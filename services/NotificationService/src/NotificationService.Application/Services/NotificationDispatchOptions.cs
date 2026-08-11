@@ -102,6 +102,9 @@ public class NotificationDispatchOptions
             [NotificationTypeEnum.BatteryAlertEscalationPending] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.AlertTicketSagaFailed] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.IotDeviceWentOffline] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
+            [NotificationTypeEnum.IotDeviceRecovered] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
+            [NotificationTypeEnum.IotDeviceAutoDecommissioned] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
+            [NotificationTypeEnum.SlaAutoResumed] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
 
             // Bổ sung Sprint 6.2 — trước đây thiếu nên DispatchAsync rơi về fallback InApp-only.
             [NotificationTypeEnum.CascadeRiskHigh] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
@@ -137,6 +140,7 @@ public class NotificationDispatchOptions
             NotificationTypeEnum.IncidentDeclared,
             NotificationTypeEnum.BatteryAlertEscalationPending,
             NotificationTypeEnum.AlertTicketSagaFailed,
+            NotificationTypeEnum.IotDeviceAutoDecommissioned,
             NotificationTypeEnum.SlaBreached,
             // Sprint 6.2: escalation chat lên Admin là critical (saga đã chờ Manager 30' không ACK).
             NotificationTypeEnum.ChatEscalatedToAdmin,

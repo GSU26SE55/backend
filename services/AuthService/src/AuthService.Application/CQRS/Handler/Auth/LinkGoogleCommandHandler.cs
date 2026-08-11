@@ -30,24 +30,24 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
     {
         var googleUser = await _googleOAuthHelper.ValidateAsync(request.IdToken, cancellationToken);
         if (googleUser == null || string.IsNullOrWhiteSpace(googleUser.Email))
-            return Fail(401, "Google ID token không hợp lệ.");
+            return Fail(401, "Invalid Google ID token.");
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
             .Include(a => a.Profile)
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (!string.Equals(account.Email, googleUser.Email, StringComparison.OrdinalIgnoreCase))
-            return Fail(422, "Email Google không khớp với email tài khoản hiện tại.");
+            return Fail(422, "Google email does not match the current account email.");
 
         var googleAlreadyLinked = await _unitOfWork.Accounts
             .GetAllAsync()
             .AnyAsync(a => a.Id != request.AccountId && a.GoogleId == googleUser.Subject && !a.IsDeleted, cancellationToken);
 
         if (googleAlreadyLinked)
-            return Fail(409, "Google account này đã được liên kết với tài khoản khác.");
+            return Fail(409, "This Google account is already linked to another account.");
 
         account.GoogleId = googleUser.Subject;
         account.Provider = ProviderName;
@@ -66,7 +66,7 @@ public class LinkGoogleCommandHandler : IRequestHandler<LinkGoogleCommand, Accou
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Liên kết Google thành công.",
+            Message = "Google account linked successfully.",
             Data = account.Id
         };
     }

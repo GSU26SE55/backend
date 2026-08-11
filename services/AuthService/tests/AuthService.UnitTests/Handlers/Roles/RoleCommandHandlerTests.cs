@@ -14,7 +14,7 @@ public class CreateRoleCommandHandlerTests
         var (uow, _, _, roles) = MockUnitOfWork.Build();
         var handler = new CreateRoleCommandHandler(uow.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
-        var resp = await handler.Handle(new CreateRoleCommand { Name = "Inspector", Description = "Bảo trì" }, CancellationToken.None);
+        var resp = await handler.Handle(new CreateRoleCommand { Name = "Inspector", Description = "Maintenance" }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
         resp.StatusCode.Should().Be(201);
@@ -170,7 +170,7 @@ public class ChangeRoleStatusCommandHandlerTests
         var resp = await handler.Handle(new ChangeRoleStatusCommand { Id = role.Id, Status = RoleStatusEnum.Active }, CancellationToken.None);
 
         resp.IsSuccess.Should().BeTrue();
-        resp.Message.Should().Contain("không thay đổi");
+        resp.Message.Should().Contain("unchanged");
     }
 }
 

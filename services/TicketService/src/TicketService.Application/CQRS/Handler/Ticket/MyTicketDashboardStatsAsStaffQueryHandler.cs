@@ -35,7 +35,7 @@ public class MyTicketDashboardStatsAsStaffQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Chưa đăng nhập."
+                Message = "Not logged in."
             };
         }
 

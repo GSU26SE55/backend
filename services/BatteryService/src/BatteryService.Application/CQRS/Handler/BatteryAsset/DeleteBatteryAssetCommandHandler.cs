@@ -39,7 +39,7 @@ public class DeleteBatteryAssetCommandHandler : IRequestHandler<DeleteBatteryAss
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa tài sản pin thành công."
+            Message = "Battery asset deleted successfully."
         };
     }
 
@@ -49,7 +49,7 @@ public class DeleteBatteryAssetCommandHandler : IRequestHandler<DeleteBatteryAss
         {
             IsSuccess = false,
             StatusCode = 404,
-            Message = "Không tìm thấy tài sản pin."
+            Message = "Battery asset not found."
         };
     }
 }

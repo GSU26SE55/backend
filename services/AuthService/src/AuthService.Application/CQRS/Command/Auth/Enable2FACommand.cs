@@ -17,8 +17,8 @@ public class Enable2FACommand : IRequest<CommonResponse<TwoFactorSecretDto>>, IV
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "AccountId không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "AccountId không hợp lệ." });
+            response.Message = "Invalid AccountId.";
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
         }
         return Task.FromResult(response);
     }

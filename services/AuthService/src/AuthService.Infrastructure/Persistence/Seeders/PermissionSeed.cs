@@ -15,78 +15,78 @@ internal static class PermissionSeed
     public static readonly IReadOnlyList<SeedItem> All = new SeedItem[]
     {
         // User
-        new(PermissionCodes.UserView, "User", "Xem danh sách + chi tiết account"),
-        new(PermissionCodes.UserCreate, "User", "Tạo account trực tiếp"),
-        new(PermissionCodes.UserUpdate, "User", "Cập nhật profile account"),
-        new(PermissionCodes.UserDelete, "User", "Xóa mềm account"),
-        new(PermissionCodes.UserChangeStatus, "User", "Đổi trạng thái account (Lock/Suspend/Ban)"),
-        new(PermissionCodes.UserUnlock, "User", "Mở khóa account"),
-        new(PermissionCodes.UserAssignRole, "User", "Gán/thu hồi role cho account"),
-        new(PermissionCodes.UserForceLogout, "User", "Buộc account đăng xuất khỏi mọi session"),
-        new(PermissionCodes.UserInvite, "User", "Gửi invite email cho user mới"),
+        new(PermissionCodes.UserView, "User", "View account list + details"),
+        new(PermissionCodes.UserCreate, "User", "Create account directly"),
+        new(PermissionCodes.UserUpdate, "User", "Update account profile"),
+        new(PermissionCodes.UserDelete, "User", "Soft delete account"),
+        new(PermissionCodes.UserChangeStatus, "User", "Change account status (Lock/Suspend/Ban)"),
+        new(PermissionCodes.UserUnlock, "User", "Unlock account"),
+        new(PermissionCodes.UserAssignRole, "User", "Assign/revoke role for account"),
+        new(PermissionCodes.UserForceLogout, "User", "Force account to log out of all sessions"),
+        new(PermissionCodes.UserInvite, "User", "Send invite email to new user"),
 
         // Role
-        new(PermissionCodes.RoleView, "Role", "Xem danh sách + chi tiết role"),
-        new(PermissionCodes.RoleCreate, "Role", "Tạo role mới (non-system)"),
-        new(PermissionCodes.RoleUpdate, "Role", "Cập nhật role"),
-        new(PermissionCodes.RoleDelete, "Role", "Xóa role"),
-        new(PermissionCodes.RoleAssignPermission, "Role", "Gán permission cho role"),
+        new(PermissionCodes.RoleView, "Role", "View role list + details"),
+        new(PermissionCodes.RoleCreate, "Role", "Create new role (non-system)"),
+        new(PermissionCodes.RoleUpdate, "Role", "Update role"),
+        new(PermissionCodes.RoleDelete, "Role", "Delete role"),
+        new(PermissionCodes.RoleAssignPermission, "Role", "Assign permission to role"),
 
         // Battery
-        new(PermissionCodes.BatteryView, "Battery", "Xem battery + sensor reading"),
-        new(PermissionCodes.BatteryCreate, "Battery", "Tạo battery mới"),
-        new(PermissionCodes.BatteryUpdate, "Battery", "Cập nhật battery"),
-        new(PermissionCodes.BatteryDelete, "Battery", "Xóa battery"),
-        new(PermissionCodes.BatteryAssign, "Battery", "Assign battery cho customer"),
-        new(PermissionCodes.BatteryConfigure, "Battery", "Cấu hình ngưỡng cảnh báo"),
+        new(PermissionCodes.BatteryView, "Battery", "View battery + sensor readings"),
+        new(PermissionCodes.BatteryCreate, "Battery", "Create new battery"),
+        new(PermissionCodes.BatteryUpdate, "Battery", "Update battery"),
+        new(PermissionCodes.BatteryDelete, "Battery", "Delete battery"),
+        new(PermissionCodes.BatteryAssign, "Battery", "Assign battery to customer"),
+        new(PermissionCodes.BatteryConfigure, "Battery", "Configure alert thresholds"),
 
         // Ticket
-        new(PermissionCodes.TicketView, "Ticket", "Xem ticket của chính mình"),
-        new(PermissionCodes.TicketViewAll, "Ticket", "Xem mọi ticket trong hệ thống"),
-        new(PermissionCodes.TicketCreate, "Ticket", "Tạo ticket"),
-        new(PermissionCodes.TicketAssign, "Ticket", "Assign ticket cho Staff"),
+        new(PermissionCodes.TicketView, "Ticket", "View own tickets"),
+        new(PermissionCodes.TicketViewAll, "Ticket", "View all tickets in the system"),
+        new(PermissionCodes.TicketCreate, "Ticket", "Create ticket"),
+        new(PermissionCodes.TicketAssign, "Ticket", "Assign ticket to Staff"),
         new(PermissionCodes.TicketResolve, "Ticket", "Mark ticket Resolved"),
-        new(PermissionCodes.TicketClose, "Ticket", "Đóng ticket"),
-        new(PermissionCodes.TicketEscalate, "Ticket", "Escalate ticket lên Manager"),
+        new(PermissionCodes.TicketClose, "Ticket", "Close ticket"),
+        new(PermissionCodes.TicketEscalate, "Ticket", "Escalate ticket to Manager"),
 
         // Notification
-        new(PermissionCodes.NotificationView, "Notification", "Xem thông báo"),
-        new(PermissionCodes.NotificationSend, "Notification", "Gửi thông báo vận hành"),
-        new(PermissionCodes.NotificationManageTemplate, "Notification", "Quản lý template thông báo"),
+        new(PermissionCodes.NotificationView, "Notification", "View notifications"),
+        new(PermissionCodes.NotificationSend, "Notification", "Send operational notifications"),
+        new(PermissionCodes.NotificationManageTemplate, "Notification", "Manage notification templates"),
         // Sprint 6.4 NOTI4-10
-        new(PermissionCodes.NotificationGroupView, "Notification", "Xem nhóm người nhận thông báo"),
-        new(PermissionCodes.NotificationGroupManage, "Notification", "Tạo/sửa/xoá nhóm và thành viên"),
-        new(PermissionCodes.NotificationBroadcast, "Notification", "Gửi thông báo hàng loạt cho nhóm"),
-        new(PermissionCodes.NotificationBatchView, "Notification", "Xem lịch sử các lần gửi hàng loạt"),
+        new(PermissionCodes.NotificationGroupView, "Notification", "View notification recipient groups"),
+        new(PermissionCodes.NotificationGroupManage, "Notification", "Create/edit/delete groups and members"),
+        new(PermissionCodes.NotificationBroadcast, "Notification", "Send bulk notifications to a group"),
+        new(PermissionCodes.NotificationBatchView, "Notification", "View bulk send history"),
 
         // KnowledgeBase
-        new(PermissionCodes.KnowledgeBaseView, "KnowledgeBase", "Xem bài viết knowledge base"),
-        new(PermissionCodes.KnowledgeBaseCreate, "KnowledgeBase", "Tạo bài viết knowledge base"),
-        new(PermissionCodes.KnowledgeBaseUpdate, "KnowledgeBase", "Cập nhật bài viết knowledge base"),
-        new(PermissionCodes.KnowledgeBaseDelete, "KnowledgeBase", "Xóa bài viết knowledge base"),
-        new(PermissionCodes.KnowledgeBasePublish, "KnowledgeBase", "Publish/unpublish bài viết knowledge base"),
+        new(PermissionCodes.KnowledgeBaseView, "KnowledgeBase", "View knowledge base articles"),
+        new(PermissionCodes.KnowledgeBaseCreate, "KnowledgeBase", "Create knowledge base article"),
+        new(PermissionCodes.KnowledgeBaseUpdate, "KnowledgeBase", "Update knowledge base article"),
+        new(PermissionCodes.KnowledgeBaseDelete, "KnowledgeBase", "Delete knowledge base article"),
+        new(PermissionCodes.KnowledgeBasePublish, "KnowledgeBase", "Publish/unpublish knowledge base article"),
 
         // Reports
-        new(PermissionCodes.ReportsView, "Reports", "Xem báo cáo vận hành"),
-        new(PermissionCodes.ReportsExport, "Reports", "Export báo cáo"),
+        new(PermissionCodes.ReportsView, "Reports", "View operational reports"),
+        new(PermissionCodes.ReportsExport, "Reports", "Export reports"),
 
         // Audit
-        new(PermissionCodes.AuditView, "Audit", "Xem audit log"),
+        new(PermissionCodes.AuditView, "Audit", "View audit log"),
 
         // Alert–Ticket Saga ops — Sprint 5B #241
-        new(PermissionCodes.TicketSagaView, "TicketSaga", "Xem danh sách Alert-Ticket Saga + state hiện tại"),
-        new(PermissionCodes.TicketSagaReprocess, "TicketSaga", "Reprocess Saga đang Failed (admin only)"),
+        new(PermissionCodes.TicketSagaView, "TicketSaga", "View Alert-Ticket Saga list + current state"),
+        new(PermissionCodes.TicketSagaReprocess, "TicketSaga", "Reprocess a Failed Saga (admin only)"),
 
         // Chat — Sprint Chat Phase 2 #516
-        new(PermissionCodes.ChatCreatePublic, "Chat", "Tạo bình luận công khai trên ticket"),
-        new(PermissionCodes.ChatCreateInternal, "Chat", "Tạo bình luận nội bộ (ẩn với Customer)"),
-        new(PermissionCodes.ChatEditOwn, "Chat", "Sửa bình luận của chính mình"),
-        new(PermissionCodes.ChatEditAny, "Chat", "Sửa bình luận của bất kỳ ai"),
-        new(PermissionCodes.ChatDeleteOwn, "Chat", "Xóa bình luận của chính mình"),
-        new(PermissionCodes.ChatDeleteAny, "Chat", "Xóa bình luận của bất kỳ ai"),
-        new(PermissionCodes.ChatPin, "Chat", "Pin/unpin bình luận"),
-        new(PermissionCodes.ChatViewInternal, "Chat", "Xem bình luận nội bộ"),
-        new(PermissionCodes.ChatTemplateCreateGlobal, "Chat", "Tạo chat template phạm vi Global"),
+        new(PermissionCodes.ChatCreatePublic, "Chat", "Create a public comment on a ticket"),
+        new(PermissionCodes.ChatCreateInternal, "Chat", "Create an internal comment (hidden from Customer)"),
+        new(PermissionCodes.ChatEditOwn, "Chat", "Edit own comment"),
+        new(PermissionCodes.ChatEditAny, "Chat", "Edit any comment"),
+        new(PermissionCodes.ChatDeleteOwn, "Chat", "Delete own comment"),
+        new(PermissionCodes.ChatDeleteAny, "Chat", "Delete any comment"),
+        new(PermissionCodes.ChatPin, "Chat", "Pin/unpin comment"),
+        new(PermissionCodes.ChatViewInternal, "Chat", "View internal comments"),
+        new(PermissionCodes.ChatTemplateCreateGlobal, "Chat", "Create a Global-scope chat template"),
     };
 
     /// <summary>Mapping role → list permission codes mặc định cho 4 system roles.</summary>

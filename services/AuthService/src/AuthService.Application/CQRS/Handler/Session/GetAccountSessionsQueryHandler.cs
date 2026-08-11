@@ -24,7 +24,7 @@ public class GetAccountSessionsQueryHandler : IRequestHandler<GetAccountSessions
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "AccountId không hợp lệ."
+                Message = "Invalid AccountId."
             };
         }
 

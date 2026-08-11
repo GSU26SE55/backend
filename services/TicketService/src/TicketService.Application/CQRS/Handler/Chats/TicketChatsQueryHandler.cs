@@ -175,7 +175,7 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
             PinnedAt = c.PinnedAt,
             PinnedByUserId = c.PinnedByUserId?.ToString(),
             IsDeleted = c.IsDeleted,
-            Body = c.IsDeleted ? "Tin nhắn này đã bị xóa." : c.Body,
+            Body = c.IsDeleted ? "This message has been deleted." : c.Body,
             BodyHtml = c.IsDeleted ? null : c.BodyHtml,
             BodyFormat = c.IsDeleted ? default : c.BodyFormat,
             AttachmentFileIds = c.IsDeleted ? [] : c.AttachmentFileIds.Select(id => id.ToString()).ToList(),

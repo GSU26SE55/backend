@@ -26,7 +26,7 @@ public class TicketParticipantsQueryHandler : IRequestHandler<TicketParticipants
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var activeParticipants = await _unitOfWork.TicketParticipants.GetAllAsync()
             .AsNoTracking()
@@ -34,7 +34,7 @@ public class TicketParticipantsQueryHandler : IRequestHandler<TicketParticipants
             .ToListAsync(cancellationToken);
 
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
-            return Fail(403, "Không có quyền truy cập ticket này.");
+            return Fail(403, "You do not have permission to access this ticket.");
 
         var participantUserIds = activeParticipants.Select(p => p.UserId).Distinct().ToList();
         var customerNames = await _unitOfWork.CustomerAccounts.GetAllAsync()

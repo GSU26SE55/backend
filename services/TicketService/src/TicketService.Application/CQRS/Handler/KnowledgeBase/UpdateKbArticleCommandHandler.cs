@@ -26,12 +26,12 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         if (article.IsTemplate)
         {
             if (!command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
-                return Fail(403, "Chỉ Admin mới có thể cập nhật template.");
+                return Fail(403, "Only Admin can update templates.");
 
             return await HandleTemplateUpdate(article, command, ct);
         }
@@ -43,7 +43,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
 
         if (!isCreator && !isManagerOrAdmin && !command.CurrentUserRole.Equals("Staff", StringComparison.OrdinalIgnoreCase))
         {
-            return Fail(403, "Bạn không có quyền cập nhật bài viết này.");
+            return Fail(403, "You do not have permission to update this article.");
         }
 
         // Manager/Admin hoặc chủ sở hữu bài viết cập nhật trực tiếp, không qua phê duyệt lại.
@@ -71,7 +71,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             Title = command.Title,
             Content = J(command.Content),
             Tags = command.Tags ?? new List<string>(),
-            ChangeDescription = command.ChangeDescription ?? "Staff cập nhật nội dung",
+            ChangeDescription = command.ChangeDescription ?? "Staff updated content",
             ChangedBy = command.CurrentUserId
         };
         await _uow.KbArticleVersions.AddAsync(newVersion);
@@ -87,7 +87,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Bản thảo thay đổi đã được lưu và đang chờ phê duyệt.",
+            Message = "Change draft has been saved and is pending approval.",
             Data = KnowledgeBaseMapper.ToDto(article)
         };
     }
@@ -111,7 +111,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
                 MajorVersion = nextMajor,
                 MinorVersion = 0,
                 Status = KbVersionStatusEnum.Approved,
-                ChangeDescription = command.ChangeDescription ?? "Cập nhật trực tiếp",
+                ChangeDescription = command.ChangeDescription ?? "Direct update",
                 ChangedBy = command.CurrentUserId
             };
             ApplyContentToVersion(newVersion, command);
@@ -120,7 +120,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             // xem KbArticleVersionSlot. AddAsync thẳng vào đây là 23505 → 500.
             await KbArticleVersionSlot.UpsertAsync(_uow, newVersion, ct);
             await KbArticleVersionSlot.RejectOtherPendingAsync(
-                _uow, article.Id, nextMajor, 0, "Đã có bản cập nhật trực tiếp thay thế.", ct);
+                _uow, article.Id, nextMajor, 0, "A direct update has replaced it.", ct);
 
             ApplyContentToArticle(article, command);
             article.Category = command.Category;
@@ -142,7 +142,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật bài viết thành công.",
+            Message = "Article updated successfully.",
             Data = KnowledgeBaseMapper.ToDto(article)
         };
     }
@@ -164,7 +164,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
                     MajorVersion = article.Version + 1,
                     MinorVersion = 0,
                     Status = KbVersionStatusEnum.Pending,
-                    ChangeDescription = command.ChangeDescription ?? "Admin cập nhật template",
+                    ChangeDescription = command.ChangeDescription ?? "Admin updated template",
                     ChangedBy = command.CurrentUserId
                 };
                 ApplyContentToVersion(pending, command);
@@ -184,7 +184,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
                     MajorVersion = nextMajor,
                     MinorVersion = 0,
                     Status = KbVersionStatusEnum.Approved,
-                    ChangeDescription = command.ChangeDescription ?? "Admin cập nhật template",
+                    ChangeDescription = command.ChangeDescription ?? "Admin updated template",
                     ChangedBy = command.CurrentUserId
                 };
                 ApplyContentToVersion(newVersion, command);
@@ -205,7 +205,7 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Template đã được cập nhật thành công.",
+            Message = "Template updated successfully.",
             Data = KnowledgeBaseMapper.ToDto(article)
         };
     }

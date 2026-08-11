@@ -34,10 +34,10 @@ public class ParticipantSelfLeaveCommandHandler : IRequestHandler<ParticipantSel
                 && p.RemovedAt == null && !p.IsDeleted, ct);
 
         if (participant == null)
-            return Fail(404, "Không tìm thấy participant active của ticket.");
+            return Fail(404, "Active participant of the ticket not found.");
 
         if (participant.ParticipantType != ParticipantTypeEnum.Watcher)
-            return Fail(403, "Chỉ Watcher mới có thể tự rời khỏi ticket.");
+            return Fail(403, "Only a Watcher can leave the ticket on their own.");
 
         participant.RemovedAt = DateTime.UtcNow;
         participant.RemovedByUserId = request.ActorUserId;
@@ -65,7 +65,7 @@ public class ParticipantSelfLeaveCommandHandler : IRequestHandler<ParticipantSel
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Rời khỏi ticket thành công."
+            Message = "Left the ticket successfully."
         };
     }
 

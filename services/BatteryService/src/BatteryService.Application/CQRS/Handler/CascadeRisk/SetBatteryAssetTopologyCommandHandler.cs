@@ -33,7 +33,7 @@ public class SetBatteryAssetTopologyCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy pin."
+                Message = "Battery not found."
             };
         }
 
@@ -51,7 +51,7 @@ public class SetBatteryAssetTopologyCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã cập nhật electrical topology.",
+            Message = "Electrical topology updated.",
             Data = new CascadeRiskDto
             {
                 BatteryAssetId = asset.Id.ToString(),

@@ -26,35 +26,35 @@ public class UpdateMyProfileCommand : IRequest<AccountResponse>, IValidatable<Ac
         var response = new AccountResponse();
 
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(AccountId), Detail = "AccountId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(AccountId), Detail = "Invalid AccountId." });
 
         if (string.IsNullOrWhiteSpace(FullName))
-            response.ListErrors.Add(new Errors { Field = nameof(FullName), Detail = "Họ tên không được để trống." });
+            response.ListErrors.Add(new Errors { Field = nameof(FullName), Detail = "Full name is required." });
         else if (FullName.Trim().Length > 150)
-            response.ListErrors.Add(new Errors { Field = nameof(FullName), Detail = "Họ tên tối đa 150 ký tự." });
+            response.ListErrors.Add(new Errors { Field = nameof(FullName), Detail = "Full name must not exceed 150 characters." });
 
         if (!string.IsNullOrWhiteSpace(PhoneNumber) && PhoneNumber.Trim().Length > 20)
-            response.ListErrors.Add(new Errors { Field = nameof(PhoneNumber), Detail = "Số điện thoại tối đa 20 ký tự." });
+            response.ListErrors.Add(new Errors { Field = nameof(PhoneNumber), Detail = "Phone number must not exceed 20 characters." });
 
         if (!string.IsNullOrWhiteSpace(Address) && Address.Trim().Length > 500)
-            response.ListErrors.Add(new Errors { Field = nameof(Address), Detail = "Địa chỉ tối đa 500 ký tự." });
+            response.ListErrors.Add(new Errors { Field = nameof(Address), Detail = "Address must not exceed 500 characters." });
 
         if (BirthDate.HasValue)
         {
             if (BirthDate.Value > DateTime.UtcNow)
-                response.ListErrors.Add(new Errors { Field = nameof(BirthDate), Detail = "Ngày sinh không hợp lệ." });
+                response.ListErrors.Add(new Errors { Field = nameof(BirthDate), Detail = "Invalid date of birth." });
             else if (BirthDate.Value.Year < 1900)
-                response.ListErrors.Add(new Errors { Field = nameof(BirthDate), Detail = "Năm sinh không hợp lệ." });
+                response.ListErrors.Add(new Errors { Field = nameof(BirthDate), Detail = "Invalid birth year." });
         }
 
         if (!string.IsNullOrWhiteSpace(TimeZone) && TimeZone.Trim().Length > 100)
-            response.ListErrors.Add(new Errors { Field = nameof(TimeZone), Detail = "TimeZone tối đa 100 ký tự." });
+            response.ListErrors.Add(new Errors { Field = nameof(TimeZone), Detail = "TimeZone must not exceed 100 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

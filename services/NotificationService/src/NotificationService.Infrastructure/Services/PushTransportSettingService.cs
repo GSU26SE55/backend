@@ -71,7 +71,7 @@ public class PushTransportSettingService : IPushTransportSettingService
     public async Task SetAsync(PushTransportEnum transport, CancellationToken cancellationToken = default)
     {
         if (!Enum.IsDefined(transport))
-            throw new ArgumentOutOfRangeException(nameof(transport), transport, "Đường vận chuyển push không hợp lệ.");
+            throw new ArgumentOutOfRangeException(nameof(transport), transport, "Invalid push transport.");
 
         var row = await _unitOfWork.NotificationSettings.GetAllAsync()
             .FirstOrDefaultAsync(x => x.Key == NotificationSettingKeys.PushTransport && !x.IsDeleted, cancellationToken);
@@ -83,7 +83,7 @@ public class PushTransportSettingService : IPushTransportSettingService
                 Id = Guid.NewGuid(),
                 Key = NotificationSettingKeys.PushTransport,
                 Value = transport.ToString(),
-                Description = "Đường vận chuyển kênh Push: SignalR (tự vận hành) / Expo / Both.",
+                Description = "Push channel transport: SignalR (self-hosted) / Expo / Both.",
             });
         }
         else

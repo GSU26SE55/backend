@@ -400,6 +400,7 @@ services:
       # Giá trị là đường TRONG container, khớp bind mount ở khối `volumes:` bên dưới.
       Mqtt__PasswordFilePath: ${Mqtt__PasswordFilePath:-/mosquitto-config/passwd}
       Mqtt__CredentialSyncIntervalSeconds: ${Mqtt__CredentialSyncIntervalSeconds:-60}
+      Mqtt__LwtOfflineGraceSeconds: ${Mqtt__LwtOfflineGraceSeconds:-90}
       # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage.
       # Production khuyến nghị: dùng object storage (S3/MinIO) + set PublicBaseUrl tới CDN.
       # Local FS fallback: bind mount /opt/solar/firmware-storage để giữ qua container restart.

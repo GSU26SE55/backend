@@ -65,7 +65,7 @@ public static class ConsumerTestHarness
             {
                 writeAttempts++;
                 if (failWriteOnAttempt is not null && failWriteOnAttempt(writeAttempts))
-                    throw new InvalidOperationException("DB tạm thời lỗi");
+                    throw new InvalidOperationException("Temporary DB failure");
                 written.Add(n);
             })
             .Returns(Task.CompletedTask);

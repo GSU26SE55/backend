@@ -12,20 +12,20 @@ namespace NotificationService.UnitTests.Templates;
 public class BatteryAnomalyLabelsTests
 {
     [Theory]
-    [InlineData("Overheat", "Quá nhiệt")]
-    [InlineData("SohDegradation", "Suy giảm tuổi thọ pin")]
-    [InlineData("CellImbalance", "Lệch cân bằng cell")]
-    [InlineData("Undertemp", "Nhiệt độ quá thấp")]
-    public void TenEnum_QuyVeTiengViet(string name, string expected)
+    [InlineData("Overheat", "Overheating")]
+    [InlineData("SohDegradation", "Battery health degradation")]
+    [InlineData("CellImbalance", "Cell imbalance")]
+    [InlineData("Undertemp", "Low temperature")]
+    public void TenEnum_QuyVeTiengAnh(string name, string expected)
     {
         BatteryAnomalyLabels.AnomalyType(name, 0).Should().Be(expected);
     }
 
     [Theory]
-    [InlineData("Info", "Thông tin")]
-    [InlineData("Warning", "Cảnh báo")]
-    [InlineData("Critical", "Nghiêm trọng")]
-    public void MucDoNghiemTrong_QuyVeTiengViet(string name, string expected)
+    [InlineData("Info", "Info")]
+    [InlineData("Warning", "Warning")]
+    [InlineData("Critical", "Critical")]
+    public void MucDoNghiemTrong_QuyVeTiengAnh(string name, string expected)
     {
         BatteryAnomalyLabels.Severity(name, 0).Should().Be(expected);
     }
@@ -33,7 +33,7 @@ public class BatteryAnomalyLabelsTests
     [Fact]
     public void KhongPhanBietHoaThuong()
     {
-        BatteryAnomalyLabels.AnomalyType("overheat", 0).Should().Be("Quá nhiệt");
+        BatteryAnomalyLabels.AnomalyType("overheat", 0).Should().Be("Overheating");
     }
 
     /// <summary>

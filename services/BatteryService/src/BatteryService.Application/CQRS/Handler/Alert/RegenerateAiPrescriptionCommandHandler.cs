@@ -44,10 +44,10 @@ public class RegenerateAiPrescriptionCommandHandler
             .FirstOrDefaultAsync(a => a.Id == request.AlertId && !a.IsDeleted, cancellationToken);
 
         if (alert is null)
-            return Fail(404, "Không tìm thấy alert.");
+            return Fail(404, "Alert not found.");
 
         if (alert.BatteryAssetId is not Guid assetId)
-            return Fail(409, "Alert này ở cấp site, không gắn với pin nào nên không kê đơn được.");
+            return Fail(409, "This alert is site-level and is not attached to any battery, so a prescription cannot be generated.");
 
         var asset = await _unitOfWork.BatteryAssets.GetAllAsync()
             .AsNoTracking()
@@ -62,7 +62,7 @@ public class RegenerateAiPrescriptionCommandHandler
             .FirstOrDefaultAsync(cancellationToken);
 
         if (asset is null)
-            return Fail(404, "Không tìm thấy pin của alert này.");
+            return Fail(404, "Battery for this alert not found.");
 
         var packConfig = BuildPackConfig(asset.NominalVoltage, asset.NominalCapacityAh, asset.Chemistry);
 
@@ -83,7 +83,7 @@ public class RegenerateAiPrescriptionCommandHandler
             .ToListAsync(cancellationToken);
 
         if (scannedDesc.Count < AiOptions.WindowSize)
-            return Fail(409, $"Pin chưa đủ {AiOptions.WindowSize} số đo để AI kê đơn.");
+            return Fail(409, $"Battery does not have enough {AiOptions.WindowSize} readings for AI to generate a prescription.");
 
         var scanned = scannedDesc.OrderBy(r => r.Time).ToList();
 
@@ -109,7 +109,7 @@ public class RegenerateAiPrescriptionCommandHandler
 
         var filtered = AiReadingWindowFilter.Filter(checkRows, packConfig);
         if (filtered.AcceptedCount < AiOptions.WindowSize)
-            return Fail(409, "Không đủ số đo hợp lệ trong dải AI chấp nhận để kê đơn.");
+            return Fail(409, "Not enough valid readings within the AI-accepted range to generate a prescription.");
 
         var window = filtered.AcceptedIndices
             .Skip(filtered.AcceptedCount - AiOptions.WindowSize)
@@ -118,7 +118,7 @@ public class RegenerateAiPrescriptionCommandHandler
 
         // Bộ soc_mode="cycle" từ chối thẳng payload 4 cột — dừng trước khi gọi cho khỏi phí.
         if (allowDerived && !window.All(r => r.CycleCount.HasValue))
-            return Fail(409, "Cửa sổ thiếu cycle_count, mà model của pin này bắt buộc phải có.");
+            return Fail(409, "The window is missing cycle_count, which this battery's model requires.");
 
         var t0 = window[0].Time;
         var readings = window
@@ -161,7 +161,7 @@ public class RegenerateAiPrescriptionCommandHandler
         if (result is null)
         {
             _logger.LogWarning("AI không kê được đơn cho alert {AlertId}.", request.AlertId);
-            return Fail(503, "AI không phản hồi. Thử lại sau.");
+            return Fail(503, "AI did not respond. Please try again later.");
         }
 
         // Gắn id mới lên alert: đơn vừa kê LÀ đơn hiện hành của alert này, nên phản hồi của

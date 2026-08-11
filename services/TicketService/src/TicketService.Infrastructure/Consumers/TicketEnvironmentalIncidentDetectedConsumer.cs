@@ -74,9 +74,9 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
         {
             Id = Guid.NewGuid(),
             Code = code,
-            Title = $"Sự cố môi trường tại {evt.SiteName}",
-            Description = $"Hệ thống tự tạo từ sự cố môi trường (loại {evt.IncidentType}, mức {evt.Severity}) "
-                        + $"tại site {evt.SiteName}. {evt.Description}".Trim(),
+            Title = $"Environmental incident at {evt.SiteName}",
+            Description = $"Auto-created by the system from an environmental incident (type {evt.IncidentType}, severity {evt.Severity}) "
+                        + $"at site {evt.SiteName}. {evt.Description}".Trim(),
             Category = TicketCategoryEnum.Repair,
             CustomerId = evt.CustomerId,
             BatteryAssetId = Guid.Empty, // site-level — không gắn pin cụ thể

@@ -51,7 +51,7 @@ public class ChatBulkDeleteCommandHandler : IRequestHandler<ChatBulkDeleteComman
     {
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var blockReason = ChatClosedStateHelper.GetBlockReason(
             ticket.Status, request.UserRole, ChatClosedStateHelper.ChatAction.Delete, _chatOptions.BlockEditOnClosed);
@@ -92,7 +92,7 @@ public class ChatBulkDeleteCommandHandler : IRequestHandler<ChatBulkDeleteComman
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Không có bình luận nào được xóa.",
+                Message = "No comments were deleted.",
                 Data = new ChatBulkDeleteResultDTO
                 {
                     Deleted = 0,
@@ -131,7 +131,7 @@ public class ChatBulkDeleteCommandHandler : IRequestHandler<ChatBulkDeleteComman
         catch (Exception ex)
         {
             _logger.LogError(ex, "[ChatBulkDelete] Failed to persist bulk delete for ticket {TicketId}", ticket.Id);
-            return Fail(500, "Lỗi khi lưu dữ liệu. Vui lòng thử lại.");
+            return Fail(500, "Error saving data. Please try again.");
         }
 
         // Hide non-owner chats for the caller (idempotent)
@@ -184,7 +184,7 @@ public class ChatBulkDeleteCommandHandler : IRequestHandler<ChatBulkDeleteComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã xóa {deletedChats.Count} bình luận.",
+            Message = $"Deleted {deletedChats.Count} comment(s).",
             Data = new ChatBulkDeleteResultDTO
             {
                 Deleted = deletedChats.Count,

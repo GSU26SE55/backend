@@ -33,10 +33,10 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
         var response = new CommonResponse<SensorReadingBatchIngestResult>();
 
         if (Items.Count == 0)
-            AddError(response, nameof(Items), "Danh sách readings là bắt buộc.");
+            AddError(response, nameof(Items), "Reading list is required.");
 
         if (Items.Count > 1000)
-            AddError(response, nameof(Items), "Batch không được vượt quá 1000 readings.");
+            AddError(response, nameof(Items), "Batch must not exceed 1000 readings.");
 
         for (var i = 0; i < Items.Count; i++)
         {
@@ -44,48 +44,48 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
             var prefix = $"{nameof(Items)}[{i}]";
 
             if (item.BatteryAssetId == Guid.Empty && string.IsNullOrWhiteSpace(item.BatteryAssetSerial))
-                AddError(response, $"{prefix}.{nameof(item.BatteryAssetId)}", "Phải có BatteryAssetId hoặc BatteryAssetSerial.");
+                AddError(response, $"{prefix}.{nameof(item.BatteryAssetId)}", "BatteryAssetId or BatteryAssetSerial is required.");
 
             if (item.Time == default)
-                AddError(response, $"{prefix}.{nameof(item.Time)}", "Thời điểm reading là bắt buộc.");
+                AddError(response, $"{prefix}.{nameof(item.Time)}", "Reading timestamp is required.");
             else if (item.Time.ToUniversalTime() > DateTime.UtcNow.AddMinutes(5))
-                AddError(response, $"{prefix}.{nameof(item.Time)}", "Thời điểm reading không được nằm quá xa trong tương lai.");
+                AddError(response, $"{prefix}.{nameof(item.Time)}", "Reading timestamp cannot be too far in the future.");
 
             // Clock skew check ĐÃ MOVE vào handler để fire metric reason=clock_drift (#IoT2-15).
 
             if (item.BatteryAssetSerial?.Length > 64)
-                AddError(response, $"{prefix}.{nameof(item.BatteryAssetSerial)}", "BatteryAssetSerial tối đa 64 ký tự.");
+                AddError(response, $"{prefix}.{nameof(item.BatteryAssetSerial)}", "BatteryAssetSerial must not exceed 64 characters.");
 
             // Sprint IoT-2 #IoT2-15/#IoT2-17 — sanity check ONLY (cực biên hardware noise).
             // Outlier reject + clock-drift kiểm tra trong HANDLER để metric counters fire đúng (§52.5).
             if (item.Voltage < 0)
-                AddError(response, $"{prefix}.{nameof(item.Voltage)}", "Điện áp không được âm.");
+                AddError(response, $"{prefix}.{nameof(item.Voltage)}", "Voltage must not be negative.");
 
             if (item.CycleCount is < 0)
-                AddError(response, $"{prefix}.{nameof(item.CycleCount)}", "Số chu kỳ không được âm.");
+                AddError(response, $"{prefix}.{nameof(item.CycleCount)}", "Cycle count must not be negative.");
 
             if (item.SourceDeviceId?.Length > 64)
-                AddError(response, $"{prefix}.{nameof(item.SourceDeviceId)}", "Id thiết bị nguồn tối đa 64 ký tự.");
+                AddError(response, $"{prefix}.{nameof(item.SourceDeviceId)}", "Source device Id must not exceed 64 characters.");
 
             if (item.ChargingState.HasValue && !Enum.IsDefined(typeof(ChargingStateEnum), item.ChargingState.Value))
-                AddError(response, $"{prefix}.{nameof(item.ChargingState)}", "ChargingState không hợp lệ.");
+                AddError(response, $"{prefix}.{nameof(item.ChargingState)}", "Invalid ChargingState.");
 
             // Sprint 5B #105 — Tier 2 validation.
             if (item.InternalResistanceMilliohm is <= 0)
-                AddError(response, $"{prefix}.{nameof(item.InternalResistanceMilliohm)}", "Internal resistance phải > 0 mΩ.");
+                AddError(response, $"{prefix}.{nameof(item.InternalResistanceMilliohm)}", "Internal resistance must be > 0 mΩ.");
 
             if (item.CellVoltageDeltaMv is < 0)
-                AddError(response, $"{prefix}.{nameof(item.CellVoltageDeltaMv)}", "Cell voltage delta không được âm.");
+                AddError(response, $"{prefix}.{nameof(item.CellVoltageDeltaMv)}", "Cell voltage delta must not be negative.");
 
             // Sprint 5B B9 — SourceType + length validation.
             if (!Enum.IsDefined(typeof(SensorReadingSourceTypeEnum), item.SourceType))
-                AddError(response, $"{prefix}.{nameof(item.SourceType)}", "SourceType không hợp lệ.");
+                AddError(response, $"{prefix}.{nameof(item.SourceType)}", "Invalid SourceType.");
 
             if (item.BmsErrorCode?.Length > 64)
-                AddError(response, $"{prefix}.{nameof(item.BmsErrorCode)}", "BmsErrorCode tối đa 64 ký tự.");
+                AddError(response, $"{prefix}.{nameof(item.BmsErrorCode)}", "BmsErrorCode must not exceed 64 characters.");
 
             if (item.SensorSourceCode?.Length > 20)
-                AddError(response, $"{prefix}.{nameof(item.SensorSourceCode)}", "SensorSourceCode tối đa 20 ký tự.");
+                AddError(response, $"{prefix}.{nameof(item.SensorSourceCode)}", "SensorSourceCode must not exceed 20 characters.");
         }
 
         return Task.FromResult(response);
@@ -95,7 +95,7 @@ public class BatchIngestSensorReadingsCommand : IRequest<CommonResponse<SensorRe
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu sensor reading không hợp lệ.";
+        response.Message = "Invalid sensor reading data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

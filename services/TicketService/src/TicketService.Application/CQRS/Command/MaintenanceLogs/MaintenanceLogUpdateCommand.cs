@@ -46,23 +46,23 @@ public class MaintenanceLogUpdateCommand : IRequest<TicketActionResponse>, IVali
         var response = new TicketActionResponse();
 
         if (LogId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "LogId", Detail = "LogId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "LogId", Detail = "Invalid LogId." });
 
         if (StaffId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "StaffId", Detail = "StaffId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "StaffId", Detail = "Invalid StaffId." });
 
         if (Summary != null && string.IsNullOrWhiteSpace(Summary))
-            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Tóm tắt không được để trống nếu được cập nhật." });
+            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary must not be empty when updated." });
 
         if (DurationMinutes.HasValue && DurationMinutes < 0)
-            response.ListErrors.Add(new Errors { Field = "DurationMinutes", Detail = "Thời gian thực hiện không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "DurationMinutes", Detail = "Invalid duration." });
 
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

@@ -44,8 +44,8 @@ public class ChatReactionConsumer : IConsumer<ChatReactedEvent>
                     UserId = evt.ChatAuthorUserId,
                     Type = NotificationTypeEnum.ChatReacted,
                     Channel = channel,
-                    Title = "Chat của bạn có reaction mới",
-                    Body = "Một chat của bạn vừa nhận được reaction.",
+                    Title = "Your chat has a new reaction",
+                    Body = "One of your chats just received a reaction.",
                     PayloadJson = JsonSerializer.Serialize(new
                     {
                         chatId = evt.ChatId,

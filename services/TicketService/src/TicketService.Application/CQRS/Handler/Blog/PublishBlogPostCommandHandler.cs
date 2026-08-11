@@ -21,16 +21,16 @@ public class PublishBlogPostCommandHandler : IRequestHandler<PublishBlogPostComm
             .FirstOrDefaultAsync(ct);
 
         if (post == null)
-            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 404, Message = "Bài viết không tìm thấy." };
+            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 404, Message = "Post not found." };
 
         if (post.Status is BlogPostStatusEnum.Generating or BlogPostStatusEnum.GenerationFailed)
-            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Bài viết chưa sẵn sàng để publish." };
+            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Post is not ready to be published." };
 
         if (post.Status == BlogPostStatusEnum.Published)
-            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Bài viết đã được publish." };
+            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Post has already been published." };
 
         if (post.Status == BlogPostStatusEnum.Archived)
-            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Bài viết đã được archive, không thể publish." };
+            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Post has been archived and cannot be published." };
 
         post.Status = BlogPostStatusEnum.Published;
         _uow.BlogPosts.UpdateAsync(post);
@@ -40,7 +40,7 @@ public class PublishBlogPostCommandHandler : IRequestHandler<PublishBlogPostComm
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Publish bài blog thành công.",
+            Message = "Blog post published successfully.",
             Data = new BlogPostActionDTO
             {
                 Id = post.Id.ToString(),

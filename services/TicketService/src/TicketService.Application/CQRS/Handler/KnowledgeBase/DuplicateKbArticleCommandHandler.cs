@@ -36,7 +36,7 @@ public class DuplicateKbArticleCommandHandler
             .FirstOrDefaultAsync(a => a.Id == command.SourceId, ct);
 
         if (source == null || source.IsDeleted)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
 
         var code = await _codeGenerator.GenerateNextCodeAsync(ct);
         var contentText = KnowledgeBaseMapper.J(source.Content);
@@ -71,7 +71,7 @@ public class DuplicateKbArticleCommandHandler
             Title = newTitle,
             Content = KnowledgeBaseMapper.ToJsonDoc(contentText),
             Tags = source.Tags.ToList(),
-            ChangeDescription = $"Sao chép từ {source.Code}",
+            ChangeDescription = $"Copied from {source.Code}",
             ChangedBy = command.CurrentUserId
         };
 
@@ -83,7 +83,7 @@ public class DuplicateKbArticleCommandHandler
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Đã sao chép bài viết. Bản mới ở trạng thái Nháp.",
+            Message = "Article duplicated. The new version is in Draft status.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),

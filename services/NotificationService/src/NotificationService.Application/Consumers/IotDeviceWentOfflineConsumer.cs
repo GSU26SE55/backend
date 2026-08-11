@@ -1,8 +1,7 @@
 using System.Text.Json;
 using MassTransit;
-using MediatR;
 using Microsoft.Extensions.Logging;
-using NotificationService.Application.CQRS.Command.Notification;
+using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
@@ -11,24 +10,23 @@ using SharedContracts.Interfaces;
 namespace NotificationService.Application.Consumers;
 
 /// <summary>
-/// Sprint IoT-1 (#249) — IoT device mất heartbeat → push + in-app cho Manager + Admin.
-/// GH-604: recipient resolve qua <see cref="IRecipientResolver"/> (broadcast Manager + Admin).
+/// IoT device mất heartbeat → push + in-app cho operations và Customer sở hữu site.
 /// Channel: Push + InApp (không email — sự kiện thường xuyên hơn ticket). Routing: §3.4 overall.md.
 /// </summary>
 public class IotDeviceWentOfflineConsumer : IConsumer<IotDeviceWentOfflineEvent>
 {
-    private readonly IMediator _mediator;
+    private readonly INotificationUnitOfWork _unitOfWork;
     private readonly IRecipientResolver _recipientResolver;
     private readonly ICacheService _cache;
     private readonly ILogger<IotDeviceWentOfflineConsumer> _logger;
 
     public IotDeviceWentOfflineConsumer(
-        IMediator mediator,
+        INotificationUnitOfWork unitOfWork,
         IRecipientResolver recipientResolver,
         ICacheService cache,
         ILogger<IotDeviceWentOfflineConsumer> logger)
     {
-        _mediator = mediator;
+        _unitOfWork = unitOfWork;
         _recipientResolver = recipientResolver;
         _cache = cache;
         _logger = logger;
@@ -42,54 +40,59 @@ public class IotDeviceWentOfflineConsumer : IConsumer<IotDeviceWentOfflineEvent>
         await NotificationDebounce.ProcessOnceAsync(_cache, context, "IotDeviceWentOffline", _logger, async () =>
         {
             var evt = context.Message;
-
-            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
-            if (recipientIds.Count == 0)
+            var incidentId = evt.AlertId ?? evt.IotDeviceId;
+            await NotificationDebounce.ProcessOnceByBusinessKeyAsync(
+                _cache,
+                "iot-offline",
+                incidentId,
+                TimeSpan.FromDays(7),
+                context.CancellationToken,
+                async () =>
             {
-                _logger.LogWarning("No Manager/Admin recipient resolved for IotDeviceWentOffline device={DeviceId} — skip.", evt.IotDeviceId);
-                return;
-            }
-
-            var durationMinutes = Math.Round(evt.OfflineDurationSeconds / 60.0, 1);
-            var title = $"[IoT] Device offline — {evt.DeviceCode}";
-            var body = $"Device \"{evt.DisplayName}\" tại site \"{evt.SiteName ?? evt.SiteId.ToString()}\" mất heartbeat {durationMinutes} phút " +
-                       $"(last seen {evt.LastSeenAt:O}). Ảnh hưởng {evt.AffectedBatteryCount} battery asset.";
-
-            var payload = JsonSerializer.Serialize(new
-            {
-                iotDeviceId = evt.IotDeviceId,
-                deviceCode = evt.DeviceCode,
-                siteId = evt.SiteId,
-                lastSeenAt = evt.LastSeenAt,
-                offlineDurationSeconds = evt.OfflineDurationSeconds,
-                affectedBatteryCount = evt.AffectedBatteryCount,
-                alertId = evt.AlertId
-            });
-
-            foreach (var userId in recipientIds)
-            {
-                foreach (var channel in new[] { NotificationChannelEnum.Push, NotificationChannelEnum.InApp })
+                var recipientIds = (await _recipientResolver.GetActiveByRoleAsync(
+                        context.CancellationToken, "Manager", "Admin", "Staff"))
+                    .Where(id => id != Guid.Empty)
+                    .ToList();
+                if (evt.CustomerId is { } customerId && customerId != Guid.Empty)
+                    recipientIds.Add(customerId);
+                recipientIds = recipientIds.Distinct().ToList();
+                if (recipientIds.Count == 0)
                 {
-                    var cmd = new CreateNotificationCommand
-                    {
-                        UserId = userId,
-                        Type = NotificationTypeEnum.IotDeviceWentOffline,
-                        Channel = channel,
-                        Title = title,
-                        Body = body,
-                        PayloadJson = payload,
-                        EntityType = "IotDevice",
-                        EntityId = evt.IotDeviceId
-                    };
-                    var result = await _mediator.Send(cmd, context.CancellationToken);
-                    if (!result.IsSuccess)
-                    {
-                        _logger.LogWarning(
-                            "Failed to create IoT offline notification for DeviceId={DeviceId}: {Message}",
-                            evt.IotDeviceId, result.Message);
-                    }
+                    _logger.LogWarning("No recipient resolved for IotDeviceWentOffline device={DeviceId} — skip.", evt.IotDeviceId);
+                    return;
                 }
-            }
+
+                var durationMinutes = Math.Round(evt.OfflineDurationSeconds / 60.0, 1);
+                var title = $"[IoT] Device offline — {evt.DeviceCode}";
+                var body = $"Device \"{evt.DisplayName}\" at site \"{evt.SiteName ?? evt.SiteId.ToString()}\" lost heartbeat for {durationMinutes} minutes " +
+                           $"(last seen {evt.LastSeenAt:O}). Affecting {evt.AffectedBatteryCount} battery asset(s).";
+
+                var payload = JsonSerializer.Serialize(new
+                {
+                    iotDeviceId = evt.IotDeviceId,
+                    deviceCode = evt.DeviceCode,
+                    siteId = evt.SiteId,
+                    lastSeenAt = evt.LastSeenAt,
+                    offlineDurationSeconds = evt.OfflineDurationSeconds,
+                    affectedBatteryCount = evt.AffectedBatteryCount,
+                    alertId = evt.AlertId
+                });
+
+                // One SaveChanges for the entire recipient × channel fan-out. A DB failure
+                // propagates so MassTransit retries; the business lease is only promoted after
+                // this write succeeds.
+                await NotificationWriter.WriteAsync(
+                    _unitOfWork,
+                    recipientIds,
+                    NotificationTypeEnum.IotDeviceWentOffline,
+                    NotificationWriter.InAppPush,
+                    title,
+                    body,
+                    payload,
+                    "IotDevice",
+                    evt.IotDeviceId,
+                    context.CancellationToken);
+            });
         });
     }
 }

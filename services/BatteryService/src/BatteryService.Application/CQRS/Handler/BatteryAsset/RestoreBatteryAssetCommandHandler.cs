@@ -27,7 +27,7 @@ public class RestoreBatteryAssetCommandHandler : IRequestHandler<RestoreBatteryA
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài sản pin đã xóa."
+                Message = "Deleted battery asset not found."
             };
         }
 
@@ -44,7 +44,7 @@ public class RestoreBatteryAssetCommandHandler : IRequestHandler<RestoreBatteryA
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Không thể khôi phục vì serial pin đã được sử dụng."
+                Message = "Cannot restore because the battery serial number is already in use."
             };
         }
 
@@ -60,7 +60,7 @@ public class RestoreBatteryAssetCommandHandler : IRequestHandler<RestoreBatteryA
                 {
                     IsSuccess = false,
                     StatusCode = 409,
-                    Message = "Không thể khôi phục vì site của tài sản đã bị xóa."
+                    Message = "Cannot restore because the asset's site has been deleted."
                 };
             }
         }
@@ -74,7 +74,7 @@ public class RestoreBatteryAssetCommandHandler : IRequestHandler<RestoreBatteryA
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Khôi phục tài sản pin thành công."
+            Message = "Battery asset restored successfully."
         };
     }
 }

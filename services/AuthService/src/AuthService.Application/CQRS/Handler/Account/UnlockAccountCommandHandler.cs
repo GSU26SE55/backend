@@ -38,7 +38,7 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -48,7 +48,7 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
             {
                 IsSuccess = false,
                 StatusCode = 200,
-                Message = "Tài khoản không ở trạng thái Locked, không cần unlock."
+                Message = "Account is not in Locked status; unlock is not needed."
             };
         }
 
@@ -85,7 +85,7 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã unlock tài khoản.",
+            Message = "Account unlocked.",
             Data = account.Id
         };
     }

@@ -224,7 +224,7 @@ public class JwtHelper : IJwtHelper
     public (Guid? accountId, string? jti, DateTime? expiresAtUtc, string? errorMessage) ValidateResetTokenDetailed(string token)
     {
         if (string.IsNullOrWhiteSpace(token))
-            return (null, null, null, "Reset token không được để trống.");
+            return (null, null, null, "Reset token must not be empty.");
 
         try
         {
@@ -242,11 +242,11 @@ public class JwtHelper : IJwtHelper
             }, out var validated);
 
             if (principal.FindFirst(ResetTokenPurposeClaim)?.Value != ResetTokenPurposeValue)
-                return (null, null, null, "Token không phải dành cho reset password.");
+                return (null, null, null, "Token is not intended for password reset.");
 
             var raw = principal.FindFirst("AccountId")?.Value;
             if (!Guid.TryParse(raw, out var id))
-                return (null, null, null, "Token thiếu AccountId.");
+                return (null, null, null, "Token is missing AccountId.");
 
             var jti = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
             var exp = validated is JwtSecurityToken jwt ? (DateTime?)jwt.ValidTo : null;
@@ -255,11 +255,11 @@ public class JwtHelper : IJwtHelper
         }
         catch (SecurityTokenExpiredException)
         {
-            return (null, null, null, "Reset token đã hết hạn.");
+            return (null, null, null, "Reset token has expired.");
         }
         catch (Exception)
         {
-            return (null, null, null, "Reset token không hợp lệ.");
+            return (null, null, null, "Invalid reset token.");
         }
     }
 }

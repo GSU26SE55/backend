@@ -45,20 +45,20 @@ public static class FileUploadPolicy
     {
         if (file is null)
         {
-            AddError(response, 400, "File là bắt buộc.", nameof(file), "File là bắt buộc.");
+            AddError(response, 400, "File is required.", nameof(file), "File is required.");
             return;
         }
 
         if (file.Length <= 0)
-            AddError(response, 400, "File rỗng.", nameof(file), "File rỗng.");
+            AddError(response, 400, "File is empty.", nameof(file), "File is empty.");
 
         if (file.Length > MaxFileSizeBytes)
-            AddError(response, 413, "File vượt quá giới hạn 20 MB.", nameof(file), "Kích thước file tối đa là 20 MB.");
+            AddError(response, 413, "File exceeds the 20 MB limit.", nameof(file), "Maximum file size is 20 MB.");
 
         var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(extension))
         {
-            AddError(response, 400, "File phải có phần mở rộng hợp lệ.", nameof(file), "File phải có phần mở rộng hợp lệ.");
+            AddError(response, 400, "File must have a valid extension.", nameof(file), "File must have a valid extension.");
             return;
         }
 
@@ -68,9 +68,9 @@ public static class FileUploadPolicy
             AddError(
                 response,
                 400,
-                $"Định dạng file không hợp lệ cho purpose {purpose}.",
+                $"Invalid file format for purpose {purpose}.",
                 nameof(file),
-                $"Chỉ chấp nhận: {string.Join(", ", allowedExtensions)}.");
+                $"Only accepted: {string.Join(", ", allowedExtensions)}.");
             return;
         }
 
@@ -98,13 +98,13 @@ public static class FileUploadPolicy
             return;
 
         var detail = actual is null
-            ? $"Nội dung file không phải {expected.DisplayName} hợp lệ."
-            : $"File có đuôi {extension} nhưng nội dung thực tế là {actual.DisplayName}.{GetConversionHint(actual)}";
+            ? $"File content is not a valid {expected.DisplayName}."
+            : $"File has extension {extension} but its actual content is {actual.DisplayName}.{GetConversionHint(actual)}";
 
         AddError(
             response,
             400,
-            $"Nội dung file không khớp với đuôi {extension}.",
+            $"File content does not match extension {extension}.",
             FileField,
             detail);
     }
@@ -112,8 +112,8 @@ public static class FileUploadPolicy
     private static string GetConversionHint(FileContentSignature actual)
     {
         return actual.Mime is "image/heic" or "image/avif"
-            ? " Ảnh chụp bằng iPhone mặc định là HEIC dù tên file là .JPG/.JPEG, và trình duyệt không hiển thị được định dạng này."
-              + " Hãy đổi ảnh sang JPEG hoặc PNG trước khi upload (iPhone: Settings → Camera → Formats → Most Compatible)."
+            ? " Photos taken with an iPhone default to HEIC even when the file name is .JPG/.JPEG, and browsers cannot display this format."
+              + " Please convert the image to JPEG or PNG before uploading (iPhone: Settings → Camera → Formats → Most Compatible)."
             : string.Empty;
     }
 

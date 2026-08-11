@@ -46,7 +46,7 @@ public static class IotSiteAccessGuard
             if (foreign.Count > 0)
             {
                 return new SiteAccessDecision(false, 403,
-                    "Thiết bị không có quyền ghi dữ liệu cho site khác.");
+                    "The device does not have permission to write data for another site.");
             }
         }
 
@@ -55,7 +55,7 @@ public static class IotSiteAccessGuard
         {
             // Trước đây site không tồn tại đi thẳng xuống DB và nổ ra lỗi khoá ngoại → 500. Đó là lỗi
             // của người gọi, phải trả về 4xx nói rõ, không phải lỗi máy chủ.
-            return new SiteAccessDecision(false, 404, "Site không tồn tại.");
+            return new SiteAccessDecision(false, 404, "Site not found.");
         }
 
         return SiteAccessDecision.Ok;

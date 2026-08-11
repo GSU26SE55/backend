@@ -93,6 +93,18 @@ public class AnomalyDetectionService : IAnomalyDetectionService
 
             foreach (var anomaly in anomalies)
             {
+                // The background lookback deliberately overlaps two ticks. A reading that has
+                // already produced either an Open or Merged alert must therefore be ignored on
+                // the next scan; otherwise every overlap creates another meaningless Merged row.
+                var readingAlreadyProcessed = await _unitOfWork.Alerts.GetAllAsync()
+                    .AnyAsync(a => !a.IsDeleted
+                                   && a.BatteryAssetId == reading.BatteryAssetId
+                                   && a.AnomalyType == anomaly.Type
+                                   && a.DetectedAt == reading.Time,
+                        cancellationToken);
+                if (readingAlreadyProcessed)
+                    continue;
+
                 // Sprint 5B B1 (#152) — Noise suppression frequency-based.
                 // Bypass: EnvironmentalIncident và Critical Overheat (an toàn).
                 var (suppress, recordedBreach) = await ShouldSuppressByNoiseAsync(

@@ -39,7 +39,7 @@ public class NotificationBroadcastTemplatePreviewQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Phải chọn ít nhất một kênh gửi.",
+                Message = "You must select at least one channel to send to.",
             };
         }
 
@@ -128,7 +128,7 @@ public class NotificationBroadcastTemplatePreviewQueryHandler
             StatusCode = 200,
             Message = unknownKeys.Count == 0
                 ? null
-                : $"Payload có biến không thuộc loại thông báo này: {string.Join(", ", unknownKeys)}.",
+                : $"The payload contains variables not applicable to this notification type: {string.Join(", ", unknownKeys)}.",
             Data = rows,
         };
     }

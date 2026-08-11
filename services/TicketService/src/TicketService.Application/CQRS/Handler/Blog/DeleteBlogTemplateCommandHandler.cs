@@ -21,7 +21,7 @@ public class DeleteBlogTemplateCommandHandler : IRequestHandler<DeleteBlogTempla
             .FirstOrDefaultAsync(ct);
 
         if (template == null)
-            return new CommonResponse<BlogTemplateDTO> { IsSuccess = false, StatusCode = 404, Message = "Template không tìm thấy." };
+            return new CommonResponse<BlogTemplateDTO> { IsSuccess = false, StatusCode = 404, Message = "Template not found." };
 
         _uow.BlogTemplates.DeleteAsync(template);
         await _uow.SaveChangesAsync(ct);
@@ -30,7 +30,7 @@ public class DeleteBlogTemplateCommandHandler : IRequestHandler<DeleteBlogTempla
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa template thành công.",
+            Message = "Template deleted successfully.",
             Data = new BlogTemplateDTO
             {
                 Id = template.Id.ToString(),

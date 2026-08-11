@@ -40,32 +40,32 @@ public class UpdateKbArticleCommand : IRequest<CommonResponse<KbArticleDTO>>, IV
         };
 
         if (ArticleId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "ArticleId", Detail = "ID bài viết không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ArticleId", Detail = "Invalid article ID." });
 
         if (string.IsNullOrWhiteSpace(Title))
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title is required." });
         else if (Title.Length > 200)
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được vượt quá 200 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title must be at most 200 characters." });
 
         if (string.IsNullOrWhiteSpace(Content))
-            response.ListErrors.Add(new Errors { Field = "Content", Detail = "Nội dung không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Content", Detail = "Content is required." });
         else if (Content.Length > 50000)
-            response.ListErrors.Add(new Errors { Field = "Content", Detail = "Nội dung không được vượt quá 50000 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Content", Detail = "Content must be at most 50000 characters." });
 
         if (!Enum.IsDefined(typeof(TicketCategoryEnum), Category))
-            response.ListErrors.Add(new Errors { Field = "Category", Detail = "Danh mục không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Category", Detail = "Invalid category." });
 
         if (Tags != null && Tags.Count > 10)
-            response.ListErrors.Add(new Errors { Field = "Tags", Detail = "Tối đa 10 thẻ." });
+            response.ListErrors.Add(new Errors { Field = "Tags", Detail = "A maximum of 10 tags is allowed." });
 
         if (Tags != null && Tags.Any(t => t.Length > 50))
-            response.ListErrors.Add(new Errors { Field = "Tags", Detail = "Mỗi thẻ không được vượt quá 50 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Tags", Detail = "Each tag must be at most 50 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

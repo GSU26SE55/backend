@@ -36,7 +36,7 @@ public class GetUnreadCountQueryHandler : IRequestHandler<GetUnreadCountQuery, N
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Lấy số notification chưa đọc thành công.",
+            Message = "Unread notification count retrieved successfully.",
             Data = count
         };
     }

@@ -20,7 +20,7 @@ public class TechnicalTermMaskerTests
     [Fact]
     public void Mask_NoTermsPresent_ReturnsSameAndEmptyMap()
     {
-        var text = "Pin bị lỗi, cần kiểm tra ngay";
+        var text = "Battery fault, needs checking right away";
 
         var (masked, map) = Create().Mask(text);
 
@@ -106,9 +106,9 @@ public class TechnicalTermMaskerTests
     {
         var map = new Dictionary<string, string> { ["[[term_1]]"] = "SOH" };
 
-        var result = Create().Unmask("[[term_1]] là 80%", map);
+        var result = Create().Unmask("[[term_1]] is 80%", map);
 
-        result.Should().Be("SOH là 80%");
+        result.Should().Be("SOH is 80%");
     }
 
     // --- Roundtrip ---

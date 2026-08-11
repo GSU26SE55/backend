@@ -415,9 +415,9 @@ public class SohPredictionBackgroundServiceTests
                 It.IsAny<string>(), It.IsAny<IReadOnlyList<double[]>>(),
                 It.IsAny<bool>(), It.IsAny<AiPackConfig?>(), It.IsAny<CancellationToken>(), It.IsAny<AiPrescriptionContext?>(), It.IsAny<bool>()))
             .ReturnsAsync(new AiPrescriptionResult(
-                Prescription: "Kiểm tra cell 3",
-                ActionSteps: new[] { "Đo điện áp từng cell" },
-                PpeRequired: new[] { "Găng cách điện" },
+                Prescription: "Inspect cell 3",
+                ActionSteps: new[] { "Measure the voltage of each cell" },
+                PpeRequired: new[] { "Insulating gloves" },
                 SopReferences: Array.Empty<string>(),
                 SafetyWarnings: Array.Empty<string>(),
                 HumanVerificationRequired: false,

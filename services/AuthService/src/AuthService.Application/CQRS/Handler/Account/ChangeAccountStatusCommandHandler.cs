@@ -49,7 +49,7 @@ public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountSt
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -59,7 +59,7 @@ public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountSt
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Trạng thái không thay đổi.",
+                Message = "Status unchanged.",
                 Data = account.Id
             };
         }
@@ -143,7 +143,7 @@ public class ChangeAccountStatusCommandHandler : IRequestHandler<ChangeAccountSt
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật trạng thái tài khoản thành công.",
+            Message = "Account status updated successfully.",
             Data = account.Id
         };
     }

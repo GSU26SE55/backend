@@ -33,8 +33,8 @@ public class DeterministicMessageIdTests
         NotificationId = NotificationId,
         UserId = Guid.NewGuid(),
         Type = NotificationTypeEnum.TicketCreated,
-        Title = "Tiêu đề",
-        Body = "Nội dung",
+        Title = "Title",
+        Body = "Content",
         Email = "user@x.com",
         PhoneNumber = "0901234567",
     };

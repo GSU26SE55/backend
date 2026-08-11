@@ -18,8 +18,8 @@ public class TicketKbSuggestionsQueryHandlerTests
     {
         Id = id,
         Code = "TKT-001",
-        Title = "Pin quá nhiệt",
-        Description = "Nhiệt độ vượt ngưỡng",
+        Title = "Battery overheating",
+        Description = "Temperature exceeded threshold",
         Category = TicketCategoryEnum.Overheat,
         Status = TicketStatusEnum.InProgress,
         CustomerId = Guid.NewGuid(),
@@ -29,7 +29,7 @@ public class TicketKbSuggestionsQueryHandlerTests
     {
         Id = id,
         Code = "KB-2026-0001",
-        Title = "Xử lý pin quá nhiệt",
+        Title = "Handling battery overheating",
         Category = TicketCategoryEnum.Overheat,
         Status = status,
         Tags = new List<string> { "nhiet" },

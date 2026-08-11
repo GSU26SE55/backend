@@ -35,7 +35,7 @@ public class SubmitPrescriptionFeedbackCommand : IRequest<CommonResponse<string>
 
         if (string.IsNullOrWhiteSpace(Status))
         {
-            response.ListErrors.Add(new Errors { Field = nameof(Status), Detail = "Bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = nameof(Status), Detail = "Required." });
         }
         else if (!AllowedStatuses.Contains(Status.Trim().ToLowerInvariant()))
         {
@@ -44,7 +44,7 @@ public class SubmitPrescriptionFeedbackCommand : IRequest<CommonResponse<string>
             response.ListErrors.Add(new Errors
             {
                 Field = nameof(Status),
-                Detail = $"Chỉ nhận: {string.Join(", ", AllowedStatuses)}."
+                Detail = $"Only accepted values: {string.Join(", ", AllowedStatuses)}."
             });
         }
 
@@ -55,7 +55,7 @@ public class SubmitPrescriptionFeedbackCommand : IRequest<CommonResponse<string>
             response.ListErrors.Add(new Errors
             {
                 Field = nameof(EditedSteps),
-                Detail = "Bắt buộc khi status = edited."
+                Detail = "Required when status = edited."
             });
         }
 

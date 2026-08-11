@@ -40,7 +40,7 @@ public class TicketRateCommandHandlerTests
             CustomerId = customerId,
             CustomerName = "Customer A",
             Rating = 5,
-            RatingComment = "Rất hài lòng!"
+            RatingComment = "Very satisfied!"
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });

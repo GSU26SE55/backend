@@ -38,27 +38,27 @@ public class QueueSmsCommandHandler : IRequestHandler<QueueSmsCommand, CommonRes
             validationResponse.ListErrors.Add(new Errors
             {
                 Field = nameof(request.PhoneNumber),
-                Detail = "Số điện thoại không hợp lệ (E.164 / VN)."
+                Detail = "Invalid phone number (E.164 / VN)."
             });
 
         if (string.IsNullOrWhiteSpace(request.Message))
             validationResponse.ListErrors.Add(new Errors
             {
                 Field = nameof(request.Message),
-                Detail = "Nội dung SMS rỗng."
+                Detail = "SMS content is empty."
             });
         else if (request.Message.Length > MaxMessageLength)
             validationResponse.ListErrors.Add(new Errors
             {
                 Field = nameof(request.Message),
-                Detail = $"Nội dung SMS vượt quá {MaxMessageLength} ký tự."
+                Detail = $"SMS content exceeds {MaxMessageLength} characters."
             });
 
         if (validationResponse.ListErrors.Count > 0)
         {
             validationResponse.IsSuccess = false;
             validationResponse.StatusCode = 400;
-            validationResponse.Message = "Dữ liệu không hợp lệ.";
+            validationResponse.Message = "Invalid data.";
             return validationResponse;
         }
 

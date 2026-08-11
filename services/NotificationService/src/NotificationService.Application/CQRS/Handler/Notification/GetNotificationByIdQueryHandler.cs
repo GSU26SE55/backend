@@ -53,7 +53,7 @@ public class GetNotificationByIdQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy notification."
+                Message = "Notification not found."
             };
         }
 

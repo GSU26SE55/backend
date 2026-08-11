@@ -65,8 +65,8 @@ public class SlaWarningConsumer : IConsumer<SlaWarningEvent>
             // chuỗi rỗng, câu tự lược phần mã đi thay vì hiện "Ticket  ".
             var codeSuffix = string.IsNullOrWhiteSpace(evt.Code) ? "" : $" {evt.Code}";
 
-            var title = $"⏰ Cảnh báo SLA sắp hết hạn{codeSuffix}";
-            var body = $"Ticket{codeSuffix} đã dùng {pct}% thời gian SLA (hạn {evt.WarningAt:dd/MM HH:mm}). Cần xử lý sớm.";
+            var title = $"⏰ SLA warning — approaching deadline{codeSuffix}";
+            var body = $"Ticket{codeSuffix} has used {pct}% of its SLA time (deadline {evt.WarningAt:dd/MM HH:mm}). Prompt action required.";
             var payload = JsonSerializer.Serialize(new
             {
                 ticketId = evt.TicketId,

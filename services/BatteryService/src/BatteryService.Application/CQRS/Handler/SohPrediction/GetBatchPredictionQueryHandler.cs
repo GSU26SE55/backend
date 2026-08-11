@@ -49,7 +49,7 @@ public class GetBatchPredictionQueryHandler
             .ToListAsync(cancellationToken);
 
         if (assets.Count == 0)
-            return Fail(409, "Không có pin Active nào để dự đoán.");
+            return Fail(409, "No active battery to predict.");
 
         // soc_mode đọc từ AI, không suy từ chemistry — gửi sai định nghĩa soc_percent không
         // bị từ chối, nó chỉ lặng lẽ dịch SOH đi.
@@ -119,7 +119,7 @@ public class GetBatchPredictionQueryHandler
         }
 
         if (items.Count == 0)
-            return Fail(409, "Không pin nào đủ số đo hợp lệ để dự đoán hàng loạt.");
+            return Fail(409, "No battery has enough valid readings for batch prediction.");
 
         var result = await _streamClient.PredictManyAsync(items, cancellationToken);
 

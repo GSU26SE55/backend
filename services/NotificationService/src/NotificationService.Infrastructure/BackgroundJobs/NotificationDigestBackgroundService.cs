@@ -172,7 +172,7 @@ public class NotificationDigestBackgroundService : BackgroundService
                 // Tiêu đề của mục con có thể dài đúng bằng trần 200 của cột, chép nguyên vào đây thì
                 // vẫn vừa — nhưng cắt cho chắc, vì cột đích cũng chỉ 200.
                 Title = Truncate(
-                    items.Count == 1 ? items[0].Title : $"Bạn có {items.Count} thông báo mới",
+                    items.Count == 1 ? items[0].Title : $"You have {items.Count} new notifications",
                     TitleMaxLength),
                 Body = BuildBody(items),
                 PayloadJson = JsonSerializer.Serialize(new
@@ -241,7 +241,7 @@ public class NotificationDigestBackgroundService : BackgroundService
         {
             var line = $"• {items[i].Title}: {items[i].Body}";
             var remaining = items.Count - i;
-            var footer = $"… và {remaining} thông báo khác.";
+            var footer = $"… and {remaining} more notification(s).";
 
             // Còn đủ chỗ cho dòng này VÀ cho dòng kết (nếu sau đó phải cắt) thì mới thêm.
             if (used + line.Length + 1 + footer.Length > BodyMaxLength)
@@ -255,7 +255,7 @@ public class NotificationDigestBackgroundService : BackgroundService
         }
 
         if (items.Count > shown)
-            sb.Append($"… và {items.Count - shown} thông báo khác.");
+            sb.Append($"… and {items.Count - shown} more notification(s).");
 
         // Chốt chặn cuối: dù mọi tính toán trên có sai thì cột vẫn không bao giờ bị tràn.
         return Truncate(sb.ToString().TrimEnd(), BodyMaxLength);

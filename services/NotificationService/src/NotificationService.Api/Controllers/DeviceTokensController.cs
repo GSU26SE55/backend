@@ -106,7 +106,7 @@ public class DeviceTokensController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = StatusCodes.Status400BadRequest,
-                Message = "Không xác định được user."
+                Message = "Unable to determine the current user."
             });
 
         var result = await _mediator.Send(new GetMyDeviceTokensQuery { UserId = userId }, cancellationToken);
@@ -117,7 +117,7 @@ public class DeviceTokensController : ControllerBase
     {
         IsSuccess = false,
         StatusCode = StatusCodes.Status400BadRequest,
-        Message = "Không xác định được user."
+        Message = "Unable to determine the current user."
     };
 
     private bool TryGetCurrentUserId(out Guid userId)

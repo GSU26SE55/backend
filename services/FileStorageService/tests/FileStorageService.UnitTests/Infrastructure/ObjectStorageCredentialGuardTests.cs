@@ -82,7 +82,7 @@ public class ObjectStorageCredentialGuardTests
         // dài thì chỉ cần đổi thành "minio1" là lọt.
         var errors = ObjectStorageCredentialGuard.Validate(Opt(GoodAccessKey, "minio1"), isLocalEnvironment: false);
 
-        errors.Should().ContainSingle().Which.Should().Contain("quá ngắn");
+        errors.Should().ContainSingle().Which.Should().Contain("too short");
     }
 
     [Fact]

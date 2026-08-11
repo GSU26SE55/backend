@@ -305,7 +305,7 @@ public class NotificationDispatchBackgroundService : BackgroundService
         {
             notification.Status = NotificationStatusEnum.Pending;
             notification.ProcessingStartedAt = null;
-            notification.FailureReason = "Thu hồi việc bị bỏ dở: tiến trình dừng khi đang gửi.";
+            notification.FailureReason = "Reclaimed stalled work: the process stopped while sending.";
             notification.NextAttemptAt = now;
         }
 

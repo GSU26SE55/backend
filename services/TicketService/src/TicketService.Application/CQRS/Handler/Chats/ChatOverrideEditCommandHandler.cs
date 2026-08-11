@@ -37,18 +37,18 @@ public class ChatOverrideEditCommandHandler : IRequestHandler<ChatOverrideEditCo
     public async Task<TicketActionResponse> Handle(ChatOverrideEditCommand request, CancellationToken ct)
     {
         if (request.UserRole != ActorRoleEnum.Admin)
-            return Fail(403, "Chỉ Admin được override khi ticket đã đóng.");
+            return Fail(403, "Only Admin can override when the ticket is closed.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var oldBody = chat.Body;
 
@@ -92,7 +92,7 @@ public class ChatOverrideEditCommandHandler : IRequestHandler<ChatOverrideEditCo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Sửa bình luận (override) thành công.",
+            Message = "Comment edited (override) successfully.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),

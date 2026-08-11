@@ -29,7 +29,7 @@ public class UpdateBatteryTypeCommandHandler : IRequestHandler<UpdateBatteryType
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy loại pin."
+                Message = "Battery type not found."
             };
         }
 
@@ -47,7 +47,7 @@ public class UpdateBatteryTypeCommandHandler : IRequestHandler<UpdateBatteryType
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tên loại pin đã tồn tại.",
+                Message = "Battery type name already exists.",
             };
         }
 
@@ -66,7 +66,7 @@ public class UpdateBatteryTypeCommandHandler : IRequestHandler<UpdateBatteryType
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật loại pin thành công.",
+            Message = "Battery type updated successfully.",
             Data = BatteryMapper.ToDto(entity)
         };
     }

@@ -41,7 +41,7 @@ public class NotificationTemplateCreateCommand
             response.ListErrors.Add(new Errors
             {
                 Field = "ActorUserId",
-                Detail = "Không xác định được người thực hiện từ token.",
+                Detail = "Unable to determine the actor from the token.",
             });
         }
 
@@ -49,7 +49,7 @@ public class NotificationTemplateCreateCommand
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);
@@ -74,19 +74,19 @@ internal static class NotificationTemplateContentRules
         string bodyTemplate)
     {
         if (type.HasValue && !Enum.IsDefined(typeof(NotificationTypeEnum), type.Value))
-            errors.Add(new Errors { Field = "Type", Detail = "Type không hợp lệ." });
+            errors.Add(new Errors { Field = "Type", Detail = "Invalid Type." });
 
         if (channel.HasValue && !Enum.IsDefined(typeof(NotificationChannelEnum), channel.Value))
-            errors.Add(new Errors { Field = "Channel", Detail = "Channel không hợp lệ." });
+            errors.Add(new Errors { Field = "Channel", Detail = "Invalid Channel." });
 
         if (string.IsNullOrWhiteSpace(titleTemplate))
-            errors.Add(new Errors { Field = "TitleTemplate", Detail = "Tiêu đề không được trống." });
+            errors.Add(new Errors { Field = "TitleTemplate", Detail = "Title template is required." });
         else if (titleTemplate.Length > MaxTitleLength)
-            errors.Add(new Errors { Field = "TitleTemplate", Detail = $"Tiêu đề tối đa {MaxTitleLength} ký tự." });
+            errors.Add(new Errors { Field = "TitleTemplate", Detail = $"Title template must be at most {MaxTitleLength} characters." });
 
         if (string.IsNullOrWhiteSpace(bodyTemplate))
-            errors.Add(new Errors { Field = "BodyTemplate", Detail = "Nội dung không được trống." });
+            errors.Add(new Errors { Field = "BodyTemplate", Detail = "Body template is required." });
         else if (bodyTemplate.Length > MaxBodyLength)
-            errors.Add(new Errors { Field = "BodyTemplate", Detail = $"Nội dung tối đa {MaxBodyLength} ký tự." });
+            errors.Add(new Errors { Field = "BodyTemplate", Detail = $"Body template must be at most {MaxBodyLength} characters." });
     }
 }

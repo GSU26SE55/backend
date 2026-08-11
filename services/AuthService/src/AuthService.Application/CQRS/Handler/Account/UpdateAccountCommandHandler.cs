@@ -36,7 +36,7 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -53,7 +53,7 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
                 {
                     IsSuccess = false,
                     StatusCode = 409,
-                    Message = "Số điện thoại đã được sử dụng.",
+                    Message = "Phone number is already in use.",
                 };
             }
 
@@ -92,7 +92,7 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật tài khoản thành công.",
+            Message = "Account updated successfully.",
             Data = account.Id
         };
     }

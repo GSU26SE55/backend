@@ -30,7 +30,7 @@ public class ExportMyDataQueryHandler : IRequestHandler<ExportMyDataQuery, Commo
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
 
         var export = new AccountDataExportDto

@@ -56,7 +56,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -70,7 +70,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Role không tồn tại hoặc đã bị vô hiệu hóa."
+                Message = "Role does not exist or has been deactivated."
             };
         }
 
@@ -85,7 +85,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Role không thay đổi.",
+                Message = "Role unchanged.",
                 Data = account.Id
             };
         }
@@ -180,7 +180,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tài khoản đã bị thay đổi bởi tiến trình khác. Vui lòng thử lại."
+                Message = "The account was modified by another process. Please try again."
             };
         }
 
@@ -188,7 +188,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã đổi role sang {role.Name}.",
+            Message = $"Role changed to {role.Name}.",
             Data = account.Id
         };
     }

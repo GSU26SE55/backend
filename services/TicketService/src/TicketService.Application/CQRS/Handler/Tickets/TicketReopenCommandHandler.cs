@@ -41,12 +41,12 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
         if (ticket == null)
-            return Fail(404, "Ticket không tìm thấy.");
+            return Fail(404, "Ticket not found.");
 
         // BR-06: Customer reopens within 7 days
         var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, request.CustomerId);
         if (!transitionResult.IsAllowed)
-            return Fail(403, transitionResult.Reason ?? "Không thể mở lại ticket.");
+            return Fail(403, transitionResult.Reason ?? "Cannot reopen ticket.");
 
         // Execute reopen transition
         await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Open, new TransitionContext
@@ -74,7 +74,7 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
             if (escalateResult.IsAllowed)
             {
                 var reason = EscalationReasonEnum.CustomerComplaint;
-                var note = $"Tự động escalate do mở lại nhiều lần ({ticket.ReopenCount}).";
+                var note = $"Automatically escalated due to repeated reopening ({ticket.ReopenCount}).";
 
                 await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Escalated, new TransitionContext
                 {
@@ -104,7 +104,7 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = ticket.Status == TicketStatusEnum.Escalated ? "Ticket đã được mở lại và tự động escalate." : "Ticket đã được mở lại.",
+            Message = ticket.Status == TicketStatusEnum.Escalated ? "Ticket has been reopened and automatically escalated." : "Ticket has been reopened.",
             Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),

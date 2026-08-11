@@ -23,23 +23,23 @@ public class ChangeEmailCommand : IRequest<AccountActionResponse>, IValidatable<
         var response = new AccountActionResponse();
 
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "AccountId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
 
         if (string.IsNullOrWhiteSpace(NewEmail))
-            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "Email mới không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "New email is required." });
         else if (NewEmail.Trim().Length > 256)
-            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "Email tối đa 256 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "Email must not exceed 256 characters." });
         else if (!EmailRegex.IsMatch(NewEmail.Trim()))
-            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "Email không đúng định dạng." });
+            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "Invalid email format." });
 
         if (string.IsNullOrWhiteSpace(CurrentPassword))
-            response.ListErrors.Add(new Errors { Field = "CurrentPassword", Detail = "Mật khẩu hiện tại không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "CurrentPassword", Detail = "Current password is required." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
         return Task.FromResult(response);
     }

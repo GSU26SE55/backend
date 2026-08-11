@@ -41,7 +41,7 @@ public class NotificationTemplateGetByIdQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy template.",
+                Message = "Template not found.",
             };
         }
 

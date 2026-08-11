@@ -77,7 +77,7 @@ public class TicketStartCommandHandler : IRequestHandler<TicketStartCommand, Tic
                 Ticket = ticket,
                 StaffId = request.StaffId,
                 LogType = request.LogType ?? MaintenanceLogTypeEnum.OnSite,
-                Summary = "Đang thực hiện...",
+                Summary = "In progress...",
                 StartedAt = DateTime.UtcNow,
                 // CheckInLatitude = request.Latitude,
                 // CheckInLongitude = request.Longitude,

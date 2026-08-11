@@ -69,7 +69,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             if (lookup.ScopeDenied)
             {
                 Context.Items[ScopeDeniedItemKey] = true;
-                return AuthenticateResult.Fail("Device API key thiếu scope cho endpoint này.");
+                return AuthenticateResult.Fail("Device API key is missing scope for this endpoint.");
             }
 
             var device = lookup.Device;

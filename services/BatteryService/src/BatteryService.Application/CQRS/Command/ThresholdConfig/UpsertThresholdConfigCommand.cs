@@ -48,41 +48,41 @@ public class UpsertThresholdConfigCommand : IRequest<CommonResponse<ThresholdCon
         var response = new CommonResponse<ThresholdConfigDto>();
 
         if (BatteryTypeId == Guid.Empty)
-            AddError(response, nameof(BatteryTypeId), "Id loại pin là bắt buộc.");
+            AddError(response, nameof(BatteryTypeId), "Battery type Id is required.");
 
         if (VoltageMin <= 0)
-            AddError(response, nameof(VoltageMin), "Ngưỡng điện áp tối thiểu phải lớn hơn 0.");
+            AddError(response, nameof(VoltageMin), "Minimum voltage threshold must be greater than 0.");
 
         if (VoltageMax <= VoltageMin)
-            AddCrossFieldError(response, nameof(VoltageMax), "Ngưỡng điện áp tối đa phải lớn hơn ngưỡng tối thiểu.");
+            AddCrossFieldError(response, nameof(VoltageMax), "Maximum voltage threshold must be greater than the minimum threshold.");
 
         if (TemperatureMax <= TemperatureMin)
-            AddCrossFieldError(response, nameof(TemperatureMax), "Nhiệt độ tối đa phải lớn hơn nhiệt độ tối thiểu.");
+            AddCrossFieldError(response, nameof(TemperatureMax), "Maximum temperature must be greater than the minimum temperature.");
 
         if (SocWarningThreshold is < 0 or > 100)
-            AddError(response, nameof(SocWarningThreshold), "Ngưỡng SOC cảnh báo phải nằm trong khoảng 0-100.");
+            AddError(response, nameof(SocWarningThreshold), "SOC warning threshold must be between 0-100.");
 
         if (SocCriticalThreshold is < 0 or > 100)
-            AddError(response, nameof(SocCriticalThreshold), "Ngưỡng SOC nghiêm trọng phải nằm trong khoảng 0-100.");
+            AddError(response, nameof(SocCriticalThreshold), "SOC critical threshold must be between 0-100.");
 
         if (SocCriticalThreshold >= SocWarningThreshold)
-            AddCrossFieldError(response, nameof(SocCriticalThreshold), "Ngưỡng SOC nghiêm trọng phải nhỏ hơn ngưỡng cảnh báo.");
+            AddCrossFieldError(response, nameof(SocCriticalThreshold), "SOC critical threshold must be lower than the warning threshold.");
 
         if (CurrentMaxCharge.HasValue && CurrentMaxCharge <= 0)
-            AddError(response, nameof(CurrentMaxCharge), "Dòng sạc tối đa phải lớn hơn 0.");
+            AddError(response, nameof(CurrentMaxCharge), "Maximum charge current must be greater than 0.");
 
         if (CurrentMaxDischarge.HasValue && CurrentMaxDischarge <= 0)
-            AddError(response, nameof(CurrentMaxDischarge), "Dòng xả tối đa phải lớn hơn 0.");
+            AddError(response, nameof(CurrentMaxDischarge), "Maximum discharge current must be greater than 0.");
 
         if (SohWarningThreshold is < 0 or > 100)
-            AddError(response, nameof(SohWarningThreshold), "Ngưỡng SOH cảnh báo phải nằm trong khoảng 0-100.");
+            AddError(response, nameof(SohWarningThreshold), "SOH warning threshold must be between 0-100.");
 
         if (SohCriticalThreshold is < 0 or > 100)
-            AddError(response, nameof(SohCriticalThreshold), "Ngưỡng SOH nghiêm trọng phải nằm trong khoảng 0-100.");
+            AddError(response, nameof(SohCriticalThreshold), "SOH critical threshold must be between 0-100.");
 
         if (SohWarningThreshold.HasValue && SohCriticalThreshold.HasValue
             && SohCriticalThreshold.Value >= SohWarningThreshold.Value)
-            AddCrossFieldError(response, nameof(SohCriticalThreshold), "Ngưỡng SOH nghiêm trọng phải nhỏ hơn ngưỡng cảnh báo.");
+            AddCrossFieldError(response, nameof(SohCriticalThreshold), "SOH critical threshold must be lower than the warning threshold.");
 
         return Task.FromResult(response);
     }
@@ -91,7 +91,7 @@ public class UpsertThresholdConfigCommand : IRequest<CommonResponse<ThresholdCon
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu ngưỡng pin không hợp lệ.";
+        response.Message = "Invalid battery threshold data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 
@@ -102,7 +102,7 @@ public class UpsertThresholdConfigCommand : IRequest<CommonResponse<ThresholdCon
         // Do not overwrite 400 (field-level format errors take precedence).
         if (response.StatusCode != 400)
             response.StatusCode = 422;
-        response.Message = "Dữ liệu ngưỡng pin không hợp lệ.";
+        response.Message = "Invalid battery threshold data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

@@ -10,11 +10,11 @@ public static class EnvironmentalMetrics
 {
     public static readonly Counter IncidentsDetectedTotal = Metrics.CreateCounter(
         "environmental_incident_detected_total",
-        "Tổng số environmental incident được detect/report.",
+        "Total number of environmental incidents detected/reported.",
         new CounterConfiguration { LabelNames = new[] { "type", "severity" } });
 
     public static readonly Histogram DetectionLatencySeconds = Metrics.CreateHistogram(
         "environmental_incident_detection_latency_seconds",
-        "Độ trễ từ lúc incident xảy ra (DetectedAt) đến lúc hệ thống ghi nhận.",
+        "Latency from when the incident occurred (DetectedAt) until the system recorded it.",
         new HistogramConfiguration { Buckets = Histogram.ExponentialBuckets(1, 2, 12) });
 }

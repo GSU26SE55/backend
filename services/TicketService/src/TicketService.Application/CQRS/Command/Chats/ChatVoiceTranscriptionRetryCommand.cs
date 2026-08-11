@@ -18,7 +18,7 @@ public sealed class ChatVoiceTranscriptionRetryCommand : IRequest<TicketActionRe
     {
         var response = new TicketActionResponse { IsSuccess = TicketId != Guid.Empty && ChatId != Guid.Empty, StatusCode = 400 };
         if (!response.IsSuccess)
-            response.ListErrors.Add(new Errors { Field = "chatId", Detail = "chatId và ticketId là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "chatId", Detail = "chatId and ticketId are required." });
         return Task.FromResult(response);
     }
 }

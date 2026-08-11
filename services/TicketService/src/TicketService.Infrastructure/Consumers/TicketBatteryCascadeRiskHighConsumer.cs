@@ -153,9 +153,9 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
         {
             Id = Guid.NewGuid(),
             Code = code,
-            Title = $"Cascade risk cao — pin {evt.AssetSerialNumber}",
-            Description = $"Hệ thống tự tạo do CascadeRiskScore={evt.CascadeRiskScore:F3} ≥ 0.7 "
-                        + $"(nguy cơ lan truyền) mà pin chưa có ticket xử lý. Cần cô lập/kiểm tra khẩn.",
+            Title = $"High cascade risk — battery {evt.AssetSerialNumber}",
+            Description = $"Auto-created by the system because CascadeRiskScore={evt.CascadeRiskScore:F3} ≥ 0.7 "
+                        + $"(propagation risk) and the battery has no ticket handling it yet. Isolation/urgent inspection required.",
             Category = TicketCategoryEnum.Repair,
             CustomerId = evt.CustomerId,
             BatteryAssetId = evt.BatteryAssetId,

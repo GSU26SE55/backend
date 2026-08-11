@@ -28,7 +28,7 @@ public static class AuditSearchValidator
             errors.Add(new Errors
             {
                 Field = "severity",
-                Detail = $"Giá trị '{request.Severity}' không hợp lệ. Hợp lệ (phân biệt hoa-thường): {string.Join(", ", Severities.All)}.",
+                Detail = $"Value '{request.Severity}' is invalid. Valid values (case-sensitive): {string.Join(", ", Severities.All)}.",
             });
         }
 
@@ -37,7 +37,7 @@ public static class AuditSearchValidator
             errors.Add(new Errors
             {
                 Field = "category",
-                Detail = $"Giá trị '{request.Category}' không hợp lệ. Hợp lệ (phân biệt hoa-thường): {string.Join(", ", AuditCategories.All)}.",
+                Detail = $"Value '{request.Category}' is invalid. Valid values (case-sensitive): {string.Join(", ", AuditCategories.All)}.",
             });
         }
 

@@ -51,7 +51,7 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
                 {
                     IsSuccess = false,
                     StatusCode = 409,
-                    Message = "Số điện thoại đã được sử dụng.",
+                    Message = "Phone number is already in use.",
                 };
             }
 
@@ -99,7 +99,7 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật profile thành công.",
+            Message = "Profile updated successfully.",
             Data = AccountProfileMapper.ToAccountDto(account)
         };
     }
@@ -108,6 +108,6 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
     {
         IsSuccess = false,
         StatusCode = 404,
-        Message = "Không tìm thấy tài khoản."
+        Message = "Account not found."
     };
 }

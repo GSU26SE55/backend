@@ -71,7 +71,7 @@ public class AuditReplayCompletedConsumer : IConsumer<AuditReplayCompletedEvent>
 
             if (!evt.IsSuccess)
             {
-                var line = $"{evt.ServiceName}: {evt.Error ?? "lỗi không rõ"}";
+                var line = $"{evt.ServiceName}: {evt.Error ?? "unknown error"}";
                 job.Error = string.IsNullOrEmpty(job.Error) ? line : $"{job.Error} | {line}";
             }
 
@@ -111,7 +111,7 @@ public class AuditReplayCompletedConsumer : IConsumer<AuditReplayCompletedEvent>
 
         // Hết lượt thử: ném để MassTransit retry sau, KHÔNG nuốt (sẽ mất tiến độ vĩnh viễn).
         throw new InvalidOperationException(
-            $"Không cập nhật được tiến độ replay job {evt.JobId} sau {MaxConcurrencyRetries} lần vì xung đột đồng thời.");
+            $"Could not update replay job {evt.JobId} progress after {MaxConcurrencyRetries} attempts due to concurrency conflicts.");
     }
 
     private static List<string> SplitServices(string? value) =>

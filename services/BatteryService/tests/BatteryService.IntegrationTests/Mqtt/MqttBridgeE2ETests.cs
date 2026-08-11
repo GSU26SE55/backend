@@ -3,6 +3,7 @@ using System.Text.Json;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
+using BatteryService.Application.Services;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using BatteryService.Infrastructure.Implements.Repositories;
@@ -21,6 +22,7 @@ using Moq;
 using MQTTnet;
 using MQTTnet.Client;
 using SharedContracts.Common.Responses;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
 
@@ -30,7 +32,7 @@ namespace BatteryService.IntegrationTests.Mqtt;
 /// Sprint IoT-1 <c>#253</c> — 3 kịch bản MQTT mà task yêu cầu, chạy trên broker Mosquitto THẬT:
 /// <list type="number">
 ///   <item>telemetry qua broker đi đúng <see cref="BatchIngestSensorReadingsCommand"/>;</item>
-///   <item>LWT <c>offline</c> → device Offline + Alert(DeviceOffline) cho mọi pin của site;</item>
+///   <item>LWT <c>offline</c> → device Offline + exactly one device-level incident;</item>
 ///   <item>ACL chặn device lạ ghi đè topic của device khác.</item>
 /// </list>
 /// Trước đây nhóm này chỉ có <c>MqttTopicMapTests</c> (thuần map chuỗi) — không kịch bản nào chạm
@@ -48,19 +50,24 @@ public class MqttBridgeE2ETests
     // ---------------------------------------------------------------- helpers
 
     /// <summary>
-    /// Context mới trên CÙNG một InMemory database (đặt tên qua <paramref name="dbName"/>).
+    /// Context mới trên cùng một SQLite database quan hệ (đặt tên qua <paramref name="dbName"/>).
     ///
     /// Bắt buộc phải tách instance: bridge xử lý message trên thread của MQTT client, trong khi test
     /// poll kết quả trên thread test. Dùng chung 1 <see cref="ApplicationDbContext"/> là dính
     /// "A second operation was started on this context instance" — EF DbContext không thread-safe.
     /// Tách ra cũng đúng với runtime: mỗi message tạo 1 scope DI ⇒ 1 DbContext riêng.
     /// </summary>
-    private static ApplicationDbContext NewDb(string dbName) =>
-        new(new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseInMemoryDatabase(dbName)
-                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+    private static ApplicationDbContext NewDb(string dbName)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{dbName}.sqlite");
+        var db = new ApplicationDbContext(
+            new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseSqlite($"Data Source={path};Cache=Shared")
                 .Options,
             new AuditableEntityInterceptor(new CurrentUserService(new HttpContextAccessor())));
+        db.Database.EnsureCreated();
+        return db;
+    }
 
     /// <summary>
     /// Bridge thật + scope factory trỏ vào DbContext của test. <paramref name="mediator"/> để test
@@ -72,7 +79,14 @@ public class MqttBridgeE2ETests
     {
         var services = new ServiceCollection();
         // Scoped + context MỚI mỗi scope — giống hệt runtime, và tránh đụng context của test.
-        services.AddScoped<IBatteryUnitOfWork>(_ => new UnitOfWork(NewDb(dbName)));
+        services.AddScoped(_ => NewDb(dbName));
+        services.AddScoped<IBatteryUnitOfWork>(sp =>
+            new UnitOfWork(sp.GetRequiredService<ApplicationDbContext>()));
+        services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
+        services.AddScoped<IIotDeviceAvailabilityService, IotDeviceAvailabilityService>();
+        services.AddScoped<IIotDeviceOfflineDetectionService, IotDeviceOfflineDetectionService>();
+        services.AddSingleton(Mock.Of<IIotMetricsRecorder>());
+        services.AddLogging();
         services.AddSingleton(mediator);
         var provider = services.BuildServiceProvider();
 
@@ -85,7 +99,8 @@ public class MqttBridgeE2ETests
             Username = user,
             Password = MosquittoBrokerFixture.Password,
             ClientId = $"bridge-{Guid.NewGuid():N}",
-            ReconnectIntervalSeconds = 1
+            ReconnectIntervalSeconds = 1,
+            LwtOfflineGraceSeconds = 90
         });
 
         var bridge = new MqttBridgeBackgroundService(
@@ -139,6 +154,14 @@ public class MqttBridgeE2ETests
             SiteId = siteId,
             Status = IotDeviceStatusEnum.Active
         };
+        db.Sites.Add(new Site
+        {
+            Id = siteId,
+            Name = "Site telemetry",
+            Address = "addr",
+            CustomerId = Guid.NewGuid(),
+            InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
         db.IotDevices.Add(device);
         await db.SaveChangesAsync();
 
@@ -221,13 +244,22 @@ public class MqttBridgeE2ETests
     {
         var dbName = $"mqtt-m2-{Guid.NewGuid()}";
         await using var db = NewDb(dbName);
+        var siteId = Guid.NewGuid();
+        db.Sites.Add(new Site
+        {
+            Id = siteId,
+            Name = "Site telemetry M2",
+            Address = "addr",
+            CustomerId = Guid.NewGuid(),
+            InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
         db.IotDevices.Add(new IotDevice
         {
             Id = Guid.NewGuid(),
             DeviceCode = MosquittoBrokerFixture.DeviceACode,
             MqttUsername = MosquittoBrokerFixture.DeviceA,
             DisplayName = "GW test M2",
-            SiteId = Guid.NewGuid(),
+            SiteId = siteId,
             Status = IotDeviceStatusEnum.Active
         });
         await db.SaveChangesAsync();
@@ -299,13 +331,22 @@ public class MqttBridgeE2ETests
     {
         var dbName = $"mqtt-ack-{Guid.NewGuid()}";
         await using var db = NewDb(dbName);
+        var siteId = Guid.NewGuid();
+        db.Sites.Add(new Site
+        {
+            Id = siteId,
+            Name = "Site command ack",
+            Address = "addr",
+            CustomerId = Guid.NewGuid(),
+            InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
         db.IotDevices.Add(new IotDevice
         {
             Id = Guid.NewGuid(),
             DeviceCode = MosquittoBrokerFixture.DeviceACode,
             MqttUsername = MosquittoBrokerFixture.DeviceA,
             DisplayName = "GW ack test",
-            SiteId = Guid.NewGuid(),
+            SiteId = siteId,
             Status = IotDeviceStatusEnum.Active
         });
         await db.SaveChangesAsync();
@@ -360,15 +401,32 @@ public class MqttBridgeE2ETests
         }
     }
 
-    // ---------------------------------------------------------------- 2) LWT → Offline + Alert
+    // ---------------------------------------------------------------- 2) LWT → Offline + canonical incident
 
     [Fact]
-    public async Task LastWill_OfflinePayload_MarksDeviceOffline_AndAlertsEveryAssetOfSite()
+    public async Task LastWill_OfflinePayload_MarksDeviceOffline_AndCreatesOneDeviceIncident()
     {
         var dbName = $"mqtt-e2e-{Guid.NewGuid()}";
         await using var db = NewDb(dbName);
         var siteId = Guid.NewGuid();
-        db.Sites.Add(new Site { Id = siteId, Name = "Site LWT", Address = "addr" });
+        var customerId = Guid.NewGuid();
+        var typeId = Guid.NewGuid();
+        db.Sites.Add(new Site
+        {
+            Id = siteId,
+            Name = "Site LWT",
+            Address = "addr",
+            CustomerId = customerId,
+            InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
+        db.BatteryTypes.Add(new BatteryType
+        {
+            Id = typeId,
+            Name = "LWT test type",
+            Manufacturer = "Test",
+            NominalVoltage = 48,
+            NominalCapacityAh = 100
+        });
         var device = new IotDevice
         {
             Id = Guid.NewGuid(),
@@ -378,12 +436,22 @@ public class MqttBridgeE2ETests
             DisplayName = "GW test B",
             SiteId = siteId,
             Status = IotDeviceStatusEnum.Active,
-            LastSeenAt = DateTime.UtcNow.AddMinutes(-1)
+            LastSeenAt = DateTime.UtcNow.AddMinutes(-5),
+            HeartbeatIntervalSeconds = 60,
+            ApiKeyHash = "test",
+            ApiKeyLastFour = "test"
         };
         db.IotDevices.Add(device);
-        // 2 pin — đủ để lộ lỗi Guid.Empty trùng khoá nếu Alert không set Id tường minh.
-        db.BatteryAssets.Add(new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "A-1", SiteId = siteId });
-        db.BatteryAssets.Add(new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "A-2", SiteId = siteId });
+        db.BatteryAssets.Add(new BatteryAsset
+        {
+            Id = Guid.NewGuid(), SerialNumber = "A-1", SiteId = siteId,
+            CustomerId = customerId, BatteryTypeId = typeId, InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
+        db.BatteryAssets.Add(new BatteryAsset
+        {
+            Id = Guid.NewGuid(), SerialNumber = "A-2", SiteId = siteId,
+            CustomerId = customerId, BatteryTypeId = typeId, InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
         await db.SaveChangesAsync();
 
         var (bridge, provider) = BuildBridge(dbName, Mock.Of<IMediator>(), _broker.Host, _broker.Port,
@@ -404,10 +472,10 @@ public class MqttBridgeE2ETests
                 {
                     using var probe = NewDb(dbName);
                     return probe.Alerts.AsNoTracking()
-                        .Count(a => a.AnomalyType == AnomalyTypeEnum.DeviceOffline) == 2;
+                        .Count(a => a.AnomalyType == AnomalyTypeEnum.DeviceOffline) == 1;
                 },
                 TimeSpan.FromSeconds(20));
-            ok.Should().BeTrue("LWT offline phải sinh 1 Alert(DeviceOffline) cho MỖI pin của site");
+            ok.Should().BeTrue("LWT offline must create one canonical incident for the device");
 
             await publisher.DisconnectAsync();
             await bridge.StopAsync(CancellationToken.None);
@@ -419,9 +487,9 @@ public class MqttBridgeE2ETests
         saved.LastOfflineAt.Should().NotBeNull();
 
         var alerts = await verify.Alerts.AsNoTracking().ToListAsync();
-        alerts.Should().HaveCount(2);
-        alerts.Select(a => a.Id).Distinct().Should().HaveCount(2,
-            "mỗi Alert phải có Id riêng — để Guid.Empty là EF ném trùng khoá ở pin thứ hai");
+        alerts.Should().ContainSingle();
+        alerts[0].IotDeviceId.Should().Be(device.Id);
+        alerts[0].BatteryAssetId.Should().BeNull();
         alerts.Should().OnlyContain(a => a.Severity == AlertSeverityEnum.Warning
                                       && a.Status == AlertStatusEnum.Open);
     }

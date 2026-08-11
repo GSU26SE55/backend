@@ -22,11 +22,11 @@ public class GetBlogPostByIdQueryHandler : IRequestHandler<GetBlogPostByIdQuery,
             .FirstOrDefaultAsync(ct);
 
         if (entity == null)
-            return new CommonResponse<BlogPostDTO> { IsSuccess = false, StatusCode = 404, Message = "Bài viết không tìm thấy." };
+            return new CommonResponse<BlogPostDTO> { IsSuccess = false, StatusCode = 404, Message = "Post not found." };
 
         // Endpoint public không được lộ bài Draft/Generating/Archived
         if (request.RequirePublished && entity.Status != BlogPostStatusEnum.Published)
-            return new CommonResponse<BlogPostDTO> { IsSuccess = false, StatusCode = 404, Message = "Bài viết không tìm thấy." };
+            return new CommonResponse<BlogPostDTO> { IsSuccess = false, StatusCode = 404, Message = "Post not found." };
 
         return new CommonResponse<BlogPostDTO>
         {

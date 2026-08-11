@@ -54,8 +54,8 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
             // Staff được phân công.
             await NotificationWriter.WriteAsync(
                 _unitOfWork, [evt.PrimaryHandlerStaffId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
-                $"Bạn được phân công ticket {evt.Code}",
-                $"Ticket {evt.Code} (ưu tiên {evt.Priority}) đã được giao cho bạn.",
+                $"You have been assigned ticket {evt.Code}",
+                $"Ticket {evt.Code} (priority {evt.Priority}) has been assigned to you.",
                 payload, "Ticket", evt.TicketId, context.CancellationToken);
 
             // Sprint 6.2 NOTI-05 (#676) — Customer sở hữu ticket.
@@ -63,8 +63,8 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
             {
                 await NotificationWriter.WriteAsync(
                     _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
-                    $"Ticket {evt.Code} đã có nhân viên xử lý",
-                    $"Yêu cầu {evt.Code} của bạn đã được phân công cho nhân viên kỹ thuật (ưu tiên {evt.Priority}).",
+                    $"Ticket {evt.Code} now has a staff member assigned",
+                    $"Your request {evt.Code} has been assigned to a technician (priority {evt.Priority}).",
                     payload, "Ticket", evt.TicketId, context.CancellationToken);
             }
             else if (evt.CustomerId == Guid.Empty)

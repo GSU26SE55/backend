@@ -30,7 +30,7 @@ public class ChangeRoleStatusCommandHandler : IRequestHandler<ChangeRoleStatusCo
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy role."
+                Message = "Role not found."
             };
         }
 
@@ -40,7 +40,7 @@ public class ChangeRoleStatusCommandHandler : IRequestHandler<ChangeRoleStatusCo
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Không thể đổi trạng thái role hệ thống."
+                Message = "Cannot change the status of a system role."
             };
         }
 
@@ -50,7 +50,7 @@ public class ChangeRoleStatusCommandHandler : IRequestHandler<ChangeRoleStatusCo
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Trạng thái không thay đổi.",
+                Message = "Status unchanged.",
                 Data = role.Id
             };
         }
@@ -69,7 +69,7 @@ public class ChangeRoleStatusCommandHandler : IRequestHandler<ChangeRoleStatusCo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật trạng thái role thành công.",
+            Message = "Role status updated successfully.",
             Data = role.Id
         };
     }

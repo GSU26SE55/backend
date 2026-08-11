@@ -24,7 +24,7 @@ public class GetAlertTicketSagaByIdQueryHandler : IRequestHandler<GetAlertTicket
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = $"Saga state cho AlertId {request.AlertId} không tồn tại."
+                Message = $"Saga state for AlertId {request.AlertId} does not exist."
             };
         }
 

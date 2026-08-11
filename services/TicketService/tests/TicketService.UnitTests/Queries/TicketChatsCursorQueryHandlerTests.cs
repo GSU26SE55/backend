@@ -210,7 +210,7 @@ public class TicketChatsCursorQueryHandlerTests
         result.Data!.Items.Should().HaveCount(2);
 
         var deleted = result.Data.Items.Single(c => c.IsDeleted);
-        deleted.Body.Should().Be("Tin nhắn này đã bị xóa.");
+        deleted.Body.Should().Be("This message has been deleted.");
         deleted.AttachmentFileIds.Should().BeEmpty();
 
         var normal = result.Data.Items.Single(c => !c.IsDeleted);

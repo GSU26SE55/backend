@@ -588,7 +588,7 @@ public class KbWorkflowHandlersTests
             MajorVersion = 1,
             MinorVersion = 0,
             Status = KbVersionStatusEnum.Pending,
-            Title = "Khởi tạo",
+            Title = "Initial",
             Content = JsonDocument.Parse("\"init\"")
         };
 

@@ -179,7 +179,7 @@ public class UpdateNotificationCategoryPreferenceCommandHandler
         var matrix = await _mediator.Send(
             new GetNotificationPreferenceMatrixQuery { UserId = request.UserId }, cancellationToken);
 
-        matrix.Message = "Cập nhật tuỳ chọn theo nhóm thành công.";
+        matrix.Message = "Updated category preferences successfully.";
         return matrix;
     }
 }

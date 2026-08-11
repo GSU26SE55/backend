@@ -46,7 +46,7 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "File đang bị cách ly và không thể tải."
+                Message = "File is quarantined and cannot be downloaded."
             };
         }
 
@@ -56,7 +56,7 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "File đang được xử lý, vui lòng thử lại sau."
+                Message = "File is being processed, please try again later."
             };
         }
 
@@ -69,7 +69,7 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Tạo presigned URL thành công.",
+            Message = "Presigned URL created successfully.",
             Data = result
         };
     }
@@ -78,13 +78,13 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
     {
         IsSuccess = false,
         StatusCode = 404,
-        Message = "Không tìm thấy file."
+        Message = "File not found."
     };
 
     private static CommonResponse<string> Forbidden() => new()
     {
         IsSuccess = false,
         StatusCode = 403,
-        Message = "Không có quyền tạo presigned URL cho file này."
+        Message = "You do not have permission to create a presigned URL for this file."
     };
 }

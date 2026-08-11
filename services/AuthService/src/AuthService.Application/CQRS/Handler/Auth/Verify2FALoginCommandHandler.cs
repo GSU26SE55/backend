@@ -69,14 +69,14 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
     {
         var challenge = await _challengeStore.GetAsync(request.ChallengeToken, cancellationToken);
         if (challenge == null)
-            return Fail(422, "Phiên xác thực đã hết hạn hoặc không hợp lệ. Hãy login lại.");
+            return Fail(422, "The authentication session has expired or is invalid. Please log in again.");
 
         // Atomic increment trước khi verify (nếu attacker spam mỗi request đều tốn quota)
         var attempts = await _challengeStore.IncrementAttemptsAsync(request.ChallengeToken, cancellationToken);
         if (attempts > MaxAttemptsPerChallenge)
         {
             await _challengeStore.InvalidateAsync(request.ChallengeToken, cancellationToken);
-            return Fail(429, "Vượt quá số lần thử cho phiên này. Hãy login lại.");
+            return Fail(429, "Too many attempts for this session. Please log in again.");
         }
 
         var account = await _unitOfWork.Accounts.GetAllAsync()
@@ -87,7 +87,7 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
         if (account == null)
         {
             await _challengeStore.InvalidateAsync(request.ChallengeToken, cancellationToken);
-            return Fail(404, "Tài khoản không tồn tại hoặc đã bị xóa.");
+            return Fail(404, "Account does not exist or has been deleted.");
         }
 
         // Re-check status — account có thể bị suspend/lock giữa lúc challenge còn sống
@@ -99,14 +99,14 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
                 reason: $"Status changed mid-challenge: {account.Status}",
                 cancellationToken: cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(403, "Tài khoản không khả dụng cho đăng nhập.");
+            return Fail(403, "Account is not available for login.");
         }
 
         if (!account.TwoFactorEnabled || string.IsNullOrEmpty(account.TwoFactorSecret))
         {
             // Inconsistent state: account đã disable 2FA giữa lúc challenge sống
             await _challengeStore.InvalidateAsync(request.ChallengeToken, cancellationToken);
-            return Fail(409, "2FA không còn được bật. Hãy login lại.");
+            return Fail(409, "2FA is no longer enabled. Please log in again.");
         }
 
         // #AUTH-45: per-account rate limit cho backup code path TRƯỚC khi attempt redeem.
@@ -125,7 +125,7 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
                     reason: "Backup code rate limit exceeded",
                     cancellationToken: cancellationToken);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
-                return Fail(429, "Vượt quá số lần thử backup code. Vui lòng thử lại sau 15 phút hoặc dùng TOTP.");
+                return Fail(429, "Too many backup code attempts. Please try again in 15 minutes or use TOTP.");
             }
         }
 
@@ -176,7 +176,7 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
                 cancellationToken: cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             var remaining = MaxAttemptsPerChallenge - attempts;
-            return Fail(422, $"Mã xác thực không đúng. Còn {Math.Max(0, remaining)} lần thử.");
+            return Fail(422, $"Incorrect verification code. {Math.Max(0, remaining)} attempt(s) remaining.");
         }
 
         // #AUTH-22: Lazy re-encrypt secret nếu vẫn là plaintext legacy HOẶC
@@ -245,7 +245,7 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đăng nhập thành công.",
+            Message = "Login successful.",
             Data = new LoginResultDto { Tokens = tokens }
         };
     }

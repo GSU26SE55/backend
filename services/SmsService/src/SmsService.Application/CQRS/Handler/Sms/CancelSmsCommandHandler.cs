@@ -33,10 +33,10 @@ public class CancelSmsCommandHandler : IRequestHandler<CancelSmsCommand, CommonR
             .FirstOrDefaultAsync(x => x.Id == request.SmsId && !x.IsDeleted, cancellationToken);
 
         if (sms is null)
-            return Fail(404, "SMS không tồn tại.");
+            return Fail(404, "SMS not found.");
 
         if (sms.Status is SmsStatus.Sent or SmsStatus.Failed or SmsStatus.Cancelled)
-            return Fail(409, $"SMS đang ở trạng thái {sms.Status}, không thể huỷ.");
+            return Fail(409, $"SMS is in status {sms.Status}, cannot be cancelled.");
 
         var now = DateTime.UtcNow;
         var targetDeviceCode = sms.GatewayDeviceCode ?? sms.TargetDeviceCode;

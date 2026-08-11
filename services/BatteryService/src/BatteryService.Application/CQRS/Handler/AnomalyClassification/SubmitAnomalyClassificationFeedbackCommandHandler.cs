@@ -30,7 +30,7 @@ public class SubmitAnomalyClassificationFeedbackCommandHandler
             .FirstOrDefaultAsync(c => c.Id == request.Id && !c.IsDeleted, cancellationToken);
 
         if (entity is null)
-            return new CommonResponse<AnomalyClassificationDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy classification." };
+            return new CommonResponse<AnomalyClassificationDto> { IsSuccess = false, StatusCode = 404, Message = "Classification not found." };
 
         entity.StaffFeedback = request.Feedback;
         entity.StaffFeedbackByUserId = request.StaffFeedbackByUserId;
@@ -53,7 +53,7 @@ public class SubmitAnomalyClassificationFeedbackCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã ghi nhận feedback.",
+            Message = "Feedback recorded.",
             Data = Map(entity)
         };
     }

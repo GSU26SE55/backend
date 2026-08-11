@@ -55,9 +55,9 @@ public class ChatEscalatedToAdminConsumer : IConsumer<ChatEscalatedToAdminEvent>
                 return;
             }
 
-            var title = $"🚨 Escalation chat lên Admin — ticket {evt.TicketCode}";
-            var body = $"Manager không phản hồi yêu cầu review chat trên ticket {evt.TicketCode} trong 30 phút. " +
-                       "Cần Admin vào xử lý.";
+            var title = $"🚨 Chat escalated to Admin — ticket {evt.TicketCode}";
+            var body = $"The Manager did not respond to the chat review request on ticket {evt.TicketCode} within 30 minutes. " +
+                       "Admin action is required.";
             var payload = JsonSerializer.Serialize(new
             {
                 chatId = evt.ChatId,

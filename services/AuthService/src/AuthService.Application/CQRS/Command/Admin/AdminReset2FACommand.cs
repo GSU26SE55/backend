@@ -25,7 +25,7 @@ public class AdminReset2FACommand : IRequest<CommonResponse<string>>, IValidatab
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Thiếu hoặc sai tham số định danh tài khoản trong route.";
+            response.Message = "Missing or invalid account identifier parameter in the route.";
         }
         return Task.FromResult(response);
     }

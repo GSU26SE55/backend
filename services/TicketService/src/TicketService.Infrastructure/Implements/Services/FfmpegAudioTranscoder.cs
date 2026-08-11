@@ -50,8 +50,8 @@ public class FfmpegAudioTranscoder : IAudioTranscoder
             // Để nguyên NRE thì log chỉ có "Object reference not set to an instance of an object" và
             // người đọc sẽ đi tìm biến null trong mã của mình. Đổi thành lỗi nói đúng chuyện đã xảy ra.
             throw new InvalidOperationException(
-                $"Không chạy được ffmpeg để chuyển '{sourceFileName}' sang m4a "
-                + "(tiến trình không khởi động được hoặc pipe bị ngắt sớm).", ex);
+                $"Failed to run ffmpeg to convert '{sourceFileName}' to m4a "
+                + "(the process failed to start or the pipe was closed early).", ex);
         }
 
         var output = outputStream.ToArray();
@@ -65,8 +65,8 @@ public class FfmpegAudioTranscoder : IAudioTranscoder
             || System.Text.Encoding.ASCII.GetString(output, 4, 4) != "ftyp")
         {
             throw new InvalidOperationException(
-                $"Chuyển mã âm thanh sang m4a thất bại: ffmpeg trả {output.Length} byte không phải "
-                + $"container MP4 hợp lệ (nguồn {sourceContentType}, {input.Length} byte).");
+                $"Audio transcoding to m4a failed: ffmpeg returned {output.Length} byte(s), which is not a "
+                + $"valid MP4 container (source {sourceContentType}, {input.Length} byte(s)).");
         }
 
         _logger.LogInformation(

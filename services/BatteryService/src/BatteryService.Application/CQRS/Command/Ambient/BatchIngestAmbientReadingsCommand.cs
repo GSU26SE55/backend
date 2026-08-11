@@ -31,26 +31,26 @@ public class BatchIngestAmbientReadingsCommand : IRequest<CommonResponse<int>>, 
         var response = new CommonResponse<int>();
 
         if (Items.Count == 0)
-            response.ListErrors.Add(new Errors { Field = nameof(Items), Detail = "Items không được rỗng." });
+            response.ListErrors.Add(new Errors { Field = nameof(Items), Detail = "Items must not be empty." });
         else if (Items.Count > 100)
-            response.ListErrors.Add(new Errors { Field = nameof(Items), Detail = "Tối đa 100 row mỗi batch." });
+            response.ListErrors.Add(new Errors { Field = nameof(Items), Detail = "Maximum 100 rows per batch." });
 
         for (int i = 0; i < Items.Count; i++)
         {
             var x = Items[i];
             if (x.SiteId == Guid.Empty)
-                response.ListErrors.Add(new Errors { Field = $"Items[{i}].SiteId", Detail = "SiteId bắt buộc." });
+                response.ListErrors.Add(new Errors { Field = $"Items[{i}].SiteId", Detail = "SiteId is required." });
             if (x.Humidity < 0 || x.Humidity > 100)
-                response.ListErrors.Add(new Errors { Field = $"Items[{i}].Humidity", Detail = "Humidity phải nằm [0, 100]." });
+                response.ListErrors.Add(new Errors { Field = $"Items[{i}].Humidity", Detail = "Humidity must be within [0, 100]." });
             if (x.AmbientTemperature < -90 || x.AmbientTemperature > 90)
-                response.ListErrors.Add(new Errors { Field = $"Items[{i}].AmbientTemperature", Detail = "Temperature phải nằm [-90, 90]." });
+                response.ListErrors.Add(new Errors { Field = $"Items[{i}].AmbientTemperature", Detail = "Temperature must be within [-90, 90]." });
         }
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu ingest không hợp lệ.";
+            response.Message = "Invalid ingest data.";
         }
         return Task.FromResult(response);
     }

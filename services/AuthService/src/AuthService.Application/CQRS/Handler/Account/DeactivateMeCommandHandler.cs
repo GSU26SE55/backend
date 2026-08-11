@@ -47,7 +47,7 @@ public class DeactivateMeCommandHandler : IRequestHandler<DeactivateMeCommand, A
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -99,7 +99,7 @@ public class DeactivateMeCommandHandler : IRequestHandler<DeactivateMeCommand, A
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã vô hiệu hóa tài khoản. Liên hệ admin để khôi phục.",
+            Message = "Account deactivated. Contact an admin to restore it.",
             Data = account.Id
         };
     }

@@ -98,7 +98,7 @@ public class TicketChatsQueryHandlerTests
         result.Data!.Items.Should().HaveCount(2);
 
         var deleted = result.Data.Items.Single(c => c.IsDeleted);
-        deleted.Body.Should().Be("Tin nhắn này đã bị xóa.");
+        deleted.Body.Should().Be("This message has been deleted.");
         deleted.AttachmentFileIds.Should().BeEmpty();
         deleted.Mentions.Should().BeEmpty();
         deleted.ActiveTranslation.Should().BeNull();

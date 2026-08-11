@@ -254,6 +254,29 @@ public class AnomalyDetectionServiceTests
     }
 
     [Fact]
+    public async Task Scan_OverlappingLookback_DoesNotCreateMergedRowForSameReadingTwice()
+    {
+        var reading = MakeReading(temp: 60m);
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold())
+            .WithSensorReadings(reading);
+        var service = new AnomalyDetectionService(builder.Build(), Opts());
+
+        var first = await service.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), default);
+        var overlappingTick = await service.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), default);
+
+        first.AlertsCreated.Should().Be(1);
+        overlappingTick.AlertsCreated.Should().Be(0);
+        overlappingTick.AlertsMerged.Should().Be(0,
+            "the exact same source reading was already processed by the previous tick");
+        builder.Alerts.Verify(r => r.AddAsync(It.IsAny<Alert>()), Times.Once);
+        builder.OutboxMessages.Verify(
+            r => r.AddAsync(It.Is<OutboxMessage>(m => m.Type == nameof(BatteryAnomalyDetectedEvent))),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task Scan_SohDegradation_TriggersCriticalAlert()
     {
         var b = new MockUnitOfWorkBuilder()

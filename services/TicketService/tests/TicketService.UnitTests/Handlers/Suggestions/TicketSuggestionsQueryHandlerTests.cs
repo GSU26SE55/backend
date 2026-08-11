@@ -18,8 +18,8 @@ public class TicketStaffSuggestionsQueryHandlerTests
     {
         Id = id,
         Code = "TKT-001",
-        Title = "Pin không sạc",
-        Description = "Sạc không vào",
+        Title = "Battery not charging",
+        Description = "Charging does not start",
         Category = TicketCategoryEnum.Charging,
         Priority = TicketPriorityEnum.P2High,
         Status = TicketStatusEnum.Open,
@@ -194,7 +194,7 @@ public class TicketStaffSuggestionsQueryHandlerTests
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyList<AiStaffCandidate>>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AiStaffSuggestResult(
-                new[] { new AiStaffSuggestion(staffId.ToString(), "Nguyễn Văn A", 0.9, "khớp kỹ năng", true) },
+                new[] { new AiStaffSuggestion(staffId.ToString(), "Nguyễn Văn A", 0.9, "skill match", true) },
                 ""));
 
         var res = await new TicketStaffSuggestionsQueryHandler(uow.Object, _ai.Object)
@@ -204,6 +204,6 @@ public class TicketStaffSuggestionsQueryHandlerTests
         item.SkillTier.Should().Be((int)StaffSkillTierEnum.ModuleSpecialist);
         item.SkillCodes.Should().Contain("charging");
         item.MaxConcurrentTickets.Should().Be(8);
-        item.Reason.Should().Be("khớp kỹ năng");
+        item.Reason.Should().Be("skill match");
     }
 }

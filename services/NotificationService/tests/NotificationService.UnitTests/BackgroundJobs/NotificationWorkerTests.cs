@@ -279,7 +279,7 @@ public class NotificationWorkerTests
         aggregate.Channel.Should().Be(NotificationChannelEnum.Email);
         aggregate.Status.Should().Be(NotificationStatusEnum.Pending);
         aggregate.NextAttemptAt.Should().BeNull("bản tổng hợp phải được gửi ngay ở vòng dispatch kế tiếp");
-        aggregate.Title.Should().Contain("2 thông báo");
+        aggregate.Title.Should().Contain("2 new notifications");
 
         (await db.Notifications.Where(n => n.Id == n1.Id || n.Id == n2.Id).ToListAsync())
             .Should().AllSatisfy(n => n.Status.Should().Be(NotificationStatusEnum.Sent));
@@ -372,14 +372,14 @@ public class NotificationWorkerTests
         });
 
         var only = Pending(userId, NotificationChannelEnum.Email, nextAttemptAt: DateTime.UtcNow.AddMinutes(-1));
-        only.Title = "Chỉ một thông báo";
+        only.Title = "Just one notification";
         db.Notifications.Add(only);
         await db.SaveChangesAsync();
 
         await DigestSut(db).BuildDigestsAsync(CancellationToken.None);
 
         var aggregate = await db.Notifications.SingleAsync(n => n.EntityType == NotificationDigest.EntityType);
-        aggregate.Title.Should().Be("Chỉ một thông báo");
+        aggregate.Title.Should().Be("Just one notification");
     }
 
     [Fact]
@@ -403,7 +403,7 @@ public class NotificationWorkerTests
             .BuildDigestsAsync(CancellationToken.None);
 
         var aggregate = await db.Notifications.SingleAsync(n => n.EntityType == NotificationDigest.EntityType);
-        aggregate.Body.Should().Contain("và 3 thông báo khác");
+        aggregate.Body.Should().Contain("and 3 more notification");
     }
 
     [Fact]
@@ -450,7 +450,7 @@ public class NotificationWorkerTests
 
         aggregate.Body.Length.Should().BeLessThanOrEqualTo(2000, "vượt là Postgres ném lỗi");
         aggregate.Title.Length.Should().BeLessThanOrEqualTo(200);
-        aggregate.Body.Should().Contain("thông báo khác",
+        aggregate.Body.Should().Contain("more notification",
             "phần bị lược phải được nói ra, không im lặng nuốt mất");
     }
 

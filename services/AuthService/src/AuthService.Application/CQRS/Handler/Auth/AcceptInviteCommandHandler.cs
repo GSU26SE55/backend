@@ -53,15 +53,15 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
             .FirstOrDefaultAsync(a => a.InvitationToken == request.InvitationToken, cancellationToken);
 
         if (account == null)
-            return Fail(401, "Invitation token không hợp lệ hoặc đã được sử dụng.");
+            return Fail(401, "Invalid or already used invitation token.");
 
         // #AUTH-26: reject nếu InvitationExpiredAt null (invite không bao giờ hết hạn) hoặc đã quá hạn.
         // Dùng <= cho on-exact-expiry edge case, đồng bộ với #AUTH-27.
         if (!account.InvitationExpiredAt.HasValue || account.InvitationExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(401, "Invitation token đã hết hạn. Yêu cầu admin gửi lại invite.");
+            return Fail(401, "Invitation token has expired. Please ask an admin to resend the invite.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
-            return Fail(409, "Tài khoản đã được kích hoạt trước đó.");
+            return Fail(409, "Account has already been activated.");
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
 
@@ -121,7 +121,7 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã kích hoạt tài khoản và đăng nhập.",
+            Message = "Account activated and logged in successfully.",
             Data = new LoginResultDto
             {
                 Tokens = new TokenDTO

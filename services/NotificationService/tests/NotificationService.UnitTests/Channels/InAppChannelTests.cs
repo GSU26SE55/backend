@@ -91,24 +91,24 @@ public class InAppChannelTests
         {
             Id = id,
             Status = NotificationStatusEnum.Pending,
-            Title = "Tiêu đề consumer ghi cứng",
-            Body = "Thân consumer ghi cứng",
+            Title = "Consumer hardcoded title",
+            Body = "Consumer hardcoded body",
         };
 
         var (uow, _, _) = MockNotificationUnitOfWork.Build(notificationSeed: [notification]);
         uow.Setup(u => u.Notifications.GetByIdAsync(id)).ReturnsAsync(notification);
 
         var request = MakeRequest(id);
-        request.Title = "Tiêu đề template đã render";
-        request.Body = "Thân template đã render";
+        request.Title = "Rendered template title";
+        request.Body = "Rendered template body";
 
         var result = await new InAppChannel(uow.Object, NullLogger<InAppChannel>.Instance)
             .SendAsync(request);
 
         result.Success.Should().BeTrue();
-        notification.Title.Should().Be("Tiêu đề template đã render",
+        notification.Title.Should().Be("Rendered template title",
             "feed đọc thẳng từ dòng này, không đọc gói tin nào khác");
-        notification.Body.Should().Be("Thân template đã render");
+        notification.Body.Should().Be("Rendered template body");
     }
 
     [Fact]
@@ -121,8 +121,8 @@ public class InAppChannelTests
         {
             Id = id,
             Status = NotificationStatusEnum.Pending,
-            Title = "Giữ nguyên tiêu đề",
-            Body = "Giữ nguyên thân",
+            Title = "Keep original title",
+            Body = "Keep original body",
         };
 
         var (uow, _, _) = MockNotificationUnitOfWork.Build(notificationSeed: [notification]);
@@ -134,8 +134,8 @@ public class InAppChannelTests
 
         await new InAppChannel(uow.Object, NullLogger<InAppChannel>.Instance).SendAsync(request);
 
-        notification.Title.Should().Be("Giữ nguyên tiêu đề");
-        notification.Body.Should().Be("Giữ nguyên thân");
+        notification.Title.Should().Be("Keep original title");
+        notification.Body.Should().Be("Keep original body");
     }
 
     [Fact]
@@ -148,8 +148,8 @@ public class InAppChannelTests
         {
             Id = id,
             Status = NotificationStatusEnum.Pending,
-            Title = "cũ",
-            Body = "cũ",
+            Title = "old",
+            Body = "old",
         };
 
         var (uow, _, _) = MockNotificationUnitOfWork.Build(notificationSeed: [notification]);
@@ -175,21 +175,21 @@ public class InAppChannelTests
         {
             Id = id,
             Status = NotificationStatusEnum.Sent,
-            Title = "Nội dung đã giao",
-            Body = "Thân đã giao",
+            Title = "Content already sent",
+            Body = "Body already sent",
         };
 
         var (uow, _, _) = MockNotificationUnitOfWork.Build(notificationSeed: [notification]);
         uow.Setup(u => u.Notifications.GetByIdAsync(id)).ReturnsAsync(notification);
 
         var request = MakeRequest(id);
-        request.Title = "Nội dung mới";
-        request.Body = "Thân mới";
+        request.Title = "New content";
+        request.Body = "New body";
 
         await new InAppChannel(uow.Object, NullLogger<InAppChannel>.Instance).SendAsync(request);
 
-        notification.Title.Should().Be("Nội dung đã giao");
-        notification.Body.Should().Be("Thân đã giao");
+        notification.Title.Should().Be("Content already sent");
+        notification.Body.Should().Be("Body already sent");
     }
 
     [Fact]

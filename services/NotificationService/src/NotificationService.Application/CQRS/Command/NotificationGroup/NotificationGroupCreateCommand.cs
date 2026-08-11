@@ -36,7 +36,7 @@ public class NotificationGroupCreateCommand
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);
@@ -58,12 +58,12 @@ internal static class NotificationGroupRules
     public static void ValidateNameAndDescription(List<Errors> errors, string name, string? description)
     {
         if (string.IsNullOrWhiteSpace(name))
-            errors.Add(new Errors { Field = "Name", Detail = "Tên nhóm không được trống." });
+            errors.Add(new Errors { Field = "Name", Detail = "Group name is required." });
         else if (name.Trim().Length > MaxNameLength)
-            errors.Add(new Errors { Field = "Name", Detail = $"Tên nhóm tối đa {MaxNameLength} ký tự." });
+            errors.Add(new Errors { Field = "Name", Detail = $"Group name must be at most {MaxNameLength} characters." });
 
         if (description is not null && description.Trim().Length > MaxDescriptionLength)
-            errors.Add(new Errors { Field = "Description", Detail = $"Mô tả tối đa {MaxDescriptionLength} ký tự." });
+            errors.Add(new Errors { Field = "Description", Detail = $"Description must be at most {MaxDescriptionLength} characters." });
     }
 
     public static void ValidateActor(List<Errors> errors, Guid actorUserId)
@@ -73,7 +73,7 @@ internal static class NotificationGroupRules
             errors.Add(new Errors
             {
                 Field = "ActorUserId",
-                Detail = "Không xác định được người thực hiện từ token.",
+                Detail = "Unable to determine the actor from the token.",
             });
         }
     }

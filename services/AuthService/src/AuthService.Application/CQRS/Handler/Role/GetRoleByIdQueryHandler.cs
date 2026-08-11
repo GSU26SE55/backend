@@ -26,7 +26,7 @@ public class GetRoleByIdQueryHandler : IRequestHandler<GetRoleByIdQuery, RoleRes
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy role."
+                Message = "Role not found."
             };
         }
 

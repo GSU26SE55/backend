@@ -73,7 +73,7 @@ public class BatteryDataSeeder
                 NominalVoltage = 12,
                 Chemistry = BatteryChemistryEnum.LiFePO4,
                 MaxCycleCount = 3000,
-                Description = "Pin lithium iron phosphate dùng cho hệ solar dân dụng.",
+                Description = "Lithium iron phosphate battery for residential solar systems.",
                 CreatedAt = SeedTime()
             });
 
@@ -87,7 +87,7 @@ public class BatteryDataSeeder
                 NominalVoltage = 48,
                 Chemistry = BatteryChemistryEnum.Nmc,
                 MaxCycleCount = 2500,
-                Description = "Pin NMC công suất lớn cho solar farm.",
+                Description = "High-capacity NMC battery for solar farms.",
                 CreatedAt = SeedTime()
             });
 
@@ -101,7 +101,7 @@ public class BatteryDataSeeder
                 NominalVoltage = 24,
                 Chemistry = BatteryChemistryEnum.Nca,
                 MaxCycleCount = 2200,
-                Description = "Pin NCA dùng cho cụm lưu trữ trung bình.",
+                Description = "NCA battery for medium-scale energy storage clusters.",
                 CreatedAt = SeedTime()
             });
 

@@ -48,8 +48,8 @@ public class ChatRealtimeBypassTests
         Type = type,
         Channel = NotificationChannelEnum.Push,
         Status = NotificationStatusEnum.Pending,
-        Title = "Tiêu đề",
-        Body = "Nội dung",
+        Title = "Title",
+        Body = "Content",
         EntityType = "Chat",
     };
 

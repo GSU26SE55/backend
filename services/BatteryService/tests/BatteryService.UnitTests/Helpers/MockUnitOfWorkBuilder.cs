@@ -117,6 +117,7 @@ public sealed class MockUnitOfWorkBuilder
     {
         var list = data.ToList();
         repo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<T>(list));
+        repo.Setup(r => r.GetAllAsync(It.IsAny<bool>())).Returns(() => new TestAsyncEnumerable<T>(list));
         repo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<T, bool>>>()))
             .Returns<Expression<Func<T, bool>>>(pred => new TestAsyncEnumerable<T>(list.AsQueryable().Where(pred)));
         repo.Setup(r => r.AnyAsync(It.IsAny<Expression<Func<T, bool>>>()))

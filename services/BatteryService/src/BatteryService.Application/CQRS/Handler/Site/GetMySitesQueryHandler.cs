@@ -28,7 +28,7 @@ public class GetMySitesQueryHandler : IRequestHandler<GetMySitesQuery, CommonRes
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không xác định được người dùng hiện tại."
+                Message = "Could not identify the current user."
             };
         }
 

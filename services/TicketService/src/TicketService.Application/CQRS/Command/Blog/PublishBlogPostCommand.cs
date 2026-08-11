@@ -19,7 +19,7 @@ public class PublishBlogPostCommand : IRequest<CommonResponse<BlogPostActionDTO>
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.ListErrors.Add(new Errors { Field = "BlogPostId", Detail = "ID bài viết không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "BlogPostId", Detail = "Invalid post ID." });
         }
 
         return Task.FromResult(response);

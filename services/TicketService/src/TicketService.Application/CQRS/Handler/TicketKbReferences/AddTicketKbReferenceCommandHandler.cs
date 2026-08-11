@@ -25,7 +25,7 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
         var ticket = await _uow.Tickets.GetAllAsync()
             .FirstOrDefaultAsync(t => t.Id == command.TicketId, ct);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
         {
@@ -46,12 +46,12 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
             {
                 if (ticket.PrimaryHandlerStaffId != command.CurrentUserId)
                 {
-                    return Fail(403, "Chỉ nhân viên kỹ thuật được phân công xử lý Ticket này mới được phép gán tài liệu tham khảo.");
+                    return Fail(403, "Only staff assigned to handle this Ticket may attach reference documents.");
                 }
             }
             else
             {
-                return Fail(403, "Bạn không có quyền thực hiện hành động này.");
+                return Fail(403, "You do not have permission to perform this action.");
             }
         }
 
@@ -65,13 +65,13 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
             (ticket.Status == TicketStatusEnum.Resolved && !isAfterResolveType))
         {
             // 409: xung đột với trạng thái hiện tại của ticket (không phải lỗi quyền)
-            return Fail(409, "Ticket đã ở trạng thái chờ phê duyệt hoặc đã hoàn thành. Không thể gán thêm tài liệu tham khảo.");
+            return Fail(409, "Ticket is pending approval or already completed. Cannot attach more reference documents.");
         }
 
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == command.KbArticleId, ct);
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết Knowledge Base.");
+            return Fail(404, "Knowledge Base article not found.");
 
         var existing = await _uow.TicketKbReferences.GetAllAsync()
             .IgnoreQueryFilters()
@@ -106,7 +106,7 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
 
         await _uow.SaveChangesAsync(ct);
 
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã gán bài viết vào Ticket thành công." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Article attached to Ticket successfully." };
     }
 
     private static CommonResponse<object> Fail(int statusCode, string message)

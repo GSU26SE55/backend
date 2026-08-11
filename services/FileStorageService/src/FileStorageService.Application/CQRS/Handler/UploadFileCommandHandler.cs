@@ -37,7 +37,7 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Không có quyền upload file với purpose này."
+                Message = "You do not have permission to upload a file with this purpose."
             };
         }
 
@@ -97,7 +97,7 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Upload file thành công.",
+            Message = "File uploaded successfully.",
             Data = result
         };
     }

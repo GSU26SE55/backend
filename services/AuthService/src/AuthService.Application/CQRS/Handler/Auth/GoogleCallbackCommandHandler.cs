@@ -30,11 +30,11 @@ public class GoogleCallbackCommandHandler : IRequestHandler<GoogleCallbackComman
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (allowedUris.Count > 0 && !allowedUris.Contains(request.RedirectUri))
-            return Fail(400, "RedirectUri không hợp lệ.");
+            return Fail(400, "Invalid RedirectUri.");
 
         var idToken = await _googleOAuthHelper.ExchangeCodeForIdTokenAsync(request.Code, request.RedirectUri, cancellationToken);
         if (string.IsNullOrWhiteSpace(idToken))
-            return Fail(401, "Không thể đổi authorization code lấy id_token từ Google.");
+            return Fail(401, "Failed to exchange authorization code for id_token from Google.");
 
         return await _mediator.Send(new GoogleAuthCommand { IdToken = idToken }, cancellationToken);
     }

@@ -64,7 +64,7 @@ public class BlogGenerationConsumer : IConsumer<BlogGenerationRequestedEvent>
 
         if (article == null)
         {
-            await MarkFailedAsync(post, "KB article không tìm thấy.", evt.RequestedByUserId, ct);
+            await MarkFailedAsync(post, "KB article not found.", evt.RequestedByUserId, ct);
             return;
         }
 
@@ -92,7 +92,7 @@ public class BlogGenerationConsumer : IConsumer<BlogGenerationRequestedEvent>
             Summary = summary,
             ContentHtml = contentDoc,
             ChangedByUserId = evt.RequestedByUserId,
-            ChangeNote = "AI auto-generated từ KB article",
+            ChangeNote = "AI auto-generated from KB article",
         };
 
         post.ContentHtml = contentDoc;

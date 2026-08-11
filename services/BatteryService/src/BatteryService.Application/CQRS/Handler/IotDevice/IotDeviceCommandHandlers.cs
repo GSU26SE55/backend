@@ -21,14 +21,14 @@ public class UpdateIotDeviceCommandHandler : IRequestHandler<UpdateIotDeviceComm
             .Include(d => d.TargetFirmwareRelease)
             .FirstOrDefaultAsync(d => d.Id == request.Id && !d.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         if (entity.SiteId != request.SiteId)
         {
             var site = await _unitOfWork.Sites.GetAllAsync()
                 .FirstOrDefaultAsync(s => s.Id == request.SiteId && !s.IsDeleted, ct);
             if (site is null)
-                return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy Site." };
+                return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Site not found." };
             entity.SiteId = site.Id;
             entity.Site = site;
         }
@@ -38,10 +38,10 @@ public class UpdateIotDeviceCommandHandler : IRequestHandler<UpdateIotDeviceComm
             var fw = await _unitOfWork.IotFirmwareReleases.GetAllAsync()
                 .FirstOrDefaultAsync(f => f.Id == request.TargetFirmwareReleaseId.Value && !f.IsDeleted, ct);
             if (fw is null)
-                return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy firmware release." };
+                return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Firmware release not found." };
             // 409: release tồn tại nhưng đang ở trạng thái không cho phép đặt làm target.
             if (!fw.IsPublished || fw.IsArchived)
-                return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 409, Message = "Firmware release chưa publish hoặc đã archived, không thể đặt làm target." };
+                return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 409, Message = "Firmware release has not been published or has been archived; it cannot be set as target." };
             entity.TargetFirmwareReleaseId = fw.Id;
             entity.TargetFirmwareRelease = fw;
         }
@@ -65,7 +65,7 @@ public class UpdateIotDeviceCommandHandler : IRequestHandler<UpdateIotDeviceComm
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật device thành công.",
+            Message = "Device updated successfully.",
             Data = IotDeviceMapper.ToDto(entity, entity.Site?.Name, entity.TargetFirmwareRelease?.Version)
         };
     }
@@ -81,14 +81,14 @@ public class DeleteIotDeviceCommandHandler : IRequestHandler<DeleteIotDeviceComm
         var entity = await _unitOfWork.IotDevices.GetAllAsync()
             .FirstOrDefaultAsync(d => d.Id == request.Id && !d.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         entity.Status = IotDeviceStatusEnum.Decommissioned;
         entity.ApiKeyRevokedAt = DateTime.UtcNow;
         _unitOfWork.IotDevices.DeleteAsync(entity);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã decommission device." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Device decommissioned." };
     }
 }
 
@@ -117,7 +117,7 @@ public class RotateIotDeviceApiKeyCommandHandler : IRequestHandler<RotateIotDevi
             .Include(d => d.Site)
             .FirstOrDefaultAsync(d => d.Id == request.Id && !d.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         var key = _apiKeyService.GenerateKey();
         entity.ApiKeyHash = key.Hash;
@@ -150,7 +150,7 @@ public class RotateIotDeviceApiKeyCommandHandler : IRequestHandler<RotateIotDevi
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Rotate API key + MQTT credential thành công. Thiết bị PHẢI được nạp lại apiKey tại chỗ.",
+            Message = "API key and MQTT credential rotated successfully. The device MUST be reprovisioned on site with the new API key.",
             Data = IotDeviceMapper.ToCreatedDto(
                 entity, key.RawKey, entity.Site?.Name,
                 _brokerEndpoint.Resolve(entity.DeviceCode), mqttCred.RawPassword)
@@ -186,7 +186,7 @@ public class RotateIotDeviceMqttCredentialCommandHandler
             .Include(d => d.Site)
             .FirstOrDefaultAsync(d => d.Id == request.Id && !d.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<IotDeviceCreatedDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         var mqttCred = _apiKeyService.GenerateMqttCredential(entity.DeviceCode);
         entity.MqttUsername = mqttCred.Username;
@@ -206,7 +206,7 @@ public class RotateIotDeviceMqttCredentialCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Rotate MQTT credential thành công. Thiết bị sẽ tự re-provision để lấy mật khẩu mới.",
+            Message = "MQTT credential rotated successfully. The device will automatically reprovision to obtain the new password.",
             Data = IotDeviceMapper.ToCreatedDto(
                 entity,
                 // apiKey KHÔNG đổi — trả lại bản đang lưu để admin không tưởng là mất.
@@ -228,12 +228,12 @@ public class RevokeIotDeviceApiKeyCommandHandler : IRequestHandler<RevokeIotDevi
         var entity = await _unitOfWork.IotDevices.GetAllAsync()
             .FirstOrDefaultAsync(d => d.Id == request.Id && !d.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         entity.ApiKeyRevokedAt = DateTime.UtcNow;
         entity.Status = IotDeviceStatusEnum.Disabled;
         _unitOfWork.IotDevices.UpdateAsync(entity);
         await _unitOfWork.SaveChangesAsync(ct);
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã revoke API key." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "API key revoked." };
     }
 }

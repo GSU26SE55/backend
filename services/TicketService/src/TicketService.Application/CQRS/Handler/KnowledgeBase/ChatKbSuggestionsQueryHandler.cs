@@ -26,7 +26,7 @@ public class ChatKbSuggestionsQueryHandler : IRequestHandler<ChatKbSuggestionsQu
             .FirstOrDefaultAsync(c => c.Id == query.ChatId && c.TicketId == query.TicketId && !c.IsDeleted, ct);
 
         if (chat == null)
-            return Fail(404, "Không tìm thấy chat.");
+            return Fail(404, "Chat not found.");
 
         var topN = Math.Clamp(query.TopN, 1, 10);
         var suggestions = await _kbSuggestionService.SuggestByChatBodyAsync(

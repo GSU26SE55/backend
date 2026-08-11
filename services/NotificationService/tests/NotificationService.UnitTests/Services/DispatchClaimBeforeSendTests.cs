@@ -48,8 +48,8 @@ public class DispatchClaimBeforeSendTests
         Type = NotificationTypeEnum.TicketCreated,
         Channel = NotificationChannelEnum.InApp,
         Status = NotificationStatusEnum.Pending,
-        Title = "Tiêu đề",
-        Body = "Nội dung",
+        Title = "Title",
+        Body = "Content",
         EntityType = "Ticket",
         DispatchAttemptCount = attempts,
     };

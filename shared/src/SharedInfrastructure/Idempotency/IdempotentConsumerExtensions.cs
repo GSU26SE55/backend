@@ -15,7 +15,7 @@ namespace SharedInfrastructure.Idempotency;
 public class InboxLeaseHeldException : Exception
 {
     public InboxLeaseHeldException(Guid messageId, string consumerName)
-        : base($"Message {messageId} đang được {consumerName} xử lý — sẽ thử lại sau.")
+        : base($"Message {messageId} is currently being processed by {consumerName} — it will be retried later.")
     {
         MessageId = messageId;
         ConsumerName = consumerName;

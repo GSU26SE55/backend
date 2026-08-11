@@ -19,13 +19,13 @@ public class MarkHelpfulCommand : IRequest<CommonResponse<KbArticleActionDTO>>, 
         var response = new CommonResponse<KbArticleActionDTO>();
 
         if (ArticleId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "ArticleId", Detail = "ID bài viết không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ArticleId", Detail = "Invalid article ID." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

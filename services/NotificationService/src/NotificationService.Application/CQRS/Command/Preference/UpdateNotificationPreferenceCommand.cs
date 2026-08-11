@@ -33,18 +33,18 @@ public class UpdateNotificationPreferenceCommand : IRequest<NotificationPreferen
         var response = new NotificationPreferenceResponse();
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Không xác định được user." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Unable to determine the user." });
 
         if (!string.IsNullOrEmpty(QuietHoursStart) && !TimeOnly.TryParseExact(QuietHoursStart, "HH:mm", out _))
-            response.ListErrors.Add(new Errors { Field = "QuietHoursStart", Detail = "Định dạng phải là HH:mm." });
+            response.ListErrors.Add(new Errors { Field = "QuietHoursStart", Detail = "Format must be HH:mm." });
 
         if (!string.IsNullOrEmpty(QuietHoursEnd) && !TimeOnly.TryParseExact(QuietHoursEnd, "HH:mm", out _))
-            response.ListErrors.Add(new Errors { Field = "QuietHoursEnd", Detail = "Định dạng phải là HH:mm." });
+            response.ListErrors.Add(new Errors { Field = "QuietHoursEnd", Detail = "Format must be HH:mm." });
 
         if (string.IsNullOrWhiteSpace(TimeZone))
-            response.ListErrors.Add(new Errors { Field = "TimeZone", Detail = "TimeZone không được trống." });
+            response.ListErrors.Add(new Errors { Field = "TimeZone", Detail = "TimeZone is required." });
         else if (TimeZone.Length > 100)
-            response.ListErrors.Add(new Errors { Field = "TimeZone", Detail = "TimeZone tối đa 100 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "TimeZone", Detail = "TimeZone must be at most 100 characters." });
 
         if (response.ListErrors.Count > 0)
             response.IsSuccess = false;

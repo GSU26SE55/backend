@@ -28,7 +28,7 @@ public class GetMyBatteryAssetsQueryHandler : IRequestHandler<GetMyBatteryAssets
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Không xác định được người dùng hiện tại."
+                Message = "Could not identify the current user."
             };
         }
 

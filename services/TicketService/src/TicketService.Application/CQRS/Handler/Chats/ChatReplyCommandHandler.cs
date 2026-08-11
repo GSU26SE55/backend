@@ -46,17 +46,17 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
     {
         var parent = await _uow.TicketChats.GetByIdAsync(request.ParentChatId);
         if (parent == null || parent.IsDeleted)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (parent.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (parent.ParentChatId != null)
-            return Fail(400, "Không thể reply lồng cấp 2.");
+            return Fail(400, "Cannot reply to a second-level nested comment.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
         {
@@ -67,7 +67,7 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
         }
 
         if (ticket.Status == TicketStatusEnum.Closed)
-            return Fail(400, "Không thể trả lời bình luận khi ticket đã đóng.");
+            return Fail(400, "Cannot reply to a comment when the ticket is closed.");
 
         var reply = new TicketChat
         {
@@ -91,7 +91,7 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
             if (affectedRows == 0)
             {
                 throw new DbUpdateConcurrencyException(
-                    "Tin nhắn gốc đã bị thay đổi hoặc xóa trong khi đang trả lời.");
+                    "The original message was changed or deleted while replying.");
             }
 
             await _activityLogger.LogAsync(
@@ -101,8 +101,8 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
                 request.UserDisplayName,
                 ActivityActionEnum.ChatReplied,
                 null,
-                request.IsInternal ? "[Nội bộ]" : "[Công khai]",
-                $"Đã trả lời tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
+                request.IsInternal ? "[Internal]" : "[Public]",
+                $"Replied to chat message: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
 
             var recipientIds = await _recipientResolver.ResolveAsync(
                 ticket.Id, ticket.CustomerId, reply.AuthorUserId, reply.IsInternal, transactionCt);
@@ -146,7 +146,7 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Trả lời bình luận thành công.",
+            Message = "Reply added successfully.",
             Data = new TicketActionDTO
             {
                 Id = reply.Id.ToString(),

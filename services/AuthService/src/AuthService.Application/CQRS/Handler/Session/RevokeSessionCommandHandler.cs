@@ -30,7 +30,7 @@ public class RevokeSessionCommandHandler : IRequestHandler<RevokeSessionCommand,
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Chưa đăng nhập."
+                Message = "Not logged in."
             };
         }
 
@@ -44,7 +44,7 @@ public class RevokeSessionCommandHandler : IRequestHandler<RevokeSessionCommand,
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy session."
+                Message = "Session not found."
             };
         }
 
@@ -54,7 +54,7 @@ public class RevokeSessionCommandHandler : IRequestHandler<RevokeSessionCommand,
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Không có quyền thu hồi session này."
+                Message = "You do not have permission to revoke this session."
             };
         }
 
@@ -64,7 +64,7 @@ public class RevokeSessionCommandHandler : IRequestHandler<RevokeSessionCommand,
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Session đã không còn hiệu lực.",
+                Message = "Session is no longer active.",
                 Data = 0
             };
         }
@@ -85,7 +85,7 @@ public class RevokeSessionCommandHandler : IRequestHandler<RevokeSessionCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Thu hồi session thành công.",
+            Message = "Session revoked successfully.",
             Data = 1
         };
     }

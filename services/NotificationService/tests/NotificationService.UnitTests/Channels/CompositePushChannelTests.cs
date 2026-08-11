@@ -69,8 +69,8 @@ public class CompositePushChannelTests
         NotificationId = Guid.NewGuid(),
         UserId = UserId,
         Type = NotificationTypeEnum.ChatCreated,
-        Title = "Tiêu đề",
-        Body = "Nội dung",
+        Title = "Title",
+        Body = "Content",
         CreatedAt = DateTime.UtcNow,
     };
 
@@ -236,7 +236,7 @@ public class CompositePushChannelTests
         var signalR = new Mock<ISignalRPushChannel>();
         signalR.SetupGet(c => c.ChannelType).Returns(NotificationChannelEnum.Push);
         signalR.Setup(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()))
-               .ThrowsAsync(new InvalidOperationException("hub nổ"));
+               .ThrowsAsync(new InvalidOperationException("hub crashed"));
 
         var expo = Expo();
         var sut = Build(signalR, expo, PushTransportEnum.Both, [Token("ExponentPushToken[a]")]);
@@ -253,14 +253,14 @@ public class CompositePushChannelTests
         var signalR = new Mock<ISignalRPushChannel>();
         signalR.SetupGet(c => c.ChannelType).Returns(NotificationChannelEnum.Push);
         signalR.Setup(c => c.SendAsync(It.IsAny<SendRequest>(), It.IsAny<CancellationToken>()))
-               .ThrowsAsync(new InvalidOperationException("hub nổ"));
+               .ThrowsAsync(new InvalidOperationException("hub crashed"));
 
         var sut = Build(signalR, Expo(), PushTransportEnum.SignalR);
 
         var result = await sut.SendAsync(Request());
 
         result.Success.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("hub nổ");
+        result.ErrorMessage.Should().Contain("hub crashed");
     }
 
     [Fact]

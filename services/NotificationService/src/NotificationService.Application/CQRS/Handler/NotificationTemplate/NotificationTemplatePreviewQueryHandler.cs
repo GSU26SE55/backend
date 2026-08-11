@@ -37,7 +37,7 @@ public class NotificationTemplatePreviewQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy template.",
+                Message = "Template not found.",
             };
         }
 
@@ -71,7 +71,7 @@ public class NotificationTemplatePreviewQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = $"Template hỏng cú pháp: {ex.Message}",
+                Message = $"Template has a syntax error: {ex.Message}",
             };
         }
     }

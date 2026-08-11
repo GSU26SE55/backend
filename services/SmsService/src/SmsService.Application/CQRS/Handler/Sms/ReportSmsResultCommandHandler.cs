@@ -30,10 +30,10 @@ public class ReportSmsResultCommandHandler : IRequestHandler<ReportSmsResultComm
             .FirstOrDefaultAsync(x => x.Id == request.SmsId && !x.IsDeleted, cancellationToken);
 
         if (sms is null)
-            return Fail(404, "SMS không tồn tại.");
+            return Fail(404, "SMS not found.");
 
         if (!string.Equals(sms.GatewayDeviceCode, request.DeviceCode, StringComparison.Ordinal))
-            return Fail(403, "Device này không giữ SMS đó.");
+            return Fail(403, "This device does not hold that SMS.");
 
         // ── IDEMPOTENCY ──
         // Chỉ accept khi state == Sending. Mọi state khác (Sent/Failed/Pending/Cancelled) coi như duplicate.
@@ -111,8 +111,8 @@ public class ReportSmsResultCommandHandler : IRequestHandler<ReportSmsResultComm
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Dữ liệu không hợp lệ.",
-                ListErrors = { new Errors { Field = nameof(request.Status), Detail = "Status phải là 'Sent' hoặc 'Failed' (case-insensitive)." } },
+                Message = "Invalid data.",
+                ListErrors = { new Errors { Field = nameof(request.Status), Detail = "Status must be 'Sent' or 'Failed' (case-insensitive)." } },
                 Data = string.Empty
             };
         }

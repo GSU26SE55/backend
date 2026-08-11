@@ -79,7 +79,7 @@ public class IdempotencyKeyMiddleware
             AppMetrics.IdempotencyConflicts.Inc();
             context.Response.StatusCode = StatusCodes.Status409Conflict;
             context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync("{\"isSuccess\":false,\"message\":\"Request đang được xử lý với cùng Idempotency-Key.\"}", context.RequestAborted);
+            await context.Response.WriteAsync("{\"isSuccess\":false,\"message\":\"A request with the same Idempotency-Key is already being processed.\"}", context.RequestAborted);
             return;
         }
 

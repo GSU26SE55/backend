@@ -36,13 +36,13 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (string.IsNullOrWhiteSpace(account.PhoneNumber))
-            return Fail(422, "Tài khoản chưa có số điện thoại. Vui lòng cập nhật profile trước.");
+            return Fail(422, "Account does not have a phone number yet. Please update your profile first.");
 
         if (account.PhoneConfirmed)
-            return Fail(409, "Số điện thoại đã được xác thực.");
+            return Fail(409, "Phone number has already been verified.");
 
         if (account.OtpPurpose == OtpPurposeEnum.PhoneVerify && account.OtpExpiredAt.HasValue)
         {
@@ -51,7 +51,7 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
             if (elapsed < ResendCooldownSeconds)
             {
                 var waitSeconds = (int)Math.Ceiling(ResendCooldownSeconds - elapsed);
-                return Fail(429, $"Vui lòng đợi {waitSeconds} giây trước khi yêu cầu gửi lại OTP.");
+                return Fail(429, $"Please wait {waitSeconds} seconds before requesting another OTP.");
             }
         }
 
@@ -67,7 +67,7 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
         // consumer ở SmsService vẫn chạy thêm 1-2 sprint phòng rollback rồi xoá.
         // ⚠️ KHÔNG publish cả 2 event cùng commit — Inbox dedup theo (consumerName, messageId), 2 event
         // khác Id → tạo 2 row sms_messages → customer nhận 2 SMS OTP.
-        var smsBody = $"Ma OTP cua ban la {otp}. Vui long khong chia se ma nay.";
+        var smsBody = $"Your OTP code is {otp}. Please do not share this code.";
         // CorrelationId fresh per OTP request — KHÔNG dùng account.Id (nhiều OTP cùng account
         // sẽ trùng correlation, break tracking khi subscriber consume SmsDeliveryReportEvent).
         await _messageProducer.PublishAsync(new SendSmsCommand(
@@ -84,7 +84,7 @@ public class SendPhoneOtpCommandHandler : IRequestHandler<SendPhoneOtpCommand, C
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã gửi OTP tới số điện thoại đã đăng ký.",
+            Message = "OTP has been sent to your registered phone number.",
             Data = account.PhoneNumber
         };
     }

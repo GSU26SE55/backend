@@ -46,7 +46,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Email đã được sử dụng.",
+                Message = "Email is already in use.",
             };
         }
 
@@ -63,7 +63,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
                 {
                     IsSuccess = false,
                     StatusCode = 409,
-                    Message = "Số điện thoại đã được sử dụng.",
+                    Message = "Phone number is already in use.",
                 };
             }
         }
@@ -80,7 +80,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Role không tồn tại hoặc đã bị vô hiệu hóa.",
+                Message = "Role does not exist or has been deactivated.",
             };
         }
 
@@ -120,7 +120,7 @@ public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand,
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo tài khoản thành công.",
+            Message = "Account created successfully.",
             Data = account.Id
         };
     }

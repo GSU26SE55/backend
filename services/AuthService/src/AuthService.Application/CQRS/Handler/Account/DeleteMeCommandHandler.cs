@@ -35,7 +35,7 @@ public class DeleteMeCommandHandler : IRequestHandler<DeleteMeCommand, AccountAc
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -68,7 +68,7 @@ public class DeleteMeCommandHandler : IRequestHandler<DeleteMeCommand, AccountAc
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã xóa tài khoản.",
+            Message = "Account deleted.",
             Data = account.Id
         };
     }

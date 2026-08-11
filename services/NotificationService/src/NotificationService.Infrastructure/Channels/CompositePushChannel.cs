@@ -77,7 +77,7 @@ public sealed class CompositePushChannel : INotificationChannel
             {
                 // Không có thiết bị nào đăng ký. Với Both thì đây là chuyện bình thường (người dùng
                 // chỉ xài web) nên chỉ ghi Debug; với Expo-only thì đó là lý do thất bại thật sự.
-                const string reason = "Người nhận chưa đăng ký device token nào đang hoạt động.";
+                const string reason = "The recipient has no active device token registered.";
                 if (transport == PushTransportEnum.Expo)
                     errors.Add($"Expo: {reason}");
                 else
@@ -102,7 +102,7 @@ public sealed class CompositePushChannel : INotificationChannel
             false,
             errors.Count > 0
                 ? string.Join("; ", errors)
-                : $"Không có đường vận chuyển push nào khả dụng (transport = {transport}).");
+                : $"No push transport is available (transport = {transport}).");
     }
 
     /// <summary>

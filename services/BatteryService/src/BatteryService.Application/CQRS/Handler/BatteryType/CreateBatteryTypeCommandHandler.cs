@@ -31,7 +31,7 @@ public class CreateBatteryTypeCommandHandler : IRequestHandler<CreateBatteryType
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tên loại pin đã tồn tại.",
+                Message = "Battery type name already exists.",
             };
         }
 
@@ -54,7 +54,7 @@ public class CreateBatteryTypeCommandHandler : IRequestHandler<CreateBatteryType
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo loại pin thành công.",
+            Message = "Battery type created successfully.",
             Data = BatteryMapper.ToDto(entity)
         };
     }

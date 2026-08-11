@@ -28,30 +28,30 @@ public class UpdateBlogPostCommand : IRequest<CommonResponse<BlogPostActionDTO>>
         var response = new CommonResponse<BlogPostActionDTO>();
 
         if (BlogPostId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "BlogPostId", Detail = "ID bài viết không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "BlogPostId", Detail = "Invalid post ID." });
 
         if (string.IsNullOrWhiteSpace(Title))
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title is required." });
         else if (Title.Length > 256)
-            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Tiêu đề tối đa 256 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title must be at most 256 characters." });
 
         if (string.IsNullOrWhiteSpace(Slug))
-            response.ListErrors.Add(new Errors { Field = "Slug", Detail = "Slug không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Slug", Detail = "Slug is required." });
 
         if (string.IsNullOrWhiteSpace(Summary))
-            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Tóm tắt không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary is required." });
 
         if (string.IsNullOrWhiteSpace(ContentHtml))
-            response.ListErrors.Add(new Errors { Field = "ContentHtml", Detail = "Nội dung không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "ContentHtml", Detail = "Content is required." });
 
         if (CurrentVersion <= 0)
-            response.ListErrors.Add(new Errors { Field = "CurrentVersion", Detail = "Version không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "CurrentVersion", Detail = "Invalid version." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

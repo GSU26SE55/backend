@@ -34,7 +34,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài sản pin."
+                Message = "Battery asset not found."
             };
         }
 
@@ -52,7 +52,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Serial pin đã tồn tại.",
+                Message = "Battery serial number already exists.",
             };
         }
 
@@ -66,7 +66,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy loại pin."
+                Message = "Battery type not found."
             };
         }
 
@@ -82,7 +82,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy site."
+                Message = "Site not found."
             };
         }
 
@@ -124,7 +124,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật tài sản pin thành công.",
+            Message = "Battery asset updated successfully.",
             Data = BatteryMapper.ToDto(entity, customerName)
         };
     }
@@ -137,7 +137,7 @@ public class UpdateBatteryAssetCommandHandler : IRequestHandler<UpdateBatteryAss
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Site không thuộc khách hàng của tài sản pin."
+                Message = "Site does not belong to the battery asset's customer."
             };
         }
 

@@ -70,7 +70,7 @@ public class VirusScanWorkerTests
         protected override Task<byte[]> DownloadAsync(
             FileInternal.FileInternalClient files, Guid fileId, CancellationToken ct)
             => throw new Grpc.Core.RpcException(new Grpc.Core.Status(
-                Grpc.Core.StatusCode.DataLoss, $"Tải file {fileId} qua kênh nội bộ trả về 0 byte."));
+                Grpc.Core.StatusCode.DataLoss, $"Downloading file {fileId} over the internal channel returned 0 bytes."));
     }
 
     private static IOptions<ChatOptions> BuildOpts(

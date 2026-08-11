@@ -19,19 +19,19 @@ public class ChangeAccountStatusCommand : IRequest<AccountActionResponse>, IVali
         var response = new AccountActionResponse();
 
         if (Id == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Id account không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Invalid account Id." });
 
         if (!Enum.IsDefined(typeof(AccountStatusEnum), Status))
-            response.ListErrors.Add(new Errors { Field = "Status", Detail = "Trạng thái không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Status", Detail = "Invalid status." });
 
         if (!string.IsNullOrEmpty(Reason) && Reason.Length > 500)
-            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Lý do tối đa 500 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Reason must not exceed 500 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

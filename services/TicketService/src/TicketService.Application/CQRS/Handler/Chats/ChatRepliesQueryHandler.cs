@@ -40,7 +40,7 @@ public class ChatRepliesQueryHandler : IRequestHandler<ChatRepliesQuery, CommonR
             .AnyAsync(c => c.Id == request.ParentChatId && c.TicketId == request.TicketId, cancellationToken);
 
         if (!parentExists)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
 

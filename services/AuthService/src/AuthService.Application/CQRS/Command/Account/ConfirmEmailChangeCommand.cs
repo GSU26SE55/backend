@@ -20,16 +20,16 @@ public class ConfirmEmailChangeCommand : IRequest<AccountActionResponse>, IValid
         var response = new AccountActionResponse();
 
         if (AccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "AccountId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
 
         if (string.IsNullOrWhiteSpace(Otp) || !OtpRegex.IsMatch(Otp.Trim()))
-            response.ListErrors.Add(new Errors { Field = "Otp", Detail = "OTP phải gồm 6 chữ số." });
+            response.ListErrors.Add(new Errors { Field = "Otp", Detail = "OTP must be 6 digits." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
         return Task.FromResult(response);
     }

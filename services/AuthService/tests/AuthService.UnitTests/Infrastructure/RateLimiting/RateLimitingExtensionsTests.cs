@@ -68,13 +68,10 @@ public class RateLimitingExtensionsTests
         var rejected = await client.PostAsync("/test", new StringContent(""));
         rejected.StatusCode.Should().Be(System.Net.HttpStatusCode.TooManyRequests);
 
-        // Đọc qua JSON thay vì so chuỗi thô: CommonResponseWriter (dùng chung cho mọi response lỗi
-        // của hệ thống) escape ký tự ngoài ASCII thành \uXXXX, nên "Quá nhiều yêu cầu" không xuất hiện
-        // nguyên văn trong body. Client parse JSON vẫn nhận đúng câu tiếng Việt.
         var body = System.Text.Json.JsonDocument.Parse(await rejected.Content.ReadAsStringAsync()).RootElement;
         body.GetProperty("isSuccess").GetBoolean().Should().BeFalse();
         body.GetProperty("statusCode").GetInt32().Should().Be(429);
-        body.GetProperty("message").GetString().Should().Be("Quá nhiều yêu cầu. Vui lòng thử lại sau.");
+        body.GetProperty("message").GetString().Should().Be("Too many requests. Please try again later.");
         body.GetProperty("data").GetProperty("errorCode").GetString().Should().Be("RATE_LIMITED");
     }
 

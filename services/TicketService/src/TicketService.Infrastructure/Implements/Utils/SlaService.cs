@@ -25,11 +25,11 @@ public class SlaService : ISlaService
 
         var maxEpisodes = slaTimer.MaxPauseEpisodes > 0 ? slaTimer.MaxPauseEpisodes : 3;
         if (slaTimer.PauseEpisodesCount >= maxEpisodes)
-            return new SlaPauseEligibility(false, $"Ticket đã đạt giới hạn tạm dừng tối đa ({maxEpisodes} lần).");
+            return new SlaPauseEligibility(false, $"Ticket has reached the maximum pause limit ({maxEpisodes} time(s)).");
 
         var maxMinutes = slaTimer.MaxTotalPauseMinutes > 0 ? slaTimer.MaxTotalPauseMinutes : 2880;
         if (slaTimer.TotalPausedMinutes >= maxMinutes)
-            return new SlaPauseEligibility(false, "Tổng thời gian tạm dừng của ticket đã đạt giới hạn tối đa.");
+            return new SlaPauseEligibility(false, "The ticket's total pause duration has reached the maximum limit.");
 
         return new SlaPauseEligibility(true);
     }

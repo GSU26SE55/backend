@@ -40,7 +40,7 @@ public class TicketKbSuggestionsQueryHandler
             .FirstOrDefaultAsync(ct);
 
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         // Phân quyền: Admin/Manager xem mọi ticket; Staff phải được phân công vào ticket này.
         // Nới hơn AddTicketKbReferenceCommandHandler (chỉ PrimaryHandler): Supporter cũng
@@ -50,10 +50,10 @@ public class TicketKbSuggestionsQueryHandler
         if (role != "Admin" && role != "Manager")
         {
             if (role != "Staff")
-                return Fail(403, "Bạn không có quyền xem gợi ý tài liệu cho Ticket này.");
+                return Fail(403, "You do not have permission to view document suggestions for this Ticket.");
 
             if (!Guid.TryParse(_currentUser.UserId, out var currentUserId))
-                return Fail(403, "Không xác định được người dùng hiện tại.");
+                return Fail(403, "Unable to determine the current user.");
 
             var isAssigned = await _uow.TicketAssignments.GetAllAsync()
                 .AnyAsync(a => a.TicketId == ticket.Id
@@ -62,7 +62,7 @@ public class TicketKbSuggestionsQueryHandler
                     && a.Role != AssignmentRoleEnum.PreviousPrimaryHandler, ct);
 
             if (!isAssigned)
-                return Fail(403, "Chỉ nhân viên được phân công xử lý Ticket này mới xem được gợi ý tài liệu.");
+                return Fail(403, "Only staff assigned to handle this Ticket can view document suggestions.");
         }
 
         // Chỉ bài đã xuất bản — Draft/PendingReview chưa qua duyệt, không đưa cho kỹ thuật viên.
@@ -86,7 +86,7 @@ public class TicketKbSuggestionsQueryHandler
         {
             return Ok(new KbSuggestionListDto
             {
-                Note = "Chưa có bài viết nào được xuất bản trong hệ thống."
+                Note = "No articles have been published in the system yet."
             });
         }
 
@@ -123,7 +123,7 @@ public class TicketKbSuggestionsQueryHandler
             return Ok(new KbSuggestionListDto
             {
                 AiAvailable = false,
-                Note = "Hiện chưa lấy được gợi ý từ AI. Bạn vẫn có thể tra cứu tài liệu thủ công."
+                Note = "Unable to get suggestions from AI right now. You can still look up documents manually."
             });
         }
 

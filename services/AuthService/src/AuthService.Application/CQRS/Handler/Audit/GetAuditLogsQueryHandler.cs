@@ -24,7 +24,7 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Audit
             {
                 IsSuccess = false,
                 StatusCode = 422,
-                Message = "FromUtc phải nhỏ hơn ToUtc."
+                Message = "FromUtc must be earlier than ToUtc."
             };
         }
 

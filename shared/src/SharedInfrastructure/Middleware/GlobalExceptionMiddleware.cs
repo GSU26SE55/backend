@@ -81,7 +81,7 @@ public class GlobalExceptionMiddleware
                     new Errors
                     {
                         Field = "file",
-                        Detail = "Kích thước request vượt quá giới hạn cho phép (tối đa 20 MB)."
+                        Detail = "Request size exceeds the allowed limit (maximum 20 MB)."
                     }
                 },
                 data: new { correlationId });
@@ -94,8 +94,8 @@ public class GlobalExceptionMiddleware
         // Dev/Staging: thêm ExceptionType + message để debug nhanh.
         var isProduction = _env.IsProduction();
         var message = statusCode == (int)HttpStatusCode.InternalServerError
-            ? "Đã xảy ra lỗi hệ thống. Vui lòng liên hệ support kèm correlationId."
-            : "Request không hợp lệ.";
+            ? "A system error occurred. Please contact support with the correlationId."
+            : "The request is invalid.";
 
         object dataPayload = isProduction
             ? new { correlationId }

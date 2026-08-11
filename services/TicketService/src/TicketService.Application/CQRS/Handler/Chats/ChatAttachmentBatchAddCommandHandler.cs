@@ -26,19 +26,19 @@ public class ChatAttachmentBatchAddCommandHandler : IRequestHandler<ChatAttachme
     {
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted || chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (ticket.Status == TicketStatusEnum.Closed)
-            return Fail(400, "Không thể thêm đính kèm khi ticket đã đóng.");
+            return Fail(400, "Cannot add attachment because the ticket is closed.");
 
         var isAuthor = chat.AuthorUserId == request.UserId;
         var isManagerOrAdmin = request.UserRole == ActorRoleEnum.Manager || request.UserRole == ActorRoleEnum.Admin;
         if (!isAuthor && !isManagerOrAdmin)
-            return Fail(403, "Không có quyền thêm đính kèm vào bình luận này.");
+            return Fail(403, "You do not have permission to add attachments to this comment.");
 
         // Đếm số file hiện có trong chat
         var currentCount = await _uow.TicketAttachments.GetAllAsync()
@@ -49,8 +49,8 @@ public class ChatAttachmentBatchAddCommandHandler : IRequestHandler<ChatAttachme
         if (request.Files.Count > slotsLeft)
         {
             var msg = slotsLeft == 0
-                ? $"Bình luận đã đạt giới hạn {_chatOptions.MaxAttachmentsPerChat} đính kèm. Vui lòng xóa bớt trước khi thêm."
-                : $"Chỉ còn {slotsLeft} slot trống (tối đa {_chatOptions.MaxAttachmentsPerChat} đính kèm/bình luận). Bạn đang gửi {request.Files.Count} file — vui lòng bỏ bớt {request.Files.Count - slotsLeft} file.";
+                ? $"The comment has reached the limit of {_chatOptions.MaxAttachmentsPerChat} attachments. Please remove some before adding more."
+                : $"Only {slotsLeft} slot(s) left (max {_chatOptions.MaxAttachmentsPerChat} attachments per comment). You are sending {request.Files.Count} file(s) — please remove {request.Files.Count - slotsLeft} file(s).";
             return Fail(400, msg);
         }
 
@@ -59,9 +59,9 @@ public class ChatAttachmentBatchAddCommandHandler : IRequestHandler<ChatAttachme
         {
             var f = request.Files[i];
             if (f.SizeBytes > _chatOptions.MaxAttachmentSizeBytes)
-                return Fail(400, $"File [{f.FileName}] vượt giới hạn kích thước {_chatOptions.MaxAttachmentSizeBytes / 1024 / 1024}MB.");
+                return Fail(400, $"File [{f.FileName}] exceeds the size limit of {_chatOptions.MaxAttachmentSizeBytes / 1024 / 1024}MB.");
             if (!IsMimeTypeAllowed(f.ContentType, _chatOptions.AllowedAttachmentMimeTypes))
-                return Fail(400, $"File [{f.FileName}]: loại file '{f.ContentType}' không được hỗ trợ.");
+                return Fail(400, $"File [{f.FileName}]: file type '{f.ContentType}' is not supported.");
         }
 
         var source = request.UserRole == ActorRoleEnum.Customer
@@ -94,7 +94,7 @@ public class ChatAttachmentBatchAddCommandHandler : IRequestHandler<ChatAttachme
         catch (Exception)
         {
             await _uow.RollbackTransactionAsync();
-            return Fail(500, "Lưu đính kèm thất bại, vui lòng thử lại.");
+            return Fail(500, "Failed to save attachments, please try again.");
         }
 
         return new CommonResponse<List<TicketAttachmentDTO>>

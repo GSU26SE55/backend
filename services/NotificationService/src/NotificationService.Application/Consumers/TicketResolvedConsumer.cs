@@ -57,12 +57,12 @@ public class TicketResolvedConsumer : IConsumer<TicketResolvedEvent>
             if (recipientIds.Count > 0)
             {
                 var body = string.IsNullOrWhiteSpace(evt.ResolutionSummary)
-                    ? $"Ticket {evt.Code} đã được resolve."
-                    : $"Ticket {evt.Code} đã được resolve: {evt.ResolutionSummary}";
+                    ? $"Ticket {evt.Code} has been resolved."
+                    : $"Ticket {evt.Code} has been resolved: {evt.ResolutionSummary}";
 
                 await NotificationWriter.WriteAsync(
                     _unitOfWork, recipientIds, NotificationTypeEnum.TicketResolved, NotificationWriter.InAppPushEmail,
-                    $"Ticket {evt.Code} đã được xử lý", body, payload, "Ticket", evt.TicketId, context.CancellationToken);
+                    $"Ticket {evt.Code} has been handled", body, payload, "Ticket", evt.TicketId, context.CancellationToken);
             }
             else
             {
@@ -73,12 +73,12 @@ public class TicketResolvedConsumer : IConsumer<TicketResolvedEvent>
             if (evt.CustomerId != Guid.Empty)
             {
                 var customerBody = string.IsNullOrWhiteSpace(evt.ResolutionSummary)
-                    ? $"Sự cố trong ticket {evt.Code} đã được xử lý xong, đang chờ quản lý duyệt."
-                    : $"Sự cố trong ticket {evt.Code} đã được xử lý: {evt.ResolutionSummary}. Đang chờ quản lý duyệt.";
+                    ? $"The issue in ticket {evt.Code} has been resolved and is awaiting manager approval."
+                    : $"The issue in ticket {evt.Code} has been resolved: {evt.ResolutionSummary}. Awaiting manager approval.";
 
                 await NotificationWriter.WriteAsync(
                     _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketResolved, NotificationWriter.InAppPushEmail,
-                    $"Ticket {evt.Code} đã xử lý xong", customerBody, payload, "Ticket", evt.TicketId, context.CancellationToken);
+                    $"Ticket {evt.Code} has been resolved", customerBody, payload, "Ticket", evt.TicketId, context.CancellationToken);
             }
             else
             {

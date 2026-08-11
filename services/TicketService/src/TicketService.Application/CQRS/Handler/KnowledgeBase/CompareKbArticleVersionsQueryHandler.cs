@@ -24,7 +24,7 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
             .FirstOrDefaultAsync(v => v.Id == query.FromVersionId, ct);
 
         if (fromVersion == null)
-            return Fail(404, "Không tìm thấy phiên bản gốc.");
+            return Fail(404, "Source version not found.");
 
         KbArticleVersion? toVersion = null;
         KnowledgeBaseArticle? currentArticle = null;
@@ -36,7 +36,7 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
                 .FirstOrDefaultAsync(a => a.Id == query.ArticleId, ct);
 
             if (currentArticle == null)
-                return Fail(404, "Không tìm thấy bài viết hiện tại.");
+                return Fail(404, "Current article not found.");
 
             toVersionLabel = $"v{currentArticle.Version} (Current)";
         }
@@ -46,7 +46,7 @@ public class CompareKbArticleVersionsQueryHandler : IRequestHandler<CompareKbArt
                 .FirstOrDefaultAsync(v => v.Id == query.ToVersionId, ct);
 
             if (toVersion == null)
-                return Fail(404, "Không tìm thấy phiên bản đích.");
+                return Fail(404, "Target version not found.");
 
             toVersionLabel = $"v{toVersion.MajorVersion}.{toVersion.MinorVersion}";
         }

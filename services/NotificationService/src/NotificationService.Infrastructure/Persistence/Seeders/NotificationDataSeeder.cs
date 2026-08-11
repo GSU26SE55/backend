@@ -38,7 +38,7 @@ public class NotificationDataSeeder
 
     /// <summary>
     /// Sprint 6.3 NOTI3-12 (#712) — seed từ <see cref="NotificationTemplateCatalog"/>, phủ đủ
-    /// 32 type × mọi kênh (trước đây chỉ 5/32 type có template, phần còn lại phải sửa code mới đổi
+    /// mọi type × channel trong dispatch matrix (trước đây chỉ một phần nhỏ có template, phần còn lại phải sửa code mới đổi
     /// được câu chữ).
     ///
     /// Idempotent theo cặp (Type × Channel): đã có bản nào cho cặp đó thì KHÔNG thêm.
@@ -295,7 +295,7 @@ public class NotificationDataSeeder
                 Type = NotificationTypeEnum.TicketAssigned,
                 Channel = NotificationChannelEnum.InApp,
                 Status = NotificationStatusEnum.Sent,
-                Title = "Bạn được giao ticket TKT-2602-0001",
+                Title = "You have been assigned ticket TKT-2602-0001",
                 Body = "Battery not charging — Priority P1Critical",
                 // Khoá phải khớp TicketAssignedConsumer: `code`, KHÔNG phải `ticketCode`. Dữ liệu mẫu
                 // sai hợp đồng thì dạy người soạn template một tên biến không tồn tại.
@@ -312,8 +312,8 @@ public class NotificationDataSeeder
                 Type = NotificationTypeEnum.SlaWarning,
                 Channel = NotificationChannelEnum.Push,
                 Status = NotificationStatusEnum.Read,
-                Title = "Cảnh báo SLA: TKT-2602-0001",
-                Body = "Còn 30 phút trước khi breach SLA P1Critical.",
+                Title = "SLA warning: TKT-2602-0001",
+                Body = "30 minutes remaining before the P1Critical SLA breach.",
                 // SlaWarningConsumer ghi `percentage`, không có `ticketCode` lẫn `minutesRemaining`.
                 PayloadJson = "{\"percentage\":85,\"screen\":\"TicketDetail\"}",
                 EntityType = "Ticket",
@@ -329,8 +329,8 @@ public class NotificationDataSeeder
                 Type = NotificationTypeEnum.TicketResolved,
                 Channel = NotificationChannelEnum.Email,
                 Status = NotificationStatusEnum.Sent,
-                Title = "[TKT-2602-0004] Đã xử lý xong",
-                Body = "Ticket TKT-2602-0004 đã được xử lý. Vui lòng xác nhận và đánh giá.",
+                Title = "[TKT-2602-0004] Resolved",
+                Body = "Ticket TKT-2602-0004 has been resolved. Please confirm and rate it.",
                 EntityType = "Ticket",
                 EntityId = Guid.NewGuid(),
                 SentAt = now.AddHours(-2),
@@ -343,8 +343,8 @@ public class NotificationDataSeeder
                 Type = NotificationTypeEnum.BatteryAnomalyDetected,
                 Channel = NotificationChannelEnum.Push,
                 Status = NotificationStatusEnum.Failed,
-                Title = "Bất thường pin BAT-2026-002",
-                Body = "Loại: Overheat — Severity: Critical",
+                Title = "Battery anomaly BAT-2026-002",
+                Body = "Type: Overheat — Severity: Critical",
                 FailureReason = "Expo push token expired",
                 EntityType = "Alert",
                 EntityId = Guid.NewGuid(),
@@ -357,8 +357,8 @@ public class NotificationDataSeeder
                 Type = NotificationTypeEnum.EnvironmentalIncidentDetected,
                 Channel = NotificationChannelEnum.InApp,
                 Status = NotificationStatusEnum.Pending,
-                Title = "Cảnh báo môi trường tại Solar Farm Long An",
-                Body = "Loại: Smoke — Severity: Critical",
+                Title = "Environmental alert at Solar Farm Long An",
+                Body = "Type: Smoke — Severity: Critical",
                 EntityType = "EnvironmentalIncident",
                 EntityId = Guid.NewGuid(),
                 CreatedAt = now.AddMinutes(-2)

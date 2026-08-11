@@ -13,7 +13,7 @@ namespace TicketService.Application.CQRS.Handler.Chats;
 
 public sealed class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTranscribeCommand, TicketActionResponse>
 {
-    private const string PENDINGBODY = "Audio đang được xử lý…";
+    private const string PENDINGBODY = "Audio is being processed…";
     private readonly ITicketUnitOfWork _uow;
     private readonly IChatAuthorizationService _authorization;
     private readonly IIntegrationEventOutboxWriter _outbox;
@@ -25,11 +25,11 @@ public sealed class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoic
     {
         var roles = new[] { request.UserRole.ToString() };
         if (!await _authorization.CanAccessTicketAsync(request.TicketId, request.UserId, roles, ct))
-            return Fail(403, "Không có quyền truy cập ticket này.");
+            return Fail(403, "You do not have permission to access this ticket.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket is null || ticket.IsDeleted)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var chat = new TicketChat
         {
@@ -76,7 +76,7 @@ public sealed class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoic
         {
             IsSuccess = true,
             StatusCode = 202,
-            Message = "Audio đang được xử lý.",
+            Message = "Audio is being processed.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),

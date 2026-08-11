@@ -63,8 +63,8 @@ public class OutboxRelayService : IOutboxRelayService
         if (duplicates.Count > 0)
         {
             throw new InvalidOperationException(
-                "Trùng tên IntegrationEvent trong SharedContracts — cột outbox `type` không còn " +
-                $"phân biệt được: {string.Join(" | ", duplicates)}");
+                "Duplicate IntegrationEvent names in SharedContracts — the outbox `type` column can no " +
+                $"longer distinguish them: {string.Join(" | ", duplicates)}");
         }
 
         var map = concreteEvents.ToDictionary(t => t.Name, t => t, StringComparer.Ordinal);

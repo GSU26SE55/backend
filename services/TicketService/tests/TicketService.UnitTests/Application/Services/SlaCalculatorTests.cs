@@ -50,7 +50,7 @@ public class SlaCalculatorTests
 
         // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
-            .WithMessage($"*Giá trị Priority {invalidPriority} không được hỗ trợ*");
+            .WithMessage($"*Priority value {invalidPriority} is not supported*");
     }
 
     [Fact]

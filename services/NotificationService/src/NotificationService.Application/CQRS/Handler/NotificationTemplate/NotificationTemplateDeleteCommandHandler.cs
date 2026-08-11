@@ -38,7 +38,7 @@ public class NotificationTemplateDeleteCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy template.",
+                Message = "Template not found.",
             };
         }
 
@@ -50,7 +50,7 @@ public class NotificationTemplateDeleteCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Không xoá được bản đang dùng. Hãy kích hoạt một phiên bản khác trước.",
+                Message = "Cannot delete the active version. Activate a different version first.",
             };
         }
 
@@ -66,7 +66,7 @@ public class NotificationTemplateDeleteCommandHandler
                 target.Id,
                 request.ActorUserId,
                 isSuccess: true,
-                reason: "Xoá phiên bản template",
+                reason: "Delete template version",
                 metadata: new Dictionary<string, object?>
                 {
                     ["type"] = target.Type.ToString(),
@@ -86,7 +86,7 @@ public class NotificationTemplateDeleteCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 500,
-                Message = "Không xoá được template.",
+                Message = "Failed to delete the template.",
             };
         }
 
@@ -98,7 +98,7 @@ public class NotificationTemplateDeleteCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã xoá phiên bản {target.Version}.",
+            Message = $"Deleted version {target.Version}.",
             Data = target.Id,
         };
     }

@@ -37,7 +37,7 @@ public class FeedChannelFilterTests
             Type = NotificationTypeEnum.SlaBreached,
             Channel = c,
             Status = status,
-            Title = "SLA P1 bị vi phạm",
+            Title = "SLA P1 breached",
             Body = "Ticket breach SLA.",
             EntityType = "Ticket",
             EntityId = TicketId,
@@ -159,7 +159,7 @@ public class FeedChannelFilterTests
         var inApp = seed.Single(n => n.Channel == NotificationChannelEnum.InApp);
         var failed = seed.Single(n => n.Channel == NotificationChannelEnum.Sms);
         failed.Status = NotificationStatusEnum.Failed;
-        failed.FailureReason = "SIM hết tiền";
+        failed.FailureReason = "SIM out of credit";
 
         var (uow, _, _) = MockNotificationUnitOfWork.Build(notificationSeed: seed);
         var handler = new MarkNotificationReadCommandHandler(uow.Object, new NoopAuditWriter());
@@ -167,7 +167,7 @@ public class FeedChannelFilterTests
         await handler.Handle(new MarkNotificationReadCommand { Id = inApp.Id, UserId = UserId }, CancellationToken.None);
 
         failed.Status.Should().Be(NotificationStatusEnum.Failed, "ghi đè sẽ xoá mất dấu vết lỗi");
-        failed.FailureReason.Should().Be("SIM hết tiền");
+        failed.FailureReason.Should().Be("SIM out of credit");
     }
 
     [Fact]

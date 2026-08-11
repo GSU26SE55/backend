@@ -23,8 +23,8 @@ public class CreateNotificationUserIdTests
         UserId = userId,
         Type = NotificationTypeEnum.TicketCreated,
         Channel = NotificationChannelEnum.InApp,
-        Title = "Tiêu đề",
-        Body = "Nội dung",
+        Title = "Title",
+        Body = "Content",
     };
 
     /// <summary>Đây chính là lỗi: body có `userId` mà deserialize ra `Guid.Empty`.</summary>
@@ -37,8 +37,8 @@ public class CreateNotificationUserIdTests
               "userId":  "{{expected}}",
               "type":    1,
               "channel": 4,
-              "title":   "Tiêu đề",
-              "body":    "Nội dung"
+              "title":   "Title",
+              "body":    "Content"
             }
             """;
 
@@ -114,7 +114,7 @@ public class CreateNotificationUserIdTests
             Type = NotificationTypeEnum.SlaBreached,
             Channel = NotificationChannelEnum.Push,
             Title = "SLA breach",
-            Body = "Ticket quá hạn",
+            Body = "Ticket overdue",
             EntityType = "Ticket",
             EntityId = Guid.NewGuid(),
             BypassQuietHours = true,

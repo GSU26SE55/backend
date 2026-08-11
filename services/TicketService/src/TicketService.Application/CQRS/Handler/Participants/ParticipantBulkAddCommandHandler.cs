@@ -34,11 +34,11 @@ public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkA
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var isManagerOrAdmin = request.ActorRole == ActorRoleEnum.Manager || request.ActorRole == ActorRoleEnum.Admin;
         if (!isManagerOrAdmin)
-            return Fail(403, "Chỉ Manager/Admin mới có quyền thêm participant theo lô.");
+            return Fail(403, "Only Manager/Admin has permission to bulk add participants.");
 
         var activeUserIds = await _uow.TicketParticipants.GetAllAsync()
             .AsNoTracking()
@@ -49,7 +49,7 @@ public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkA
         foreach (var item in request.Participants)
         {
             if (activeUserIds.Contains(item.UserId))
-                return Fail(400, $"Người dùng {item.UserId} đã là participant active của ticket.");
+                return Fail(400, $"User {item.UserId} is already an active participant of the ticket.");
         }
 
         var participants = request.Participants.Select(item => new TicketParticipant
@@ -92,14 +92,14 @@ public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkA
         }
         catch (Exception ex)
         {
-            return Fail(500, $"Thêm participant theo lô thất bại: {ex.Message}");
+            return Fail(500, $"Bulk add participants failed: {ex.Message}");
         }
 
         return new ParticipantBulkActionResponse
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Thêm participant theo lô thành công.",
+            Message = "Participants added successfully.",
             Data = participants.Select(ToDto).ToList()
         };
     }

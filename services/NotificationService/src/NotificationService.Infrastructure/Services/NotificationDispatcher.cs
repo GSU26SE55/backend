@@ -229,11 +229,11 @@ public class NotificationDispatcher : INotificationDispatcher
 
         var channel = _channels.FirstOrDefault(c => c.ChannelType == notification.Channel);
         if (channel is null)
-            return await MarkFailedAsync(notification, $"Không có channel xử lý {notification.Channel}.", ct, "no_channel_handler");
+            return await MarkFailedAsync(notification, $"No channel handles {notification.Channel}.", ct, "no_channel_handler");
 
         // Recipient placeholder Guid.Empty là "broadcast chưa resolve" — không gửi được cho ai.
         if (notification.UserId == Guid.Empty)
-            return await MarkFailedAsync(notification, "UserId rỗng (placeholder broadcast chưa resolve).", ct, "empty_user_id");
+            return await MarkFailedAsync(notification, "UserId is empty (unresolved broadcast placeholder).", ct, "empty_user_id");
 
         var pref = await LoadPreferenceAsync(notification.UserId, ct);
         bool isCritical = _criticalTypes.Contains(notification.Type) || HasBypassQuietHoursFlag(notification.PayloadJson);
@@ -242,8 +242,8 @@ public class NotificationDispatcher : INotificationDispatcher
         // NOTI3-04 (#704) — tắt ở cấp kênh HOẶC cấp nhóm × kênh đều dừng ở đây.
         if (!await IsChannelEnabledAsync(pref, notification.Type, notification.Channel, ct))
             return await MarkFailedAsync(notification,
-                $"Người dùng đã tắt kênh {notification.Channel} cho nhóm "
-                + $"{NotificationCategoryMap.Resolve(notification.Type)} trong tuỳ chọn thông báo.",
+                $"The user has disabled the {notification.Channel} channel for the "
+                + $"{NotificationCategoryMap.Resolve(notification.Type)} group in their notification preferences.",
                 ct, "channel_disabled");
 
         // 2) Digest (NOTI-12) — gom notification không-critical của user bật digest,
@@ -298,10 +298,10 @@ public class NotificationDispatcher : INotificationDispatcher
 
         // 4) Thiếu địa chỉ nhận → lỗi vĩnh viễn.
         if (notification.Channel == NotificationChannelEnum.Email && string.IsNullOrWhiteSpace(account?.Email))
-            return await MarkFailedAsync(notification, "Người nhận không có email trong read-model.", ct, "no_email");
+            return await MarkFailedAsync(notification, "Recipient has no email in the read model.", ct, "no_email");
 
         if (notification.Channel == NotificationChannelEnum.Sms && string.IsNullOrWhiteSpace(account?.PhoneNumber))
-            return await MarkFailedAsync(notification, "Người nhận không có số điện thoại trong read-model.", ct, "no_phone");
+            return await MarkFailedAsync(notification, "Recipient has no phone number in the read model.", ct, "no_phone");
 
         var (title, body) = await RenderContentAsync(notification, ct);
 

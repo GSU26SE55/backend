@@ -28,14 +28,14 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
     {
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         // KIỂM TRA LOCK LOGIC: Không cho thêm log khi đã báo Resolved hoặc đã Closed
         if (ticket.Status == TicketStatusEnum.Resolved ||
             ticket.Status == TicketStatusEnum.ClosedPendingRate ||
             ticket.Status == TicketStatusEnum.Closed)
         {
-            return Fail(403, "Ticket đã ở trạng thái chờ phê duyệt hoặc đã hoàn thành. Không thể thêm nhật ký mới.");
+            return Fail(403, "Ticket is pending approval or already completed. Cannot add a new log.");
         }
 
         // KIỂM TRA LOG ĐANG CHẠY (IN-PROGRESS):
@@ -48,7 +48,7 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
 
             if (activeLog)
             {
-                return Fail(409, "Đang có một nhật ký bảo trì chưa hoàn thành cho Ticket này. Vui lòng hoàn thành nhật ký cũ trước khi bắt đầu cái mới.");
+                return Fail(409, "There is an unfinished maintenance log for this Ticket. Please complete the existing log before starting a new one.");
             }
         }
 
@@ -91,7 +91,7 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
             ActivityActionEnum.MaintenanceLogged,
             null,
             $"[{request.LogType}] {request.Summary}",
-            "Đã thêm nhật ký bảo trì.");
+            "Added a maintenance log.");
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
@@ -103,7 +103,7 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Thêm nhật ký bảo trì thành công.",
+            Message = "Maintenance log added successfully.",
             Data = new TicketActionDTO
             {
                 Id = log.Id.ToString(),

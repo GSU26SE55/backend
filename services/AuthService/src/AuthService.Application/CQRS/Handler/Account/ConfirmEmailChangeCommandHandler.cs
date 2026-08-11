@@ -36,16 +36,16 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (string.IsNullOrEmpty(account.PendingEmail) || account.OtpPurpose != OtpPurposeEnum.EmailChange)
-            return Fail(409, "Không có yêu cầu đổi email đang chờ verify.");
+            return Fail(409, "There is no pending email change request to verify.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
-            return Fail(423, "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
+            return Fail(423, "Account is locked. Please try again later.");
 
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(401, "OTP đã hết hạn. Vui lòng yêu cầu đổi email lại.");
+            return Fail(401, "OTP has expired. Please request the email change again.");
 
         if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
         {
@@ -54,7 +54,7 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
                 account.LockoutEndAt = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "OTP không chính xác.");
+            return Fail(401, "Invalid OTP.");
         }
 
         // Double-check email vẫn chưa bị account khác chiếm trong khoảng chờ verify.
@@ -70,7 +70,7 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
             account.OtpExpiredAt = null;
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(409, "Email mới đã bị tài khoản khác đăng ký trong lúc chờ verify.");
+            return Fail(409, "New email was registered by another account while verification was pending.");
         }
 
         account.Email = pending;
@@ -114,7 +114,7 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đổi email thành công. Vui lòng đăng nhập lại bằng email mới.",
+            Message = "Email changed successfully. Please log in again with the new email.",
             Data = account.Id
         };
     }

@@ -39,19 +39,19 @@ public class ReprocessSagaCommand : IRequest<SagaReprocessResponse>, IValidatabl
         var response = new SagaReprocessResponse();
 
         if (AlertId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(AlertId), Detail = "AlertId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(AlertId), Detail = "Invalid AlertId." });
 
         if (string.IsNullOrWhiteSpace(IdempotencyKey))
-            response.ListErrors.Add(new Errors { Field = nameof(IdempotencyKey), Detail = "Idempotency-Key header bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = nameof(IdempotencyKey), Detail = "Idempotency-Key header is required." });
 
         if (PerformedBy == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(PerformedBy), Detail = "Admin user ID không xác định." });
+            response.ListErrors.Add(new Errors { Field = nameof(PerformedBy), Detail = "Admin user ID could not be determined." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Reprocess request không hợp lệ.";
+            response.Message = "Invalid reprocess request.";
         }
 
         return Task.FromResult(response);

@@ -31,14 +31,14 @@ public class NotificationGroupSeeder
     /// </summary>
     private static readonly (string RoleFilter, string Name, string Description)[] SystemGroups =
     {
-        ("Admin", "Toàn bộ Quản trị viên",
-            "Nhóm hệ thống — mọi tài khoản Quản trị viên đang hoạt động. Thành viên tự cập nhật theo vai trò."),
-        ("Manager", "Toàn bộ Quản lý",
-            "Nhóm hệ thống — mọi tài khoản Quản lý đang hoạt động. Thành viên tự cập nhật theo vai trò."),
-        ("Staff", "Toàn bộ Nhân viên kỹ thuật",
-            "Nhóm hệ thống — mọi tài khoản Nhân viên kỹ thuật đang hoạt động. Thành viên tự cập nhật theo vai trò."),
-        ("Customer", "Toàn bộ Khách hàng",
-            "Nhóm hệ thống — mọi tài khoản Khách hàng đang hoạt động. Thành viên tự cập nhật theo vai trò."),
+        ("Admin", "All Administrators",
+            "System group — every active Administrator account. Membership updates automatically by role."),
+        ("Manager", "All Managers",
+            "System group — every active Manager account. Membership updates automatically by role."),
+        ("Staff", "All Technical Staff",
+            "System group — every active Technical Staff account. Membership updates automatically by role."),
+        ("Customer", "All Customers",
+            "System group — every active Customer account. Membership updates automatically by role."),
     };
 
     private readonly ApplicationDbContext _dbContext;

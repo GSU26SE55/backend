@@ -31,7 +31,7 @@ public class ChatReactionsQueryHandler : IRequestHandler<ChatReactionsQuery, Com
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy Ticket."
+                Message = "Ticket not found."
             };
         }
 
@@ -41,7 +41,7 @@ public class ChatReactionsQueryHandler : IRequestHandler<ChatReactionsQuery, Com
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Không có quyền truy cập ticket."
+                Message = "You do not have permission to access this ticket."
             };
         }
 
@@ -53,7 +53,7 @@ public class ChatReactionsQueryHandler : IRequestHandler<ChatReactionsQuery, Com
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy bình luận."
+                Message = "Comment not found."
             };
         }
 

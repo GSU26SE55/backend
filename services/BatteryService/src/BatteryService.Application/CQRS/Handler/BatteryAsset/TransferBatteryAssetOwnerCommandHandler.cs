@@ -31,7 +31,7 @@ public class TransferBatteryAssetOwnerCommandHandler : IRequestHandler<TransferB
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài sản pin."
+                Message = "Battery asset not found."
             };
         }
 
@@ -41,7 +41,7 @@ public class TransferBatteryAssetOwnerCommandHandler : IRequestHandler<TransferB
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tài sản pin đã thuộc khách hàng này."
+                Message = "Battery asset already belongs to this customer."
             };
         }
 
@@ -58,7 +58,7 @@ public class TransferBatteryAssetOwnerCommandHandler : IRequestHandler<TransferB
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy khách hàng mới đang hoạt động.",
+                Message = "Active new customer not found.",
             };
         }
 
@@ -86,7 +86,7 @@ public class TransferBatteryAssetOwnerCommandHandler : IRequestHandler<TransferB
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Chuyển chủ sở hữu tài sản pin thành công."
+            Message = "Battery asset owner transferred successfully."
         };
     }
 }

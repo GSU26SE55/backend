@@ -33,7 +33,7 @@ public class UpsertThresholdConfigCommandHandler : IRequestHandler<UpsertThresho
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy loại pin."
+                Message = "Battery type not found."
             };
         }
 
@@ -90,7 +90,7 @@ public class UpsertThresholdConfigCommandHandler : IRequestHandler<UpsertThresho
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Lưu cấu hình ngưỡng pin thành công.",
+            Message = "Battery threshold configuration saved successfully.",
             Data = BatteryMapper.ToDto(entity)
         };
     }

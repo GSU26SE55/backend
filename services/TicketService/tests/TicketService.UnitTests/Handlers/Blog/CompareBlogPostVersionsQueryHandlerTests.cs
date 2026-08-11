@@ -51,7 +51,7 @@ public class CompareBlogPostVersionsQueryHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(404);
-        result.Message.Should().Contain("version 1");
+        result.Message.Should().Contain("Version 1");
     }
 
     [Fact]

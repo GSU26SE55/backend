@@ -141,7 +141,7 @@ public class BatteryAssetFullHandlerTests
             .Handle(cmd, CancellationToken.None);
 
         r.StatusCode.Should().Be(409);
-        r.Message.Should().Contain("Site không thuộc khách hàng");
+        r.Message.Should().Contain("Site does not belong to the battery asset's customer");
     }
 
     [Fact]

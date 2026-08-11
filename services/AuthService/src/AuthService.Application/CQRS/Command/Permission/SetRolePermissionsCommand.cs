@@ -28,13 +28,13 @@ public class SetRolePermissionsCommand : IRequest<PermissionActionResponse>, IVa
         var response = new PermissionActionResponse();
 
         if (PermissionIds.Any(id => id == Guid.Empty))
-            response.ListErrors.Add(new Errors { Field = "PermissionIds", Detail = "PermissionIds chứa giá trị không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "PermissionIds", Detail = "PermissionIds contains an invalid value." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
         return Task.FromResult(response);
     }

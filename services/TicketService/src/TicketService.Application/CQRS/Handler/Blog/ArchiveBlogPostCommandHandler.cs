@@ -21,13 +21,13 @@ public class ArchiveBlogPostCommandHandler : IRequestHandler<ArchiveBlogPostComm
             .FirstOrDefaultAsync(ct);
 
         if (post == null)
-            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 404, Message = "Bài viết không tìm thấy." };
+            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 404, Message = "Post not found." };
 
         if (post.Status is BlogPostStatusEnum.Generating or BlogPostStatusEnum.GenerationFailed)
-            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Bài viết chưa sẵn sàng để archive." };
+            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Post is not ready to be archived." };
 
         if (post.Status == BlogPostStatusEnum.Archived)
-            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Bài viết đã được archive." };
+            return new CommonResponse<BlogPostActionDTO> { IsSuccess = false, StatusCode = 409, Message = "Post has already been archived." };
 
         post.Status = BlogPostStatusEnum.Archived;
         _uow.BlogPosts.UpdateAsync(post);
@@ -37,7 +37,7 @@ public class ArchiveBlogPostCommandHandler : IRequestHandler<ArchiveBlogPostComm
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Archive bài blog thành công.",
+            Message = "Blog post archived successfully.",
             Data = new BlogPostActionDTO
             {
                 Id = post.Id.ToString(),

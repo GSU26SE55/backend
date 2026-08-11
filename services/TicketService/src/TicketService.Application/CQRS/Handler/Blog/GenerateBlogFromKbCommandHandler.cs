@@ -30,10 +30,10 @@ public class GenerateBlogFromKbCommandHandler : IRequestHandler<GenerateBlogFrom
             .FirstOrDefaultAsync(ct);
 
         if (article == null)
-            return Fail(404, "Bài viết KB không tìm thấy.");
+            return Fail(404, "KB article not found.");
 
         if (article.Status != KbArticleStatusEnum.Published)
-            return Fail(409, "Chỉ có thể tạo blog từ bài viết KB đã Published.");
+            return Fail(409, "Blog can only be generated from a Published KB article.");
 
         // Duplicate check: KB article đã có blog Draft/Published/Generating
         var duplicateExists = await _uow.BlogPosts.AnyAsync(x =>
@@ -43,7 +43,7 @@ public class GenerateBlogFromKbCommandHandler : IRequestHandler<GenerateBlogFrom
             && x.Status != BlogPostStatusEnum.GenerationFailed);
 
         if (duplicateExists)
-            return Fail(409, "Bài viết KB này đã có blog đang được tạo hoặc đã tồn tại. Vui lòng archive blog cũ trước.");
+            return Fail(409, "This KB article already has a blog being generated or already existing. Please archive the old blog first.");
 
         var slug = GenerateSlug(article.Title);
 
@@ -86,7 +86,7 @@ public class GenerateBlogFromKbCommandHandler : IRequestHandler<GenerateBlogFrom
         {
             IsSuccess = true,
             StatusCode = 202,
-            Message = "Đã gửi yêu cầu tạo blog bằng AI. Bài viết sẽ sẵn sàng sau vài giây.",
+            Message = "AI blog generation request sent. The post will be ready in a few seconds.",
             Data = new BlogPostActionDTO
             {
                 Id = post.Id.ToString(),

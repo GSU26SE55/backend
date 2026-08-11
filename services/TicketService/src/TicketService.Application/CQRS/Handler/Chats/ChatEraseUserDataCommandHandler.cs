@@ -29,7 +29,7 @@ public class ChatEraseUserDataCommandHandler : IRequestHandler<ChatEraseUserData
             .ToListAsync(ct);
 
         if (chats.Count == 0)
-            return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Không có dữ liệu chat cần xóa." };
+            return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "No chat data to erase." };
 
         var now = DateTime.UtcNow;
         await _uow.BeginTransactionAsync();
@@ -55,7 +55,7 @@ public class ChatEraseUserDataCommandHandler : IRequestHandler<ChatEraseUserData
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã xóa dữ liệu GDPR: {chats.Count} tin nhắn chat đã được ẩn danh hóa."
+            Message = $"GDPR data erased: {chats.Count} chat message(s) have been anonymized."
         };
     }
 }

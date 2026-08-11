@@ -132,7 +132,7 @@ public class MarkdownSanitizerContractTests
     [Fact]
     public void Extractor_FindsTags_OnRealSanitizedOutput()
     {
-        var html = _renderer.RenderToHtml("**đậm** và [link](https://example.com)", Array.Empty<Guid>());
+        var html = _renderer.RenderToHtml("**bold** and [link](https://example.com)", Array.Empty<Guid>());
 
         ExtractTags(html).Should().Contain("p").And.Contain("a").And.Contain("strong");
     }
@@ -163,7 +163,7 @@ public class MarkdownSanitizerContractTests
     {
         // Chốt ngược lại: siết quá tay tới mức nội dung hợp lệ cũng mất thì cũng là hỏng.
         var html = _renderer.RenderToHtml(
-            "**đậm** _nghiêng_ `mã`\n\n- một\n- hai\n\n> trích dẫn", Array.Empty<Guid>());
+            "**bold** _italic_ `code`\n\n- one\n- two\n\n> quote", Array.Empty<Guid>());
 
         html.Should().Contain("<strong>").And.Contain("<em>").And.Contain("<code>");
         html.Should().Contain("<ul>").And.Contain("<li>");
@@ -173,7 +173,7 @@ public class MarkdownSanitizerContractTests
     [Fact]
     public void SafeExternalLink_IsPreserved()
     {
-        var html = _renderer.RenderToHtml("[trang chủ](https://example.com/a?b=1)", Array.Empty<Guid>());
+        var html = _renderer.RenderToHtml("[home page](https://example.com/a?b=1)", Array.Empty<Guid>());
 
         html.Should().Contain("href=\"https://example.com/a?b=1\"");
     }

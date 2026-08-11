@@ -31,7 +31,7 @@ public class GetSiteCascadeRiskSummaryQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy site."
+                Message = "Site not found."
             };
         }
 

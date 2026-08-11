@@ -34,7 +34,7 @@ public class GetStaffAssignmentProfileQueryHandler : IRequestHandler<GetStaffAss
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy staff profile."
+                Message = "Staff profile not found."
             };
         }
 
@@ -42,7 +42,7 @@ public class GetStaffAssignmentProfileQueryHandler : IRequestHandler<GetStaffAss
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Lấy staff assignment profile thành công.",
+            Message = "Staff assignment profile retrieved successfully.",
             Data = AccountProfileMapper.ToStaffAssignmentProfileDto(profile)
         };
     }

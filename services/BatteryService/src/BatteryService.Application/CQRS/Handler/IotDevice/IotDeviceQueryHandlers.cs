@@ -85,7 +85,7 @@ public class GetIotDeviceByIdQueryHandler : IRequestHandler<GetIotDeviceByIdQuer
             .Include(d => d.TargetFirmwareRelease)
             .FirstOrDefaultAsync(d => d.Id == request.Id && !d.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<IotDeviceDetailDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<IotDeviceDetailDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         return new CommonResponse<IotDeviceDetailDto>
         {
@@ -111,14 +111,14 @@ public class GetIotDeviceByCodeQueryHandler : IRequestHandler<GetIotDeviceByCode
         // Chuẩn hoá giống lúc Create lưu (Trim().ToUpperInvariant()) — khớp unique index idx_iot_devices_device_code.
         var code = (request.DeviceCode ?? string.Empty).Trim().ToUpperInvariant();
         if (code.Length == 0)
-            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         var entity = await _unitOfWork.IotDevices.GetAllAsync()
             .Include(d => d.Site)
             .Include(d => d.TargetFirmwareRelease)
             .FirstOrDefaultAsync(d => d.DeviceCode == code && !d.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy device." };
+            return new CommonResponse<IotDeviceDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         return new CommonResponse<IotDeviceDto>
         {

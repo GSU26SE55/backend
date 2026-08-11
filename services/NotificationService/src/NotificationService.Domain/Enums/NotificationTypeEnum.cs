@@ -118,5 +118,11 @@ public enum NotificationTypeEnum
     /// <summary>GH-1169 — an SLA pause was automatically resumed after its maximum duration.</summary>
     SlaAutoResumed = 35,
 
+    /// <summary>An IoT device produced enough consecutive healthy signals after an outage.</summary>
+    IotDeviceRecovered = 36,
+
+    /// <summary>An IoT device was disabled after repeatedly submitting invalid sensor data.</summary>
+    IotDeviceAutoDecommissioned = 37,
+
     System = 99
 }

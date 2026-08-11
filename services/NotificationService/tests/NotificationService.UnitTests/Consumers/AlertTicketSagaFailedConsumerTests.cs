@@ -139,7 +139,7 @@ public class AlertTicketSagaFailedConsumerTests
         // nguyên trong PayloadJson (và trong template Email) để tra cứu.
         captured.Where(c => c.Channel != NotificationChannelEnum.Email).Should().AllSatisfy(c =>
         {
-            c.Body.Should().Contain("không tự tạo được ticket");
+            c.Body.Should().Contain("failed to automatically create a ticket");
             c.Body.Should().NotContain("AlertLinkRequested");
             c.Body.Should().NotContain("Asset not found");
         });

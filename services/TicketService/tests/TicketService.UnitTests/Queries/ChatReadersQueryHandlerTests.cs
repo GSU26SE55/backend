@@ -17,7 +17,7 @@ public class ChatReadersQueryHandlerTests
         Ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" },
         AuthorUserId = Guid.NewGuid(),
         AuthorRole = ActorRoleEnum.Customer,
-        Body = "Pin sạc rất chậm"
+        Body = "Battery charges very slowly"
     };
 
     [Fact]
@@ -68,8 +68,8 @@ public class ChatReadersQueryHandlerTests
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { chat.Ticket! },
-            customerSeed: new[] { new CustomerAccount { AccountId = customerReader, FullName = "Khach Hang A" } },
-            staffSeed: new[] { new StaffAccount { AccountId = staffReader, FullName = "Ky Thuat Vien B" } });
+            customerSeed: new[] { new CustomerAccount { AccountId = customerReader, FullName = "Customer A" } },
+            staffSeed: new[] { new StaffAccount { AccountId = staffReader, FullName = "Technician B" } });
         var chatsRepo = new Mock<IGenericRepository<TicketChat>>();
         chatsRepo.Setup(r => r.GetByIdAsync(chat.Id)).ReturnsAsync(chat);
         uow.SetupGet(u => u.TicketChats).Returns(chatsRepo.Object);
@@ -81,8 +81,8 @@ public class ChatReadersQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.Should().HaveCount(3);
-        result.Data![0].DisplayName.Should().Be("Ky Thuat Vien B");
-        result.Data![1].DisplayName.Should().Be("Khach Hang A");
+        result.Data![0].DisplayName.Should().Be("Technician B");
+        result.Data![1].DisplayName.Should().Be("Customer A");
         // Không tìm thấy account (đã xoá / khác service) → fallback về UserId.
         result.Data![2].DisplayName.Should().Be(unknownReader.ToString());
     }

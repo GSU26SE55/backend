@@ -33,7 +33,7 @@ public sealed class TicketConcurrencyExceptionMiddleware
             await CommonResponseWriter.WriteAsync(
                 context.Response,
                 StatusCodes.Status409Conflict,
-                "Dữ liệu đã được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại.",
+                "The data has been changed by another operation. Please reload and try again.",
                 data: new { errorCode = "CONCURRENCY_CONFLICT" });
         }
         catch (DbUpdateException exception) when (IsAllowedUniqueConstraint(exception))
@@ -46,7 +46,7 @@ public sealed class TicketConcurrencyExceptionMiddleware
             await CommonResponseWriter.WriteAsync(
                 context.Response,
                 StatusCodes.Status409Conflict,
-                "Dữ liệu đã được thay đổi bởi thao tác khác. Vui lòng tải lại và thử lại.",
+                "The data has been changed by another operation. Please reload and try again.",
                 data: new { errorCode = "CONCURRENCY_CONFLICT" });
         }
     }

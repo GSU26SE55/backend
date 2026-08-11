@@ -140,8 +140,8 @@ public class RatingRequestBackgroundService : BackgroundService
                 Action = ActivityActionEnum.RatingRequested,
                 ActorRole = ActorRoleEnum.System,
                 ActorDisplayName = "System",
-                Reason = $"Nhắc Customer đánh giá sau {daysPending} ngày ở CLOSED_PENDING_RATE " +
-                         $"(còn {daysUntilAutoClose} ngày trước khi tự đóng)."
+                Reason = $"Reminded Customer to rate after {daysPending} day(s) in CLOSED_PENDING_RATE " +
+                         $"({daysUntilAutoClose} day(s) remaining before auto-close)."
             });
         }
 

@@ -27,7 +27,7 @@ public class SmsBusChannelTests
             NotificationId = notificationId,
             UserId = Guid.NewGuid(),
             Title = "Alert",
-            Body = "Pin của bạn có vấn đề",
+            Body = "Your battery has an issue",
             PhoneNumber = "0901234567"
         };
 
@@ -37,7 +37,7 @@ public class SmsBusChannelTests
         pub.Verify(p => p.Publish(
             It.Is<SendSmsCommand>(cmd =>
                 cmd.PhoneNumber == "0901234567" &&
-                cmd.Message == "Pin của bạn có vấn đề" &&
+                cmd.Message == "Your battery has an issue" &&
                 cmd.SourceService == "notification" &&
                 cmd.CorrelationId == notificationId),
             It.IsAny<CancellationToken>()), Times.Once);
