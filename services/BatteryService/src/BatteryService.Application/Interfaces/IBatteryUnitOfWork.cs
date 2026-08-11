@@ -41,6 +41,7 @@ public interface IBatteryUnitOfWork : IUnitOfWork
     IGenericRepository<IotDevice> IotDevices { get; }
     IGenericRepository<IotDeviceHeartbeat> IotDeviceHeartbeats { get; }
     IGenericRepository<IotDeviceCalibration> IotDeviceCalibrations { get; }
+    IGenericRepository<IotDeviceCommand> IotDeviceCommands { get; }
     IGenericRepository<IotFirmwareRelease> IotFirmwareReleases { get; }
     IGenericRepository<IotFirmwareUpdateLog> IotFirmwareUpdateLogs { get; }
 

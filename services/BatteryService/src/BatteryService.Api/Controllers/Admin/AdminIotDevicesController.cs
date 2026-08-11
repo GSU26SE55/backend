@@ -1,9 +1,12 @@
 using System.Text.Json;
+using System.Security.Claims;
 using BatteryService.Application.CQRS.Command.IotDevice;
 using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Services;
+using BatteryService.Domain.Entities;
+using BatteryService.Domain.Enums;
 using BatteryService.Infrastructure.Mqtt;   // IOT3-14: MqttTopicMap — dựng topic đúng dạng đã publish
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -447,12 +450,42 @@ public class AdminIotDevicesController : ControllerBase
         }
 
         var cmdId = string.IsNullOrWhiteSpace(body.CmdId) ? Guid.NewGuid().ToString("N") : body.CmdId;
+        if (await _unitOfWork.IotDeviceCommands.GetAllAsync()
+                .AnyAsync(command => command.CmdId == cmdId && !command.IsDeleted, ct))
+        {
+            return Conflict(new CommonResponse<object>
+            {
+                IsSuccess = false,
+                StatusCode = 409,
+                Message = "CmdId đã tồn tại."
+            });
+        }
+
+        Guid? issuedBy = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId)
+            ? accountId
+            : null;
+        var now = DateTime.UtcNow;
+        var command = new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            CmdId = cmdId,
+            Type = body.Type,
+            ParamsJson = JsonSerializer.Serialize(body.Params ?? new { }),
+            Status = IotDeviceCommandStatusEnum.Pending,
+            IssuedByAccountId = issuedBy,
+            CreatedBy = issuedBy,
+            CreatedAt = now
+        };
+        await _unitOfWork.IotDeviceCommands.AddAsync(command);
+        await _unitOfWork.SaveChangesAsync(ct);
+
         var payload = JsonSerializer.Serialize(new
         {
             cmdId,
             type = body.Type,
             @params = body.Params,
-            issuedAt = DateTime.UtcNow
+            issuedAt = now
         });
 
         try
@@ -461,6 +494,11 @@ public class AdminIotDevicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            command.Status = IotDeviceCommandStatusEnum.Failed;
+            command.AckError = $"MQTT bridge không khả dụng: {ex.Message}";
+            command.AckedAt = DateTime.UtcNow;
+            _unitOfWork.IotDeviceCommands.UpdateAsync(command);
+            await _unitOfWork.SaveChangesAsync(ct);
             return StatusCode(503, new CommonResponse<object>
             {
                 IsSuccess = false,

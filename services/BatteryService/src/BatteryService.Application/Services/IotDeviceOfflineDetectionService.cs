@@ -45,6 +45,30 @@ public sealed class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectio
         var now = DateTime.UtcNow;
         var broadThreshold = now.AddSeconds(-requiredSilence);
 
+        // Reuse this periodic sweep for command acknowledgements as well: a
+        // Pending command older than 60 seconds is terminal and must not keep
+        // both mobile switches locked forever.
+        var commandThreshold = now.AddSeconds(-60);
+        var timedOutCommands = await _unitOfWork.IotDeviceCommands.GetAllAsync()
+            .Where(command => !command.IsDeleted
+                              && command.Status == IotDeviceCommandStatusEnum.Pending
+                              && command.CreatedAt < commandThreshold)
+            .Take(boundedBatchSize)
+            .ToListAsync(ct);
+        if (timedOutCommands.Count > 0)
+        {
+            foreach (var command in timedOutCommands)
+            {
+                command.Status = IotDeviceCommandStatusEnum.TimedOut;
+                command.AckError = "Device did not acknowledge the command within 60 seconds.";
+                command.AckedAt = now;
+                _unitOfWork.IotDeviceCommands.UpdateAsync(command);
+            }
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogWarning("Marked {Count} IoT command(s) timed out", timedOutCommands.Count);
+        }
+
         // Query broadly by the global threshold, then apply the per-device heartbeat cadence.
         // Page through the ordered set: Take() before the cadence filter can starve valid devices
         // behind long-heartbeat devices, while ToList() over the whole set can exhaust memory.

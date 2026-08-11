@@ -53,6 +53,7 @@ public class UnitOfWork : IBatteryUnitOfWork
     public IGenericRepository<IotDevice> IotDevices => new GenericRepository<IotDevice>(_context);
     public IGenericRepository<IotDeviceHeartbeat> IotDeviceHeartbeats => new GenericRepository<IotDeviceHeartbeat>(_context);
     public IGenericRepository<IotDeviceCalibration> IotDeviceCalibrations => new GenericRepository<IotDeviceCalibration>(_context);
+    public IGenericRepository<IotDeviceCommand> IotDeviceCommands => new GenericRepository<IotDeviceCommand>(_context);
     public IGenericRepository<IotFirmwareRelease> IotFirmwareReleases => new GenericRepository<IotFirmwareRelease>(_context);
     public IGenericRepository<IotFirmwareUpdateLog> IotFirmwareUpdateLogs => new GenericRepository<IotFirmwareUpdateLog>(_context);
 

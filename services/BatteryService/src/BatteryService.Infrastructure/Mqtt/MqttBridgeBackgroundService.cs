@@ -165,7 +165,7 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
                     await DispatchStatusAsync(deviceCode, payload, e.ApplicationMessage.Retain);
                     break;
                 case "cmd_ack":
-                    DispatchCommandAck(deviceCode, payload);
+                    await DispatchCommandAckAsync(deviceCode, payload);
                     break;
             }
         }
@@ -389,17 +389,17 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
         }
     }
 
-    private void DispatchCommandAck(string deviceCode, string payload)
+    private async Task DispatchCommandAckAsync(string deviceCode, string payload)
     {
-        // Sprint IoT-2 #IoT2-25 — log ack để admin trace.
-        // Payload kỳ vọng: {"cmdId":"...","status":"ok"|"failed","error":"..."}
-        // Thiết bị trả `status`: "ok" | "failed" | "rejected" | "unknown"
+        await PersistCommandAckAsync(deviceCode, payload);
+        // Sprint IoT-2 #IoT2-25 — log acknowledgements for admin tracing.
+        // Expected payload: {"cmdId":"...","status":"ok"|"failed","error":"..."}
+        // Device status values: "ok" | "failed" | "rejected" | "unknown"
         // (`iot/firmware-esp32/src/cmd/command_handler.cpp`).
         //
-        // Ghi TẤT CẢ ở mức Information như trước là chôn mất ba trạng thái hỏng giữa hàng nghìn
-        // dòng "ok". Đúng lỗi đã xảy ra: dropdown frontend liệt kê 5 loại lệnh mà firmware KHÔNG
-        // hiểu loại nào; mọi lệnh gửi đi đều ack "unknown" và không ai nhận ra suốt nhiều tuần,
-        // vì backend trả 202 và toast báo thành công.
+        // Logging every acknowledgement at Information would bury failures among thousands of
+        // successful entries. Unknown commands must remain visible because a 202 response only
+        // confirms dispatch; it does not confirm device execution.
         var status = TryReadAckStatus(payload);
         if (status is "ok" or null)
         {
@@ -408,10 +408,88 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
         }
 
         _logger.LogWarning(
-            "MQTT cmd/ack từ {DeviceCode} báo status={Status} — lệnh KHÔNG được thực thi. "
-            + "`unknown` nghĩa là firmware không hiểu loại lệnh (chỉ hiểu set_interval / "
-            + "trigger_ota / request_heartbeat). Payload: {Payload}",
+            "MQTT cmd/ack from {DeviceCode} reported status={Status}; the command was not executed. "
+            + "`unknown` means the firmware does not support the command type (supported: set_interval / "
+            + "trigger_ota / request_heartbeat / set_bms_switch). Payload: {Payload}",
             deviceCode, status, Truncate(payload));
+    }
+
+    internal async Task PersistCommandAckAsync(string deviceCode, string payload)
+    {
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(payload);
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("cmdId", out var cmdIdValue)
+                || cmdIdValue.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(cmdIdValue.GetString())
+                || !root.TryGetProperty("status", out var statusValue)
+                || statusValue.ValueKind != JsonValueKind.String)
+                return;
+
+            using var scope = _scopeFactory.CreateScope();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
+            var device = await WhereTopicSegment(unitOfWork.IotDevices.GetAllAsync(), deviceCode)
+                .AsNoTracking()
+                .FirstOrDefaultAsync();
+            if (device is null)
+                return;
+
+            var cmdId = cmdIdValue.GetString()!;
+            var command = await unitOfWork.IotDeviceCommands.GetAllAsync()
+                .FirstOrDefaultAsync(item => !item.IsDeleted
+                                             && item.CmdId == cmdId
+                                             && item.IotDeviceId == device.Id);
+            if (command is null)
+                return;
+
+            var status = statusValue.GetString()?.Trim().ToLowerInvariant();
+            command.Status = status switch
+            {
+                "ok" => IotDeviceCommandStatusEnum.Ok,
+                "failed" => IotDeviceCommandStatusEnum.Failed,
+                "rejected" => IotDeviceCommandStatusEnum.Rejected,
+                _ => IotDeviceCommandStatusEnum.Unknown
+            };
+            var ackError = root.TryGetProperty("error", out var errorValue)
+                           && errorValue.ValueKind == JsonValueKind.String
+                ? errorValue.GetString()
+                : null;
+            command.AckError = command.Type == "set_bms_switch"
+                ? NormalizeBmsSwitchAckError(command.Status, ackError)
+                : ackError;
+            command.ResultJson = root.TryGetProperty("state", out var stateValue)
+                                 && stateValue.ValueKind == JsonValueKind.Object
+                ? stateValue.GetRawText()
+                : null;
+            command.AckedAt = DateTime.UtcNow;
+            unitOfWork.IotDeviceCommands.UpdateAsync(command);
+            await unitOfWork.SaveChangesAsync();
+        }
+    }
+
+    private static string? NormalizeBmsSwitchAckError(
+        IotDeviceCommandStatusEnum status,
+        string? error)
+    {
+        if (status == IotDeviceCommandStatusEnum.Ok) return null;
+        if (status == IotDeviceCommandStatusEnum.Rejected)
+            return "The BMS rejected the control command.";
+        if (status == IotDeviceCommandStatusEnum.Unknown)
+            return "The firmware did not recognize the BMS control command.";
+        if (status == IotDeviceCommandStatusEnum.Failed)
+            return "The BMS control command failed.";
+        return string.IsNullOrWhiteSpace(error) ? null : "The BMS control command could not be completed.";
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

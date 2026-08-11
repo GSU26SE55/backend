@@ -432,7 +432,7 @@ config:
   AlertTicketSaga__AlertTicketSagaEnabled: "true"
 
   # ----- Sprint IoT-1 #248 — IotDeviceOfflineDetectionBackgroundService -----
-  Iot__OfflineCheckIntervalSeconds: "120"
+  Iot__OfflineCheckIntervalSeconds: "60"
   Iot__OfflineAfterSeconds: "300"
   Iot__OfflineBatchSize: "100"
 

@@ -1,3 +1,4 @@
+using BatteryService.Application.CQRS.Command.BatteryAsset;
 using BatteryService.Application.CQRS.Query.BatteryAsset;
 using BatteryService.Application.DTOs;
 using MediatR;
@@ -179,6 +180,40 @@ public class BatteryAssetsController : ControllerBase
     public async Task<IActionResult> GetRealtime(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetBatteryAssetRealtimeQuery { Id = id }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Send a charge/discharge MOSFET command to the JK BMS through the site's gateway.</summary>
+    [HttpPost("{id:guid}/bms-switch")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<BmsSwitchCommandAcceptedDto>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(CommonResponse<BmsSwitchCommandAcceptedDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(CommonResponse<BmsSwitchCommandAcceptedDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<BmsSwitchCommandAcceptedDto>), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(CommonResponse<BmsSwitchCommandAcceptedDto>), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> SetBmsSwitch(
+        Guid id,
+        [FromBody] SetBmsSwitchRequestDto body,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new SetBmsSwitchCommand
+        {
+            BatteryAssetId = id,
+            Target = body?.Target ?? string.Empty,
+            Enable = body?.Enable ?? false
+        }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Read the last verified BMS switch state and any pending command.</summary>
+    [HttpGet("{id:guid}/bms-switch")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<BmsSwitchStateDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<BmsSwitchStateDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<BmsSwitchStateDto>), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> GetBmsSwitch(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetBmsSwitchStateQuery { BatteryAssetId = id }, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 

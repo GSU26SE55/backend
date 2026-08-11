@@ -331,6 +331,7 @@ public class MqttBridgeE2ETests
     {
         var dbName = $"mqtt-ack-{Guid.NewGuid()}";
         await using var db = NewDb(dbName);
+        var deviceId = Guid.NewGuid();
         var siteId = Guid.NewGuid();
         db.Sites.Add(new Site
         {
@@ -342,12 +343,22 @@ public class MqttBridgeE2ETests
         });
         db.IotDevices.Add(new IotDevice
         {
-            Id = Guid.NewGuid(),
+            Id = deviceId,
             DeviceCode = MosquittoBrokerFixture.DeviceACode,
             MqttUsername = MosquittoBrokerFixture.DeviceA,
             DisplayName = "GW ack test",
             SiteId = siteId,
             Status = IotDeviceStatusEnum.Active
+        });
+        db.IotDeviceCommands.Add(new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = deviceId,
+            CmdId = "c-1",
+            Type = "set_bms_switch",
+            ParamsJson = "{}",
+            Status = IotDeviceCommandStatusEnum.Pending,
+            CreatedAt = DateTime.UtcNow
         });
         await db.SaveChangesAsync();
 
@@ -383,6 +394,68 @@ public class MqttBridgeE2ETests
     }
 
     /// <summary>Ghi lại mọi dòng log mức Warning để test khẳng định được nội dung.</summary>
+    [Fact]
+    public async Task CommandAck_PersistsStatusAndActualState()
+    {
+        var dbName = $"mqtt-ack-state-{Guid.NewGuid()}";
+        await using var db = NewDb(dbName);
+        var deviceId = Guid.NewGuid();
+        db.IotDevices.Add(new IotDevice
+        {
+            Id = deviceId,
+            DeviceCode = MosquittoBrokerFixture.DeviceACode,
+            MqttUsername = MosquittoBrokerFixture.DeviceA,
+            DisplayName = "GW ack persistence",
+            SiteId = Guid.NewGuid(),
+            Status = IotDeviceStatusEnum.Active
+        });
+        db.IotDeviceCommands.Add(new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = deviceId,
+            CmdId = "switch-1",
+            Type = "set_bms_switch",
+            ParamsJson = "{}",
+            Status = IotDeviceCommandStatusEnum.Pending,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var (bridge, provider) = BuildBridge(dbName, new Mock<IMediator>().Object,
+            _broker.Host, _broker.Port, MosquittoBrokerFixture.BridgeUser);
+        await using (provider)
+        {
+            await bridge.StartAsync(CancellationToken.None);
+            await Task.Delay(1500);
+            var publisher = await ConnectAsync(MosquittoBrokerFixture.BridgeUser);
+            await publisher.PublishAsync(new MqttApplicationMessageBuilder()
+                .WithTopic(MqttTopicMap.CommandAck(MosquittoBrokerFixture.DeviceA))
+                .WithPayload("""{"cmdId":"switch-1","status":"ok","state":{"serial":"BAT-001","chargeEnabled":true,"dischargeEnabled":false}}""")
+                .Build());
+
+            var persisted = false;
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (!persisted && DateTime.UtcNow < deadline)
+            {
+                await using var verify = NewDb(dbName);
+                var row = await verify.IotDeviceCommands.AsNoTracking()
+                    .SingleAsync(command => command.CmdId == "switch-1");
+                persisted = row.Status == IotDeviceCommandStatusEnum.Ok;
+                if (!persisted) await Task.Delay(100);
+            }
+
+            persisted.Should().BeTrue();
+            await publisher.DisconnectAsync();
+            await bridge.StopAsync(CancellationToken.None);
+        }
+
+        await using var finalDb = NewDb(dbName);
+        var command = await finalDb.IotDeviceCommands.AsNoTracking()
+            .SingleAsync(item => item.CmdId == "switch-1");
+        command.ResultJson.Should().Contain("\"chargeEnabled\":true");
+        command.AckedAt.Should().NotBeNull();
+    }
+
     private sealed class CapturingLogger<T> : ILogger<T>
     {
         public List<string> Warnings { get; } = new();

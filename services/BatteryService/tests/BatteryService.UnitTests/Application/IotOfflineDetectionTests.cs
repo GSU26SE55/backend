@@ -3,6 +3,7 @@ using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using BatteryService.Infrastructure.Implements.Repositories;
 using BatteryService.Infrastructure.Persistence;
+using BatteryService.UnitTests.Helpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -173,5 +174,32 @@ public sealed class IotOfflineDetectionTests : IDisposable
         result.MarkedOffline.Should().Be(0);
         outbox.Events.Should().BeEmpty();
         (await db.IotDevices.SingleAsync()).Status.Should().Be(IotDeviceStatusEnum.Active);
+    }
+
+    [Fact]
+    public async Task Detect_MarksPendingCommandsOlderThanSixtySecondsTimedOut()
+    {
+        var command = new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = Guid.NewGuid(),
+            CmdId = "stale-command",
+            Type = "set_bms_switch",
+            ParamsJson = "{}",
+            Status = IotDeviceCommandStatusEnum.Pending,
+            CreatedAt = DateTime.UtcNow.AddSeconds(-61)
+        };
+        var uow = new MockUnitOfWorkBuilder().WithIotDeviceCommands(command);
+        var service = new IotDeviceOfflineDetectionService(
+            uow.Build(),
+            new CapturingOutbox(),
+            new NoopIotMetricsRecorder(),
+            NullLogger<IotDeviceOfflineDetectionService>.Instance);
+
+        await service.DetectAsync(offlineAfterSeconds: 300, batchSize: 10, default);
+
+        command.Status.Should().Be(IotDeviceCommandStatusEnum.TimedOut);
+        command.AckError.Should().Contain("60");
+        command.AckedAt.Should().NotBeNull();
     }
 }
