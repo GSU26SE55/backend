@@ -41,6 +41,8 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(TicketEscalatedEvent), typeof(TicketEscalatedEvent) },
         { nameof(SlaBreachedIntegrationEvent), typeof(SlaBreachedIntegrationEvent) },
         { nameof(SlaWarningIntegrationEvent), typeof(SlaWarningIntegrationEvent) },
+        { nameof(SlaBreachedEvent), typeof(SlaBreachedEvent) },
+        { nameof(SlaWarningEvent), typeof(SlaWarningEvent) },
         { nameof(IncidentDeclaredIntegrationEvent), typeof(IncidentDeclaredIntegrationEvent) },
         { nameof(TicketHeldIntegrationEvent), typeof(TicketHeldIntegrationEvent) },
         { nameof(TicketResumedIntegrationEvent), typeof(TicketResumedIntegrationEvent) },

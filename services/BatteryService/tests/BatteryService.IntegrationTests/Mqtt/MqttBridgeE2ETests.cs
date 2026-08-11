@@ -469,7 +469,8 @@ public class MqttBridgeE2ETests
             if (logLevel >= LogLevel.Warning)
             {
                 // Khoá lại: bridge xử lý message trên thread của MQTT client, test đọc trên thread khác.
-                lock (Warnings) Warnings.Add(formatter(state, exception));
+                lock (Warnings)
+                    Warnings.Add(formatter(state, exception));
             }
         }
     }
@@ -517,13 +518,21 @@ public class MqttBridgeE2ETests
         db.IotDevices.Add(device);
         db.BatteryAssets.Add(new BatteryAsset
         {
-            Id = Guid.NewGuid(), SerialNumber = "A-1", SiteId = siteId,
-            CustomerId = customerId, BatteryTypeId = typeId, InstallDate = DateTime.UtcNow.AddYears(-1)
+            Id = Guid.NewGuid(),
+            SerialNumber = "A-1",
+            SiteId = siteId,
+            CustomerId = customerId,
+            BatteryTypeId = typeId,
+            InstallDate = DateTime.UtcNow.AddYears(-1)
         });
         db.BatteryAssets.Add(new BatteryAsset
         {
-            Id = Guid.NewGuid(), SerialNumber = "A-2", SiteId = siteId,
-            CustomerId = customerId, BatteryTypeId = typeId, InstallDate = DateTime.UtcNow.AddYears(-1)
+            Id = Guid.NewGuid(),
+            SerialNumber = "A-2",
+            SiteId = siteId,
+            CustomerId = customerId,
+            BatteryTypeId = typeId,
+            InstallDate = DateTime.UtcNow.AddYears(-1)
         });
         await db.SaveChangesAsync();
 

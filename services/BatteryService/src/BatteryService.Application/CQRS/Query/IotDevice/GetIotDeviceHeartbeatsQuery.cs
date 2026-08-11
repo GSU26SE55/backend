@@ -59,7 +59,8 @@ public class GetIotDeviceHeartbeatsQuery
         {
             response.IsSuccess = false;
             // Lỗi liên trường → 422; KHÔNG ghi đè 400 (lỗi định dạng từng trường ưu tiên hơn).
-            if (response.StatusCode != 400) response.StatusCode = 422;
+            if (response.StatusCode != 400)
+                response.StatusCode = 422;
             response.Message = "Dữ liệu không hợp lệ.";
             response.ListErrors.Add(new Errors
             {

@@ -77,7 +77,8 @@ public class CreateIotDeviceCommandHandler : IRequestHandler<CreateIotDeviceComm
 
         // IOT3-29 — đẩy thông tin đăng nhập xuống broker NGAY, đừng để thiết bị lắp xong mà
         // phải chờ hết vòng quét 60s mới nối được. Hỏng thì vòng quét nền bù, không làm fail create.
-        try { await _passwordFileSync.SyncOnceAsync(cancellationToken); }
+        try
+        { await _passwordFileSync.SyncOnceAsync(cancellationToken); }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch { /* vòng quét nền sẽ bù */ }
 
