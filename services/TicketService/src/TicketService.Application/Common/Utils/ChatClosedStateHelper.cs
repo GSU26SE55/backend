@@ -17,8 +17,7 @@ public static class ChatClosedStateHelper
 
     /// <summary>
     /// Trả về <c>null</c> nếu được phép thực hiện, ngược lại trả message lý do bị block.
-    /// Customer được miễn block ở <see cref="TicketStatusEnum.ClosedPendingRate"/> cho hành động
-    /// <see cref="ChatAction.Add"/> (để feedback/rating) — mọi trường hợp khác vẫn bị chặn.
+    /// Closed and ClosedRejected are terminal and block chat mutation.
     /// </summary>
     public static string? GetBlockReason(
         TicketStatusEnum ticketStatus,
@@ -29,16 +28,8 @@ public static class ChatClosedStateHelper
         if (!blockEditOnClosed)
             return null;
 
-        if (ticketStatus == TicketStatusEnum.Closed)
+        if (ticketStatus is TicketStatusEnum.Closed or TicketStatusEnum.ClosedRejected)
             return BuildMessage(action, "closed");
-
-        if (ticketStatus == TicketStatusEnum.ClosedPendingRate)
-        {
-            if (action == ChatAction.Add && actorRole == ActorRoleEnum.Customer)
-                return null;
-
-            return BuildMessage(action, "pending rating");
-        }
 
         return null;
     }

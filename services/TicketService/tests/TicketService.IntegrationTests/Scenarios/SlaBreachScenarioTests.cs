@@ -57,7 +57,7 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
                 Code = "TKT-001",
                 Title = "Critical System Down",
                 Description = "Major outage",
-                Status = TicketStatusEnum.Open,
+                Status = TicketStatusEnum.InProgress,
                 Priority = TicketPriorityEnum.P1Critical,
                 CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
                 CreatedBy = Guid.NewGuid()

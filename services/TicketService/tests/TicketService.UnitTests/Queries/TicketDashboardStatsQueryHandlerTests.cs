@@ -68,7 +68,7 @@ public class TicketDashboardStatsQueryHandlerTests
         result.Data.OpenCount.Should().Be(0);
         result.Data.CountByStatus.Should().HaveCount(Enum.GetValues<TicketStatusEnum>().Length);
         result.Data.CountByStatus.Values.Should().AllBeEquivalentTo(0);
-        result.Data.CountByPriority.Should().HaveCount(3);
+        result.Data.CountByPriority.Should().HaveCount(4);
         result.Data.Sla.CompliancePercent.Should().Be(100);
         result.Data.CreatedTrend7Days.Should().HaveCount(7);
         result.Data.CreatedTrend7Days.Sum(p => p.Count).Should().Be(0);
@@ -79,22 +79,22 @@ public class TicketDashboardStatsQueryHandlerTests
     public async Task Handle_CountsByStatus_OpenExcludesTerminal()
     {
         var result = await MakeHandler(
-            MakeTicket(TicketStatusEnum.New),
+            MakeTicket(TicketStatusEnum.Open),
             MakeTicket(TicketStatusEnum.InProgress),
-            MakeTicket(TicketStatusEnum.Resolved),
+            MakeTicket(TicketStatusEnum.Completed),
             MakeTicket(TicketStatusEnum.ClosedRejected),
             MakeTicket(TicketStatusEnum.Closed),
             MakeTicket(TicketStatusEnum.InProgress, isDeleted: true) // bị xóa — không tính
         ).Handle(new TicketDashboardStatsQuery(), default);
 
         result.Data!.Total.Should().Be(5);
-        result.Data.OpenCount.Should().Be(2); // New + InProgress
-        result.Data.CountByStatus["New"].Should().Be(1);
+        result.Data.OpenCount.Should().Be(3); // Open + InProgress + Completed review
+        result.Data.CountByStatus["Open"].Should().Be(1);
         result.Data.CountByStatus["InProgress"].Should().Be(1);
-        result.Data.CountByStatus["Resolved"].Should().Be(1);
+        result.Data.CountByStatus["Completed"].Should().Be(1);
         result.Data.CountByStatus["ClosedRejected"].Should().Be(1);
         result.Data.CountByStatus["Closed"].Should().Be(1);
-        result.Data.CountByStatus["Escalated"].Should().Be(0); // zero-fill
+        result.Data.CountByStatus["ReAssign"].Should().Be(0); // zero-fill
     }
 
     [Fact]
@@ -155,15 +155,15 @@ public class TicketDashboardStatsQueryHandlerTests
         var staff2 = Guid.NewGuid();
         var result = await MakeHandler(
             MakeTicket(TicketStatusEnum.InProgress, staffId: staff1),
-            MakeTicket(TicketStatusEnum.Assigned, staffId: staff1),
-            MakeTicket(TicketStatusEnum.Resolved, staffId: staff1), // đã xử lý — không tính workload
+            MakeTicket(TicketStatusEnum.Pending, staffId: staff1),
+            MakeTicket(TicketStatusEnum.Completed, staffId: staff1), // completed work is not active workload
             MakeTicket(TicketStatusEnum.InProgress, staffId: staff2),
             MakeTicket(TicketStatusEnum.InProgress) // chưa gán — không tính
         ).Handle(new TicketDashboardStatsQuery(), default);
 
         result.Data!.OpenCountByStaff.Should().HaveCount(2);
         result.Data.OpenCountByStaff[0].StaffId.Should().Be(staff1.ToString()); // sort giảm dần
-        result.Data.OpenCountByStaff[0].ActiveCount.Should().Be(2);
+        result.Data.OpenCountByStaff[0].ActiveCount.Should().Be(3);
         result.Data.OpenCountByStaff[1].ActiveCount.Should().Be(1);
     }
 }

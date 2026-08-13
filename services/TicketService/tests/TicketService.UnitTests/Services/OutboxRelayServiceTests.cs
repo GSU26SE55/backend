@@ -100,6 +100,52 @@ public class OutboxRelayServiceTests
     }
 
     [Fact]
+    public async Task RelayBatchAsync_Gh1176Events_AllDeserializeAndPublish()
+    {
+        var ticketId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        IntegrationEvent[] events =
+        [
+            new TicketAssignedEvent(ticketId, "TKT-1176", staffId, "P1Critical", customerId, now, 1, true),
+            new TicketResolvedEvent(ticketId, "TKT-1176", staffId, "Resolved", customerId),
+            new IncidentDeclaredEvent(ticketId, "TKT-1176", Guid.NewGuid()),
+            new TicketStatusChangedEvent(ticketId, "TKT-1176", customerId, staffId, 4, 5, "InProgress", "Pending"),
+            new TicketApprovedEvent(ticketId, "TKT-1176", customerId, Guid.NewGuid(), "Approved", now),
+            new TicketRejectedEvent(ticketId, "TKT-1176", customerId, staffId, "Correction", false, now),
+            new TicketClosedEvent(ticketId, "TKT-1176", customerId, now, false, null),
+            new TicketReopenedEvent(ticketId, "TKT-1176", customerId, staffId, "Reopen", 1, now),
+            new TicketRatingRequestedEvent(ticketId, "TKT-1176", customerId, now.AddDays(-4), 4, 3),
+            new TicketScheduleChangedEvent(ticketId, "TKT-1176", customerId, staffId, null, now, 1),
+            new TicketWorkStartedEvent(ticketId, "TKT-1176", customerId, staffId, now, 1, "Immediate"),
+            new BatteryIsolationRequestedEvent(Guid.NewGuid(), ticketId, [Guid.NewGuid()], now)
+        ];
+
+        foreach (var evt in events)
+        {
+            _transport.Invocations.Clear();
+            var msg = new OutboxMessage
+            {
+                Id = evt.Id,
+                AggregateId = evt.Id,
+                Type = evt.GetType().Name,
+                Payload = JsonSerializer.Serialize(evt, evt.GetType()),
+                OccurredAtUtc = now
+            };
+            var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: [msg]);
+            var sut = CreateSut(uow, msg);
+
+            var result = await sut.RelayBatchAsync(1, CancellationToken.None);
+
+            result.Published.Should().Be(1, $"{evt.GetType().Name} must be registered in the relay map");
+            result.Failed.Should().Be(0);
+            msg.ProcessedAtUtc.Should().NotBeNull();
+            _transport.Invocations.Should().ContainSingle();
+        }
+    }
+
+    [Fact]
     public async Task RelayBatchAsync_ChatCreatedEvent_PublishesThroughTransportAndMarksProcessed()
     {
         var evt = new ChatCreatedEvent(

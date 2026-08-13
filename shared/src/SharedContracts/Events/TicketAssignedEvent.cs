@@ -14,5 +14,8 @@ public record TicketAssignedEvent(
     string Code,
     Guid PrimaryHandlerStaffId,
     string Priority,
-    Guid CustomerId
+    Guid CustomerId,
+    DateTime? ScheduledStartAtUtc = null,
+    int ScheduleVersion = 0,
+    bool WorkStartsImmediately = false
 ) : IntegrationEvent;

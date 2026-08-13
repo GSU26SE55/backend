@@ -27,7 +27,7 @@ public class TicketDashboardController : ControllerBase
     /// <remarks>
     /// Thay cho việc FE tự đếm trên 1 trang list (bị cap theo pageSize):
     /// <list type="bullet">
-    ///   <item><description><c>Total</c> / <c>OpenCount</c> — open = status ngoài nhóm Resolved/ClosedPendingRate/Closed/ClosedRejected.</description></item>
+    ///   <item><description><c>Total</c> / <c>OpenCount</c> — open = Open/Pending/InProgress/Request/ReAssign.</description></item>
     ///   <item><description><c>Sla</c> — count theo SlaTimerStatus + <c>CompliancePercent</c> = Met/(Met+Breached).</description></item>
     ///   <item><description><c>CountByStatus</c> — đủ 14 status (zero-fill) để FE tự nhóm pipeline, không gộp ClosedRejected vào "Hoàn tất".</description></item>
     ///   <item><description><c>CreatedTrend7Days</c> — bucket theo ngày UTC, ngày trống = 0.</description></item>

@@ -29,7 +29,7 @@ public class AdminTicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin override — thêm bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// Admin override — thêm bình luận dù ticket đang Closed (#517). Bắt buộc <c>OverrideReason</c>.
     /// </summary>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="command">Nội dung bình luận + lý do override.</param>
@@ -57,7 +57,7 @@ public class AdminTicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin override — sửa bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// Admin override — sửa bình luận dù ticket đang Closed (#517). Bắt buộc <c>OverrideReason</c>.
     /// </summary>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="id">ID của bình luận cần sửa.</param>
@@ -87,7 +87,7 @@ public class AdminTicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin override — xóa bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// Admin override — xóa bình luận dù ticket đang Closed (#517). Bắt buộc <c>OverrideReason</c>.
     /// </summary>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="id">ID của bình luận cần xóa.</param>

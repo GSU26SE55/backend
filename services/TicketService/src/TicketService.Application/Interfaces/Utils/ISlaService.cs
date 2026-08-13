@@ -11,4 +11,4 @@ public interface ISlaService
     Task ResumeOnCustomerReplyAsync(Guid ticketId, Guid userId, CancellationToken ct);
 }
 
-public sealed record SlaPauseEligibility(bool IsAllowed, string? Message = null);
+public record SlaPauseEligibility(bool IsAllowed, string? Message = null);

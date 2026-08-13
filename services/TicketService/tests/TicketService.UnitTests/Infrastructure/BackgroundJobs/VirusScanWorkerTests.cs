@@ -33,7 +33,7 @@ namespace TicketService.UnitTests.Infrastructure.BackgroundJobs;
 public class VirusScanWorkerTests
 {
     /// <summary>Lớp con thay đường tải để kiểm máy trạng thái mà không cần dựng máy chủ gRPC.</summary>
-    private sealed class TestableVirusScanWorker : VirusScanWorker
+    private class TestableVirusScanWorker : VirusScanWorker
     {
         private readonly Func<Guid, byte[]> _download;
 
@@ -62,7 +62,7 @@ public class VirusScanWorkerTests
     }
 
     /// <summary>Tái hiện đúng phép canh 0 byte của bản thật.</summary>
-    private sealed class EmptyDownloadWorker : VirusScanWorker
+    private class EmptyDownloadWorker : VirusScanWorker
     {
         public EmptyDownloadWorker(IServiceProvider sp, IOptions<ChatOptions> opts)
             : base(new Mock<ILogger<VirusScanWorker>>().Object, sp, opts) { }

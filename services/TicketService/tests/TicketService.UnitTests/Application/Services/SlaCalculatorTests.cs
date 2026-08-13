@@ -16,7 +16,7 @@ public class SlaCalculatorTests
     {
         // Arrange
         var createdAt = new DateTime(2023, 1, 1, 12, 0, 0, DateTimeKind.Utc);
-        var ticket = new Ticket { CreatedAt = createdAt, Priority = priority, Code = "T1", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.New, Origin = TicketOriginEnum.ManualByCustomer };
+        var ticket = new Ticket { CreatedAt = createdAt, Priority = priority, Code = "T1", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.Open, Origin = TicketOriginEnum.ManualByCustomer };
         var expectedDueDate = createdAt.AddHours(expectedHours);
 
         // Act
@@ -41,7 +41,7 @@ public class SlaCalculatorTests
             Title = "Test",
             Description = "Test",
             Category = TicketCategoryEnum.Other,
-            Status = TicketStatusEnum.New,
+            Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.ManualByCustomer
         };
 
@@ -57,7 +57,7 @@ public class SlaCalculatorTests
     public void CalculateSlaDueDate_ShouldThrowArgumentNullException_WhenPriorityIsNull()
     {
         // Arrange
-        var ticket = new Ticket { CreatedAt = DateTime.UtcNow, Priority = null, Code = "T1", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.New, Origin = TicketOriginEnum.ManualByCustomer };
+        var ticket = new Ticket { CreatedAt = DateTime.UtcNow, Priority = null, Code = "T1", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.Open, Origin = TicketOriginEnum.ManualByCustomer };
 
         // Act
         Action act = () => _sut.CalculateSlaDueDate(ticket);

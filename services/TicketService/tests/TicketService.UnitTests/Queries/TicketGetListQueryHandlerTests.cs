@@ -77,7 +77,7 @@ public class TicketGetListQueryHandlerTests
     {
         SetupMock([
             MakeTicket(TicketStatusEnum.Open),
-            MakeTicket(TicketStatusEnum.Assigned),
+            MakeTicket(TicketStatusEnum.Pending),
             MakeTicket(TicketStatusEnum.InProgress)
         ]);
 

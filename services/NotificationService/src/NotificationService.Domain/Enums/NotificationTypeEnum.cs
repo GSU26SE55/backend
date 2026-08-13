@@ -123,6 +123,8 @@ public enum NotificationTypeEnum
 
     /// <summary>An IoT device was disabled after repeatedly submitting invalid sensor data.</summary>
     IotDeviceAutoDecommissioned = 37,
+    TicketWorkStarted = 38,
+    TicketScheduleChanged = 39,
 
     System = 99
 }

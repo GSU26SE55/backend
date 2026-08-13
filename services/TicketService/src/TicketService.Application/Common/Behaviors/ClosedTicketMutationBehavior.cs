@@ -2,6 +2,7 @@ using System.Reflection;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using TicketService.Application.CQRS.Command.Chats;
+using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
@@ -11,7 +12,7 @@ namespace TicketService.Application.Common.Behaviors;
 /// Rejects any CQRS mutation command targeting a terminal ticket before its handler can alter it.
 /// Read requests and commands without a TicketId are intentionally outside this policy.
 /// </summary>
-public sealed class ClosedTicketMutationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+public class ClosedTicketMutationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
 {
     private readonly ITicketUnitOfWork _unitOfWork;
@@ -46,6 +47,8 @@ public sealed class ClosedTicketMutationBehavior<TRequest, TResponse> : IPipelin
     }
 
     private static bool UsesCommandSpecificClosedTicketPolicy(TRequest request) => request is
+        TicketRateCommand or
+        TicketReopenCommand or
         ChatDeleteCommand or
         ChatReplyCommand or
         ChatRestoreCommand or

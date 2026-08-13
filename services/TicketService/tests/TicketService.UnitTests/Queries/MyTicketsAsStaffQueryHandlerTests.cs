@@ -98,7 +98,7 @@ public class MyTicketsAsStaffQueryHandlerTests
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
 
         var t1 = MakeTicket(TicketStatusEnum.InProgress);
-        var t2 = MakeTicket(TicketStatusEnum.Resolved);
+        var t2 = MakeTicket(TicketStatusEnum.Completed);
 
         SetupMock(
             [t1, t2],
@@ -157,8 +157,8 @@ public class MyTicketsAsStaffQueryHandlerTests
 
         var keep = WithTimer(MakeTicket(TicketStatusEnum.InProgress, code: "KEEP"), DateTime.UtcNow.AddHours(2));
         var noTimer = MakeTicket(TicketStatusEnum.InProgress, code: "NO-TIMER");
-        var notMonitor = WithTimer(MakeTicket(TicketStatusEnum.New, code: "NOT-MONITORED"), DateTime.UtcNow.AddHours(2));
-        var resolved = WithTimer(MakeTicket(TicketStatusEnum.Resolved, code: "RESOLVED"), DateTime.UtcNow.AddHours(2));
+        var notMonitor = WithTimer(MakeTicket(TicketStatusEnum.Open, code: "NOT-MONITORED"), DateTime.UtcNow.AddHours(2));
+        var resolved = WithTimer(MakeTicket(TicketStatusEnum.Completed, code: "RESOLVED"), DateTime.UtcNow.AddHours(2));
 
         SetupMock(
             [keep, noTimer, notMonitor, resolved],

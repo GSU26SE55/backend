@@ -62,8 +62,9 @@ public class EveryConsumerWritesInAppTests
 
     /// <summary>
     /// Mọi consumer hướng user phải ghi ít nhất một record <c>InApp</c> — trực tiếp qua
-    /// <c>NotificationChannelEnum.InApp</c>, hoặc gián tiếp qua preset của <c>NotificationWriter</c>
-    /// (tất cả preset đều đã bao gồm InApp).
+    /// <c>NotificationChannelEnum.InApp</c>, gián tiếp qua preset của <c>NotificationWriter</c>
+    /// (tất cả preset đều đã bao gồm InApp), hoặc qua writer lịch ticket chuyên biệt đã được
+    /// kiểm tra như một file hướng user riêng.
     /// </summary>
     [Theory]
     [MemberData(nameof(UserFacingConsumers))]
@@ -78,7 +79,11 @@ public class EveryConsumerWritesInAppTests
             source.Contains("NotificationWriter.InAppPushEmail", StringComparison.Ordinal) ||
             source.Contains("NotificationWriter.AllChannels", StringComparison.Ordinal);
 
-        (writesInAppDirectly || writesViaPreset).Should().BeTrue(
+        var writesViaTicketSchedulingWriter =
+            source.Contains("TicketSchedulingNotificationWriter.WriteAssignmentAsync", StringComparison.Ordinal) ||
+            source.Contains("TicketSchedulingNotificationWriter.WriteWorkStartedAsync", StringComparison.Ordinal);
+
+        (writesInAppDirectly || writesViaPreset || writesViaTicketSchedulingWriter).Should().BeTrue(
             $"'{consumerName}' phải ghi ít nhất 1 record Channel=InApp. Feed lọc theo InApp "
             + "(NOTI3-01) nên consumer chỉ ghi Push/Email/Sms sẽ khiến loại thông báo này biến mất "
             + "hoàn toàn khỏi danh sách của user (R-40). Nếu consumer thực sự không hướng user "

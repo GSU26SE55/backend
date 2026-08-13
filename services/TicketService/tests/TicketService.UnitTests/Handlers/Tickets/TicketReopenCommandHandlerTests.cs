@@ -30,9 +30,10 @@ public class TicketReopenCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Test",
-            Status = TicketStatusEnum.ClosedPendingRate,
+            Status = TicketStatusEnum.Closed,
             CustomerId = customerId,
-            ApprovedAt = DateTime.UtcNow.AddDays(-3)
+            ApprovedAt = DateTime.UtcNow.AddDays(-3),
+            ClosedAt = DateTime.UtcNow.AddDays(-3)
         };
 
         var command = new TicketReopenCommand
@@ -71,9 +72,10 @@ public class TicketReopenCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Test",
-            Status = TicketStatusEnum.ClosedPendingRate,
+            Status = TicketStatusEnum.Closed,
             CustomerId = customerId,
             ApprovedAt = DateTime.UtcNow.AddDays(-1),
+            ClosedAt = DateTime.UtcNow.AddDays(-1),
             ReopenCount = 1 // Already reopened once
         };
 
@@ -102,13 +104,11 @@ public class TicketReopenCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        ticket.Status.Should().Be(TicketStatusEnum.Escalated);
+        ticket.Status.Should().Be(TicketStatusEnum.Open);
         ticket.ReopenCount.Should().Be(2);
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Open, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Escalated, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketReopenedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
-        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketEscalatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -124,9 +124,10 @@ public class TicketReopenCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Test",
-            Status = TicketStatusEnum.ClosedPendingRate,
+            Status = TicketStatusEnum.Closed,
             CustomerId = customerId,
-            ApprovedAt = DateTime.UtcNow.AddDays(-8)
+            ApprovedAt = DateTime.UtcNow.AddDays(-8),
+            ClosedAt = DateTime.UtcNow.AddDays(-8)
         };
 
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, customerId))
@@ -148,7 +149,7 @@ public class TicketReopenCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
-        result.Message.Should().Contain("7 days");
+        result.StatusCode.Should().Be(409);
+        result.Message.Should().Contain("seven-day");
     }
 }

@@ -1,7 +1,13 @@
 using FluentAssertions;
+using MockQueryable.Moq;
 using Moq;
+using SharedContracts.Events;
+using SharedContracts.Events.Root;
+using SharedContracts.Interfaces;
+using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -16,6 +22,73 @@ namespace TicketService.UnitTests.Handlers.Tickets;
 /// </summary>
 public class TicketReprioritizeCommandHandlerTests
 {
+    [Fact]
+    public async Task Handle_ReopenedIncident_DeclassifiesAndLaterIncidentCreatesNewEpisode()
+    {
+        var previousEpisodeId = Guid.NewGuid();
+        var ticket = Ticket(TicketStatusEnum.Open, TicketPriorityEnum.Urgent);
+        ticket.ReopenCount = 1;
+        ticket.IsIncident = true;
+        ticket.ActiveIncidentEpisodeId = previousEpisodeId;
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
+        var batteryAssets = new Mock<IGenericRepository<TicketBatteryAsset>>();
+        batteryAssets.Setup(x => x.GetAllAsync())
+            .Returns(Array.Empty<TicketBatteryAsset>().BuildMock());
+        uow.SetupGet(x => x.TicketBatteryAssets).Returns(batteryAssets.Object);
+        var logger = new Mock<IActivityLogger>();
+        var reprioritize = CreateHandler(uow.Object, new Mock<ISlaCalculator>().Object, logger.Object);
+
+        var reprioritizeResult = await reprioritize.Handle(new TicketReprioritizeCommand
+        {
+            TicketId = ticket.Id,
+            Impact = ImpactScopeEnum.Site,
+            Urgency = UrgencyLevelEnum.High,
+            Reason = "Manager review after reopen",
+            ManagerId = Guid.NewGuid(),
+            ManagerName = "Manager"
+        }, CancellationToken.None);
+
+        reprioritizeResult.IsSuccess.Should().BeTrue();
+        ticket.Priority.Should().Be(TicketPriorityEnum.P1Critical);
+        ticket.IsIncident.Should().BeFalse();
+        ticket.ActiveIncidentEpisodeId.Should().BeNull();
+        logger.Verify(x => x.LogAsync(
+            ticket.Id,
+            It.IsAny<Guid>(),
+            ActorRoleEnum.Manager,
+            "Manager",
+            ActivityActionEnum.IncidentDeclassified,
+            previousEpisodeId.ToString(),
+            TicketPriorityEnum.P1Critical.ToString(),
+            "Manager review after reopen"), Times.Once);
+
+        var outbox = new Mock<IIntegrationEventOutboxWriter>();
+        var slaTransitions = new Mock<ITicketActivationService>();
+        slaTransitions.Setup(x => x.StopSlaAsync(ticket, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var declareIncident = new TicketDeclareIncidentCommandHandler(
+            uow.Object, outbox.Object, logger.Object, slaTransitions.Object);
+
+        var incidentResult = await declareIncident.Handle(new TicketDeclareIncidentCommand
+        {
+            TicketId = ticket.Id,
+            UserId = Guid.NewGuid(),
+            UserDisplayName = "Manager",
+            IncidentDescription = "A new safety incident"
+        }, CancellationToken.None);
+
+        incidentResult.IsSuccess.Should().BeTrue();
+        ticket.ActiveIncidentEpisodeId.Should().NotBeNull();
+        ticket.ActiveIncidentEpisodeId.Should().NotBe(previousEpisodeId);
+        outbox.Verify(x => x.WriteAsync(
+            It.Is<BatteryIsolationRequestedEvent>(e =>
+                e.IncidentEpisodeId == ticket.ActiveIncidentEpisodeId &&
+                e.Id == DeterministicEventId.From(
+                    ticket.ActiveIncidentEpisodeId!.Value,
+                    "battery-isolation-requested")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task Handle_OpenTicket_DerivesPriorityFromMatrixAndAudits()
     {
@@ -84,11 +157,11 @@ public class TicketReprioritizeCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(TicketStatusEnum.Assigned)]
+    [InlineData(TicketStatusEnum.Pending)]
     [InlineData(TicketStatusEnum.InProgress)]
-    [InlineData(TicketStatusEnum.Escalated)]
-    [InlineData(TicketStatusEnum.New)]
-    [InlineData(TicketStatusEnum.Resolved)]
+    [InlineData(TicketStatusEnum.Request)]
+    [InlineData(TicketStatusEnum.ReAssign)]
+    [InlineData(TicketStatusEnum.Completed)]
     [InlineData(TicketStatusEnum.Closed)]
     public async Task Handle_TicketNotOpen_IsRejected(TicketStatusEnum status)
     {

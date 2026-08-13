@@ -55,7 +55,7 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
     }
 
     /// <summary>Drive ticket qua create → triage → assign → start → resolve → approve → ClosedPendingRate.</summary>
-    private async Task<Guid> DriveToClosedPendingRateAsync(string title)
+    private async Task<Guid> DriveToClosedAsync(string title)
     {
         var createRes = await _client.PostAsJsonAsync("/api/customer/tickets", new TicketCreateCommand
         {
@@ -69,21 +69,13 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
         var ticket = (await createRes.Content.ReadFromJsonAsync<TicketActionResponse>(_json))!.Data!;
         var id = Guid.Parse(ticket.Id);
 
-        (await _client.PostAsJsonAsync($"/api/admin/tickets/{id}/triage", new TicketTriageCommand
-        {
-            Impact = ImpactScopeEnum.SingleAsset,
-            Urgency = UrgencyLevelEnum.Medium,
-            ManagerComment = "Triaged"
-        })).StatusCode.Should().Be(HttpStatusCode.OK);
-
         (await _client.PostAsJsonAsync($"/api/admin/tickets/{id}/assign", new TicketAssignCommand
         {
             PrimaryHandlerStaffId = Guid.Parse(TestAuthHandler.UserId),
+            Priority = TicketPriorityEnum.P3Normal,
+            ScheduledStartAt = DateTimeOffset.UtcNow,
             Notes = "Assigned"
         })).StatusCode.Should().Be(HttpStatusCode.OK);
-
-        (await _client.PostAsJsonAsync($"/api/staff/tickets/{id}/start", new { }))
-            .StatusCode.Should().Be(HttpStatusCode.OK);
 
         (await _client.PostAsJsonAsync($"/api/staff/tickets/{id}/resolve", new TicketResolveCommand
         {
@@ -93,7 +85,7 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
         var approveRes = await _client.PostAsJsonAsync($"/api/admin/tickets/{id}/approve", new { });
         approveRes.StatusCode.Should().Be(HttpStatusCode.OK);
         var approved = (await approveRes.Content.ReadFromJsonAsync<TicketActionResponse>(_json))!.Data!;
-        approved.Status.Should().Be(TicketStatusEnum.ClosedPendingRate);
+        approved.Status.Should().Be(TicketStatusEnum.Closed);
 
         return id;
     }
@@ -108,7 +100,7 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
     [Fact]
     public async Task GoldenPath_Rate_ClosesTicket()
     {
-        var id = await DriveToClosedPendingRateAsync("Golden path → rate");
+        var id = await DriveToClosedAsync("Golden path → rate");
 
         var rateRes = await _client.PostAsJsonAsync($"/api/customer/tickets/{id}/rate", new TicketRateCommand
         {
@@ -116,7 +108,8 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
             RatingComment = "Great service"
         });
 
-        rateRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var rateBody = await rateRes.Content.ReadAsStringAsync();
+        rateRes.StatusCode.Should().Be(HttpStatusCode.OK, rateBody);
 
         var ticket = await LoadTicketAsync(id);
         ticket!.Status.Should().Be(TicketStatusEnum.Closed);
@@ -126,17 +119,18 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
     [Fact]
     public async Task Reopen_FromClosedPendingRate_ReturnsToOpen_AndIncrementsReopenCount()
     {
-        var id = await DriveToClosedPendingRateAsync("Reopen scenario");
+        var id = await DriveToClosedAsync("Reopen scenario");
 
         var reopenRes = await _client.PostAsJsonAsync($"/api/customer/tickets/{id}/reopen", new TicketReopenCommand
         {
             ReopenReason = "Vấn đề tái diễn"
         });
 
-        reopenRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var reopenBody = await reopenRes.Content.ReadAsStringAsync();
+        reopenRes.StatusCode.Should().Be(HttpStatusCode.OK, reopenBody);
 
         var ticket = await LoadTicketAsync(id);
         ticket!.ReopenCount.Should().Be(1);
-        ticket.Status.Should().BeOneOf(TicketStatusEnum.Open, TicketStatusEnum.Escalated);
+        ticket.Status.Should().Be(TicketStatusEnum.Open);
     }
 }

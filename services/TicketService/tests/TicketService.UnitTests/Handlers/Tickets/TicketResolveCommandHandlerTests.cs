@@ -44,7 +44,7 @@ public class TicketResolveCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>(), Moq.Mock.Of<TicketService.Application.Interfaces.Services.ITicketActivationService>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -52,9 +52,9 @@ public class TicketResolveCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Data!.Id.Should().Be(ticketId.ToString());
-        result.Data.Status.Should().Be(TicketStatusEnum.Resolved);
+        result.Data.Status.Should().Be(TicketStatusEnum.Completed);
 
-        _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Resolved, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Completed, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketResolvedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -84,7 +84,7 @@ public class TicketResolveCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>(), Moq.Mock.Of<TicketService.Application.Interfaces.Services.ITicketActivationService>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -119,7 +119,7 @@ public class TicketResolveCommandHandlerTests
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>(), Moq.Mock.Of<TicketService.Application.Interfaces.Services.ITicketActivationService>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -157,7 +157,7 @@ public class TicketResolveCommandHandlerTests
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>(), Moq.Mock.Of<TicketService.Application.Interfaces.Services.ITicketActivationService>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -199,7 +199,7 @@ public class TicketResolveCommandHandlerTests
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff });
 
-        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketResolveCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>(), Moq.Mock.Of<TicketService.Application.Interfaces.Services.ITicketActivationService>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

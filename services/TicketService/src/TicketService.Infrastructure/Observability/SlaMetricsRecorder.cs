@@ -3,7 +3,7 @@ using TicketService.Application.Interfaces.Services;
 namespace TicketService.Infrastructure.Observability;
 
 /// <summary>Sprint 7 #117 — bridge Application → prometheus-net cho SLA gauge.</summary>
-internal sealed class SlaMetricsRecorder : ISlaMetricsRecorder
+internal class SlaMetricsRecorder : ISlaMetricsRecorder
 {
     public void SetSlaGauges(double complianceRatio, IReadOnlyDictionary<string, int> breachedByPriority)
     {

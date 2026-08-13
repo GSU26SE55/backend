@@ -8,7 +8,7 @@ namespace TicketService.Api.Middleware;
 /// <summary>
 /// TicketService-only translation for stale server-side writes.
 /// </summary>
-public sealed class TicketConcurrencyExceptionMiddleware
+public class TicketConcurrencyExceptionMiddleware
 {
     private readonly RequestDelegate _next;
 

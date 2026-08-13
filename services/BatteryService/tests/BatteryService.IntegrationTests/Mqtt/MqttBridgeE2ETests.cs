@@ -441,7 +441,8 @@ public class MqttBridgeE2ETests
                 var row = await verify.IotDeviceCommands.AsNoTracking()
                     .SingleAsync(command => command.CmdId == "switch-1");
                 persisted = row.Status == IotDeviceCommandStatusEnum.Ok;
-                if (!persisted) await Task.Delay(100);
+                if (!persisted)
+                    await Task.Delay(100);
             }
 
             persisted.Should().BeTrue();

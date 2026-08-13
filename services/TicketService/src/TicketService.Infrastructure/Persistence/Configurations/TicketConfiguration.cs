@@ -109,6 +109,19 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(e => e.IsIncident)
             .HasColumnName("is_incident");
+        builder.Property(e => e.ScheduledStartAtUtc)
+            .HasColumnName("scheduled_start_at_utc");
+        builder.Property(e => e.ScheduleVersion)
+            .HasColumnName("schedule_version")
+            .HasDefaultValue(0);
+        builder.Property(e => e.PendingContext)
+            .HasColumnName("pending_context")
+            .HasConversion<int>();
+        builder.Property(e => e.PendingReason)
+            .HasColumnName("pending_reason")
+            .HasConversion<int>();
+        builder.Property(e => e.ActiveIncidentEpisodeId)
+            .HasColumnName("active_incident_episode_id");
 
         // GH-ticket-verify — DetectedAt + serial snapshot + AI verify + merge fields.
         builder.Property(e => e.DetectedAt)
@@ -159,5 +172,8 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(e => e.Category);
         builder.HasIndex(e => e.Priority);
         builder.HasIndex(e => e.MergedIntoTicketId);
+        builder.HasIndex(e => new { e.Status, e.ScheduledStartAtUtc })
+            .HasDatabaseName("ix_tickets_due_activation")
+            .HasFilter("is_deleted = false AND status = 2 AND scheduled_start_at_utc IS NOT NULL");
     }
 }

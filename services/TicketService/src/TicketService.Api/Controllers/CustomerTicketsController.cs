@@ -79,9 +79,9 @@ public class CustomerTicketsController : ControllerBase
     /// Khách hàng yêu cầu mở lại ticket khi chưa hài lòng với kết quả xử lý.
     /// </summary>
     /// <remarks>
-    /// - Chỉ áp dụng cho ticket ở trạng thái <c>ClosedPendingRate</c>.
+    /// - Chỉ áp dụng cho ticket <c>Closed</c>, chưa đánh giá và không phải ticket đã merge.
     /// - Phải trong vòng 7 ngày kể từ khi ticket được phê duyệt.
-    /// - Mở lại từ lần thứ 2 sẽ tự động chuyển cấp (Escalated).
+    /// - Giữ nguyên ticket và lịch sử; trạng thái quay về <c>Open</c>.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
     /// <param name="command">Lý do mở lại.</param>
@@ -103,10 +103,10 @@ public class CustomerTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Khách hàng thực hiện đánh giá chất lượng xử lý và đóng ticket chính thức.
+    /// Khách hàng đánh giá chất lượng xử lý của ticket đã đóng.
     /// </summary>
     /// <remarks>
-    /// - Chỉ áp dụng cho ticket ở trạng thái <c>ClosedPendingRate</c>.
+    /// - Chỉ áp dụng cho ticket <c>Closed</c>, chưa đánh giá và không phải ticket đã merge.
     /// - Điểm đánh giá (Rating) từ 1-5 sao.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>

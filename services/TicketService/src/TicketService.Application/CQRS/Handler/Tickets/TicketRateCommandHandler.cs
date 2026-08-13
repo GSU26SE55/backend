@@ -43,33 +43,23 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Closed, ActorRoleEnum.Customer, request.CustomerId);
-        if (!transitionResult.IsAllowed)
-            return Fail(403, transitionResult.Reason ?? "Cannot rate this ticket.");
+        if (ticket.CustomerId != request.CustomerId)
+            return Fail(403, "Only the ticket owner can rate this ticket.");
+        if (ticket.Status != TicketStatusEnum.Closed || ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate)
+            return Fail(409, "Only a non-merged Closed ticket can be rated.");
+        if (ticket.RatedAt.HasValue || ticket.Rating.HasValue)
+            return Fail(409, "This ticket has already been rated.");
+        if (!ticket.ClosedAt.HasValue || DateTime.UtcNow - ticket.ClosedAt.Value > TimeSpan.FromDays(7))
+            return Fail(409, "The seven-day rating window has expired.");
 
-        // Execute rate transition (to Closed)
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Closed, new TransitionContext
-        {
-            ActorUserId = request.CustomerId,
-            ActorRole = ActorRoleEnum.Customer,
-            ActorDisplayName = request.CustomerName!,
-            Payload = new Dictionary<string, object?>
-            {
-                { "Rating", request.Rating },
-                { "Comment", request.RatingComment }
-            }
-        }, ct);
+        ticket.Rating = request.Rating;
+        ticket.RatingComment = request.RatingComment;
+        ticket.RatedAt = DateTime.UtcNow;
 
         await _activityLogger.LogAsync(ticket.Id, request.CustomerId, ActorRoleEnum.Customer, request.CustomerName, ActivityActionEnum.Rated, newValue: request.Rating.ToString(), reason: request.RatingComment);
 
         // Outbox: Ticket Rated
         await _outboxWriter.WriteAsync(new TicketRatedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.Rating, request.RatingComment), ct);
-
-        // Sprint 6.2 NOTI-07 (#678) — rate xong là ticket đóng hẳn (CLOSED). Event SharedContracts
-        // để NotificationService xác nhận với Customer + báo Manager (IsAutoClosed = false).
-        await _outboxWriter.WriteAsync(new TicketClosedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.ClosedAt ?? DateTime.UtcNow,
-            IsAutoClosed: false, request.Rating), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(

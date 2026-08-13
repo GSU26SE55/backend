@@ -69,6 +69,16 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
 
         await _uow.Tickets.AddAsync(ticket);
 
+        if (request.BatteryAssetId != Guid.Empty)
+        {
+            await _uow.TicketBatteryAssets.AddAsync(new TicketBatteryAsset
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticket.Id,
+                BatteryAssetId = request.BatteryAssetId
+            });
+        }
+
         await SaveAiSuggestionAsync(ticket.Id, request);
 
         await _activityLogger.LogAsync(

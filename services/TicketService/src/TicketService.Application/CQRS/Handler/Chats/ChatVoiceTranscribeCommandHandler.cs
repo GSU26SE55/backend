@@ -11,7 +11,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
-public sealed class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTranscribeCommand, TicketActionResponse>
+public class ChatVoiceTranscribeCommandHandler : IRequestHandler<ChatVoiceTranscribeCommand, TicketActionResponse>
 {
     private const string PENDINGBODY = "Audio is being processed…";
     private readonly ITicketUnitOfWork _uow;

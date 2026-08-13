@@ -5,7 +5,7 @@ using TicketService.Infrastructure.Persistence;
 
 namespace TicketService.Infrastructure.Implements.Services;
 
-public sealed class OutboxClaimService : IOutboxClaimService
+public class OutboxClaimService : IOutboxClaimService
 {
     private readonly TicketDbContext _dbContext;
 

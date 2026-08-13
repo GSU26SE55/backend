@@ -1,6 +1,7 @@
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
+using SharedContracts.Events.Root;
 
 namespace NotificationService.Application.Consumers;
 
@@ -96,6 +97,59 @@ internal static class NotificationWriter
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes notification rows with deterministic primary keys. Existing rows, including
+    /// soft-deleted rows, count as already processed so a delayed broker redelivery cannot
+    /// recreate a notification the user removed.
+    /// </summary>
+    public static async Task WriteIdempotentAsync(
+        INotificationUnitOfWork unitOfWork,
+        IReadOnlyCollection<Guid> recipientIds,
+        NotificationTypeEnum type,
+        IReadOnlyCollection<NotificationChannelEnum> channels,
+        string title,
+        string body,
+        string? payloadJson,
+        string entityType,
+        Guid entityId,
+        string businessKey,
+        CancellationToken cancellationToken)
+    {
+        var added = false;
+        foreach (var userId in recipientIds.Distinct())
+        {
+            foreach (var channel in channels.Distinct())
+            {
+                var notificationId = DeterministicEventId.From(
+                    entityId,
+                    $"notification:{businessKey}:{userId:N}:{(int)channel}");
+
+                // GetById intentionally includes soft-deleted rows: the deterministic primary
+                // key is a delivery receipt, not only an active-row lookup.
+                if (await unitOfWork.Notifications.GetByIdAsync(notificationId) is not null)
+                    continue;
+
+                await unitOfWork.Notifications.AddAsync(new Notification
+                {
+                    Id = notificationId,
+                    UserId = userId,
+                    Type = type,
+                    Channel = channel,
+                    Status = NotificationStatusEnum.Pending,
+                    Title = title,
+                    Body = body,
+                    PayloadJson = payloadJson,
+                    EntityType = entityType,
+                    EntityId = entityId
+                });
+                added = true;
+            }
+        }
+
+        if (added)
+            await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

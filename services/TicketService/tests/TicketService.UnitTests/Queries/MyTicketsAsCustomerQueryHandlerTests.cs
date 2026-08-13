@@ -73,19 +73,19 @@ public class MyTicketsAsCustomerQueryHandlerTests
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
         SetupMock([
             MakeTicket(myId, TicketStatusEnum.Open),
-            MakeTicket(myId, TicketStatusEnum.Resolved),
+            MakeTicket(myId, TicketStatusEnum.Completed),
             MakeTicket(myId, TicketStatusEnum.Closed)
         ]);
 
         var result = await _handler.Handle(new MyTicketsAsCustomerQuery
         {
-            Status = TicketStatusEnum.Resolved,
+            Status = TicketStatusEnum.Completed,
             PageNumber = 1,
             PageSize = 10
         }, default);
 
         result.Data!.Items.Should().HaveCount(1);
-        result.Data.Items[0].Status.Should().Be(TicketStatusEnum.Resolved);
+        result.Data.Items[0].Status.Should().Be(TicketStatusEnum.Completed);
     }
 
     [Fact]

@@ -316,7 +316,7 @@ public class ChatSloTests : IAsyncLifetime
     /// Cache luôn trượt — buộc handler xuống DB mỗi lần. <c>SetPageAsync</c> nuốt lặng để không đo
     /// nhầm chi phí ghi cache vào độ trễ truy vấn.
     /// </summary>
-    private sealed class NoCacheChatCacheService : IChatCacheService
+    private class NoCacheChatCacheService : IChatCacheService
     {
         public Task<CachedChatPage?> GetPageAsync(Guid ticketId, int pageNumber, int pageSize,
             bool canViewInternal, CancellationToken ct = default)

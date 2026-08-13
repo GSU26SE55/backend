@@ -7,7 +7,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Command.Chats;
 
-public sealed class ChatVoiceTranscribeCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
+public class ChatVoiceTranscribeCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
     public const long MaxAudioFileSizeDefault = 20_971_520;
     private static readonly HashSet<string> AllowedAudioMimeTypes = new(StringComparer.OrdinalIgnoreCase)

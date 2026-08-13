@@ -6,7 +6,8 @@ using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
-namespace TicketService.Application.Common.Services;
+namespace TicketService.Infrastructure.Implements.Services;
+
 
 public class LocalGroupMentionResolver : IGroupMentionResolverService
 {

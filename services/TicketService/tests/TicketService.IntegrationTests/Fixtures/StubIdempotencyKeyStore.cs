@@ -7,7 +7,7 @@ namespace TicketService.IntegrationTests.Fixtures;
 /// In-memory IIdempotencyKeyStore cho integration test.
 /// Reserve trả về true lần đầu cho mỗi key, false các lần sau.
 /// </summary>
-internal sealed class StubIdempotencyKeyStore : IIdempotencyKeyStore
+internal class StubIdempotencyKeyStore : IIdempotencyKeyStore
 {
     private readonly ConcurrentDictionary<string, byte> _keys = new();
     private readonly ConcurrentDictionary<string, CachedIdempotencyResponse> _responses = new();

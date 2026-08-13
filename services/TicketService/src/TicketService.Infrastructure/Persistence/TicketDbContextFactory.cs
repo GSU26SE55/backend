@@ -33,7 +33,7 @@ public class TicketDbContextFactory : IDesignTimeDbContextFactory<TicketDbContex
             new AuditableEntityInterceptor(new DesignTimeCurrentUserService()));
     }
 
-    private sealed class DesignTimeCurrentUserService : ICurrentUserService
+    private class DesignTimeCurrentUserService : ICurrentUserService
     {
         public string? UserId => null;
     }

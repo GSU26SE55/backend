@@ -30,13 +30,11 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
 {
     private static readonly TicketStatusEnum[] ActiveStatuses =
     {
-        TicketStatusEnum.New,
         TicketStatusEnum.Open,
-        TicketStatusEnum.Assigned,
+        TicketStatusEnum.Pending,
         TicketStatusEnum.InProgress,
-        TicketStatusEnum.WaitingCustomer,
-        TicketStatusEnum.WaitingParts,
-        TicketStatusEnum.WaitingOnsiteSchedule
+        TicketStatusEnum.Request,
+        TicketStatusEnum.ReAssign
     };
 
     private readonly ITicketUnitOfWork _uow;

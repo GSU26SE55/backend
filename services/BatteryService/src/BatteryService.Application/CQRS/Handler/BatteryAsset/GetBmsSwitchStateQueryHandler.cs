@@ -114,7 +114,8 @@ public class GetBmsSwitchStateQueryHandler
         IotDeviceCommandStatusEnum status,
         string? error)
     {
-        if (status == IotDeviceCommandStatusEnum.Ok) return null;
+        if (status == IotDeviceCommandStatusEnum.Ok)
+            return null;
         if (status == IotDeviceCommandStatusEnum.Rejected)
             return "The BMS rejected the control command.";
         if (status == IotDeviceCommandStatusEnum.Unknown)

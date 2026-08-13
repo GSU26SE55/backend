@@ -1076,6 +1076,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ActiveIncidentEpisodeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("active_incident_episode_id");
+
                     b.Property<string>("AiVerifyReason")
                         .HasColumnType("text")
                         .HasColumnName("ai_verify_reason");
@@ -1188,6 +1192,14 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("origin_alert_id");
 
+                    b.Property<int?>("PendingContext")
+                        .HasColumnType("integer")
+                        .HasColumnName("pending_context");
+
+                    b.Property<int?>("PendingReason")
+                        .HasColumnType("integer")
+                        .HasColumnName("pending_reason");
+
                     b.Property<int?>("Priority")
                         .HasColumnType("integer")
                         .HasColumnName("priority");
@@ -1223,6 +1235,16 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<Guid?>("ResolvedByStaffId")
                         .HasColumnType("uuid")
                         .HasColumnName("resolved_by_staff_id");
+
+                    b.Property<int>("ScheduleVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("schedule_version");
+
+                    b.Property<DateTime?>("ScheduledStartAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scheduled_start_at_utc");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -1268,6 +1290,10 @@ namespace TicketService.Infrastructure.Migrations
                     b.HasIndex("Priority");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("Status", "ScheduledStartAtUtc")
+                        .HasDatabaseName("ix_tickets_due_activation")
+                    .HasFilter("is_deleted = false AND status = 2 AND scheduled_start_at_utc IS NOT NULL");
 
                     b.ToTable("tickets", (string)null);
                 });

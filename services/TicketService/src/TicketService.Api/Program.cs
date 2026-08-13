@@ -39,7 +39,6 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
-builder.Services.AddHostedService<AutoCloseBackgroundService>();
 // Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
 builder.Services.AddStandardRateLimiting(builder.Configuration);
 // Policy chặt hơn cho chat write — chạy chồng lên hạn mức nền.

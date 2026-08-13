@@ -134,7 +134,7 @@ public class ChatPostmanCollectionTests
 
     // ───────────────────────────────────────────────────────────────── helper
 
-    private sealed record CollectionRequest(string Name, string Endpoint);
+    private record CollectionRequest(string Name, string Endpoint);
 
     private static List<CollectionRequest> ReadCollectionRequests()
     {

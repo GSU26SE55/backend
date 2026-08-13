@@ -34,10 +34,9 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
         var ticket = log.Ticket;
 
         // KIỂM TRA LOCK LOGIC THEO YÊU CẦU:
-        // Khóa nếu Ticket đang ở trạng thái Resolved (đã báo xong, chờ Manager phê duyệt)
+        // Khóa nếu Ticket đang ở trạng thái Completed (đã báo xong, chờ Manager phê duyệt)
         // hoặc đã đóng (ClosedPendingRate, Closed).
-        if (ticket.Status == TicketStatusEnum.Resolved ||
-            ticket.Status == TicketStatusEnum.ClosedPendingRate ||
+        if (ticket.Status == TicketStatusEnum.Completed ||
             ticket.Status == TicketStatusEnum.Closed)
         {
             return Fail(403, "The log is locked. Cannot edit while the Ticket is pending approval or already completed.");
