@@ -7,7 +7,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Command.Tickets;
 
-public sealed class TicketReprioritizeCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
+public class TicketReprioritizeCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
     [JsonIgnore] public Guid TicketId { get; set; }
 

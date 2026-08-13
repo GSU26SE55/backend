@@ -74,5 +74,5 @@ public class SpamDetector : ISpamDetector
         return Convert.ToHexString(bytes);
     }
 
-    private sealed record SpamEntry(string BodyHash, DateTime PostedAt);
+    private record SpamEntry(string BodyHash, DateTime PostedAt);
 }

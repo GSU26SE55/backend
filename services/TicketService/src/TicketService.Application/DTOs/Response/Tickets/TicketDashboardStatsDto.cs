@@ -9,7 +9,7 @@ public class TicketDashboardStatsDto
     /// <summary>Tổng số ticket (không tính đã xóa).</summary>
     public int Total { get; set; }
 
-    /// <summary>Số ticket đang mở — status KHÔNG thuộc nhóm Resolved/ClosedPendingRate/Closed/ClosedRejected.</summary>
+    /// <summary>Số ticket đang mở — Open/Pending/InProgress/Request/ReAssign.</summary>
     public int OpenCount { get; set; }
 
     /// <summary>Tổng hợp SLA timer toàn hệ thống theo trạng thái.</summary>

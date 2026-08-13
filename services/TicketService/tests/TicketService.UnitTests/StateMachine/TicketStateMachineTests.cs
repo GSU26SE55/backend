@@ -8,648 +8,187 @@ namespace TicketService.UnitTests.StateMachine;
 
 public class TicketStateMachineTests
 {
-    private readonly ITicketStateMachine _sut;
-    private readonly ITransitionRuleProvider _ruleProvider;
+    private readonly ITicketStateMachine _sut = new TicketStateMachine(new TransitionRuleProvider());
 
-    public TicketStateMachineTests()
-    {
-        _ruleProvider = new TransitionRuleProvider();
-        _sut = new TicketStateMachine(_ruleProvider);
-    }
-
-    private static Ticket CreateTicket(TicketStatusEnum status, Guid? PrimaryHandlerStaffId = null, Guid? customerId = null)
-    {
-        return new Ticket
+    private static Ticket CreateTicket(
+        TicketStatusEnum status,
+        Guid? primaryHandlerStaffId = null,
+        Guid? customerId = null) => new()
         {
             Id = Guid.NewGuid(),
-            Code = "T-" + Guid.NewGuid().ToString()[..8],
-            Title = "Test Ticket",
-            Description = "Test Description",
+            Code = $"T-{Guid.NewGuid():N}"[..10],
+            Title = "Test ticket",
+            Description = "Test description",
             Status = status,
-            PrimaryHandlerStaffId = PrimaryHandlerStaffId,
+            PrimaryHandlerStaffId = primaryHandlerStaffId,
             CustomerId = customerId ?? Guid.NewGuid(),
             CreatedAt = DateTime.UtcNow.AddDays(-1),
             UpdatedAt = DateTime.UtcNow.AddDays(-1)
         };
-    }
-
-    #region Group 1: Valid Transitions (20 cases)
 
     [Theory]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.System)]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
-    // Điều chuyển người phụ trách khi Staff đang làm dở — User Guide §3.9 liệt kê
-    // "Đang xử lý" trong các trạng thái hiện nút Điều chuyển.
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Incident, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Incident, TicketStatusEnum.Assigned, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate, ActorRoleEnum.Manager)]
-    [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.InProgress, ActorRoleEnum.Manager)]
-    public void CanTransition_ValidManagerSystemTransitions_ReturnsAllowed(
-        TicketStatusEnum from, TicketStatusEnum to, ActorRoleEnum actor)
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.InProgress, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Pending, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.ClosedRejected, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Pending, TicketStatusEnum.InProgress, ActorRoleEnum.System)]
+    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.ReAssign, ActorRoleEnum.System)]
+    [InlineData(TicketStatusEnum.Request, TicketStatusEnum.InProgress, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Request, TicketStatusEnum.ReAssign, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.ReAssign, TicketStatusEnum.InProgress, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.ReAssign, TicketStatusEnum.Pending, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Completed, TicketStatusEnum.Closed, ActorRoleEnum.Manager)]
+    [InlineData(TicketStatusEnum.Completed, TicketStatusEnum.InProgress, ActorRoleEnum.Manager)]
+    public void CanTransition_AuthorizedLifecycleTransition_IsAllowed(
+        TicketStatusEnum from,
+        TicketStatusEnum to,
+        ActorRoleEnum actorRole)
     {
-        // Arrange
-        var ticket = CreateTicket(from);
+        var result = _sut.CanTransition(CreateTicket(from), to, actorRole, Guid.NewGuid());
 
-        // Act
-        var result = _sut.CanTransition(ticket, to, actor, Guid.NewGuid());
-
-        // Assert
         result.IsAllowed.Should().BeTrue();
-        result.Reason.Should().BeNullOrEmpty();
     }
 
     [Theory]
-    [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.InProgress)]
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.WaitingCustomer)]
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.WaitingParts)]
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.WaitingOnsiteSchedule)]
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Resolved)]
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Escalated)]
-    public void CanTransition_ValidStaffTransitions_MustBeAssignedStaff(
-        TicketStatusEnum from, TicketStatusEnum to)
+    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Pending)]
+    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Request)]
+    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Completed)]
+    [InlineData(TicketStatusEnum.Pending, TicketStatusEnum.InProgress)]
+    public void CanTransition_PrimaryStaffTransition_IsAllowed(
+        TicketStatusEnum from,
+        TicketStatusEnum to)
     {
-        // Arrange
-        var PrimaryHandlerStaffId = Guid.NewGuid();
-        var ticket = CreateTicket(from, PrimaryHandlerStaffId);
-
-        // Act
-        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Staff, PrimaryHandlerStaffId);
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
-        result.Reason.Should().BeNullOrEmpty();
-    }
-
-    [Theory]
-    [InlineData(TicketStatusEnum.WaitingCustomer, ActorRoleEnum.Staff)]
-    [InlineData(TicketStatusEnum.WaitingCustomer, ActorRoleEnum.System)]
-    [InlineData(TicketStatusEnum.WaitingParts, ActorRoleEnum.Staff)]
-    [InlineData(TicketStatusEnum.WaitingParts, ActorRoleEnum.System)]
-    [InlineData(TicketStatusEnum.WaitingOnsiteSchedule, ActorRoleEnum.Staff)]
-    [InlineData(TicketStatusEnum.WaitingOnsiteSchedule, ActorRoleEnum.System)]
-    public void CanTransition_WaitingToInProgress_AllowsStaffOrSystem(
-        TicketStatusEnum from, ActorRoleEnum actor)
-    {
-        // Arrange
         var staffId = Guid.NewGuid();
-        var ticket = CreateTicket(from, staffId);
+        var result = _sut.CanTransition(CreateTicket(from, staffId), to, ActorRoleEnum.Staff, staffId);
 
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.InProgress, actor, staffId);
-
-        // Assert
         result.IsAllowed.Should().BeTrue();
     }
 
     [Fact]
-    public void CanTransition_AssignedToEscalated_SystemOnly()
+    public void CanTransition_NonPrimaryStaffTransition_IsDenied()
     {
-        // Arrange
-        var ticket = CreateTicket(TicketStatusEnum.Assigned, Guid.NewGuid());
+        var ticket = CreateTicket(TicketStatusEnum.InProgress, Guid.NewGuid());
 
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.System, Guid.Empty);
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData(TicketStatusEnum.Assigned)]
-    [InlineData(TicketStatusEnum.InProgress)]
-    public void CanTransition_PrimaryStaffCanEscalate(TicketStatusEnum status)
-    {
-        var primaryStaffId = Guid.NewGuid();
-        var ticket = CreateTicket(status, primaryStaffId);
-
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Staff, primaryStaffId);
-
-        result.IsAllowed.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData(TicketStatusEnum.Assigned)]
-    [InlineData(TicketStatusEnum.InProgress)]
-    public void CanTransition_SupporterCannotEscalate(TicketStatusEnum status)
-    {
-        var ticket = CreateTicket(status, Guid.NewGuid());
-
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Staff, Guid.NewGuid());
+        var result = _sut.CanTransition(
+            ticket,
+            TicketStatusEnum.Completed,
+            ActorRoleEnum.Staff,
+            Guid.NewGuid());
 
         result.IsAllowed.Should().BeFalse();
+        result.Reason.Should().Contain("PrimaryHandler");
     }
 
     [Fact]
-    public void CanTransition_ClosedPendingRateToClosed_CustomerOwner()
+    public void CanTransition_ClosedToOpen_AllowsOwner()
     {
-        // Arrange
         var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerId);
+        var result = _sut.CanTransition(
+            CreateTicket(TicketStatusEnum.Closed, customerId: customerId),
+            TicketStatusEnum.Open,
+            ActorRoleEnum.Customer,
+            customerId);
 
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Closed, ActorRoleEnum.Customer, customerId);
-
-        // Assert
         result.IsAllowed.Should().BeTrue();
     }
 
     [Fact]
-    public void CanTransition_ClosedPendingRateToOpen_CustomerWithin7Days()
+    public void CanTransition_ClosedToOpen_DeniesDifferentCustomer()
     {
-        // Arrange
-        var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerId);
-        ticket.ApprovedAt = DateTime.UtcNow.AddDays(-3); // Within 7 days
+        var result = _sut.CanTransition(
+            CreateTicket(TicketStatusEnum.Closed, customerId: Guid.NewGuid()),
+            TicketStatusEnum.Open,
+            ActorRoleEnum.Customer,
+            Guid.NewGuid());
 
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, customerId);
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
-    }
-
-    [Fact]
-    public void CanTransition_ClosedPendingRateToClosed_SystemAfter7Days()
-    {
-        // Arrange
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate);
-        ticket.ApprovedAt = DateTime.UtcNow.AddDays(-8);
-
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Closed, ActorRoleEnum.System, Guid.Empty);
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
-    }
-
-    #endregion
-
-    #region Group 2: Invalid Actor Roles (12 cases)
-
-    [Theory]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open)] // Only Manager/System
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned)] // Only Manager
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Resolved)] // Only Staff
-    [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)] // Only Manager
-    public void CanTransition_CustomerInvalidActions_ReturnsFalse(
-        TicketStatusEnum from, TicketStatusEnum to)
-    {
-        // Arrange
-        var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(from, customerId: customerId);
-
-        // Act
-        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Customer, customerId);
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-        result.Reason.Should().NotBeNullOrEmpty();
-    }
-
-    [Theory]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned)]
-    // Staff không tự điều chuyển phiếu mình đang giữ sang người khác — muốn buông thì
-    // gửi Yêu cầu chuyển cấp (§3.12), quyết định là của Manager.
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Assigned)]
-    [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)]
-    public void CanTransition_StaffCannotDoManagerActions_ReturnsFalse(
-        TicketStatusEnum from, TicketStatusEnum to)
-    {
-        // Arrange
-        var staffId = Guid.NewGuid();
-        var ticket = CreateTicket(from, staffId);
-
-        // Act
-        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Staff, staffId);
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-        result.Reason.Should().Contain("Manager");
-    }
-
-    [Theory]
-    [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.InProgress)]
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Resolved)]
-    public void CanTransition_ManagerCannotStartOrResolve_ReturnsFalse(
-        TicketStatusEnum from, TicketStatusEnum to)
-    {
-        // Arrange
-        var managerId = Guid.NewGuid();
-        var ticket = CreateTicket(from, Guid.NewGuid()); // Different staff assigned
-
-        // Act
-        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Manager, managerId);
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-        result.Reason.Should().Contain("Assigned Staff");
-    }
-
-    [Fact]
-    public void CanTransition_WrongStaffCannotStart_ReturnsFalse()
-    {
-        // Arrange
-        var PrimaryHandlerStaffId = Guid.NewGuid();
-        var otherStaffId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.Assigned, PrimaryHandlerStaffId);
-
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, otherStaffId);
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-        result.Reason.Should().Contain("Assigned Staff");
-    }
-
-    [Fact]
-    public void CanTransition_WrongCustomerCannotClose_ReturnsFalse()
-    {
-        // Arrange
-        var customerA = Guid.NewGuid();
-        var customerB = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerA);
-
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Closed, ActorRoleEnum.Customer, customerB);
-
-        // Assert
         result.IsAllowed.Should().BeFalse();
     }
 
     [Fact]
-    public void CanTransition_WrongCustomerCannotReopen_ReturnsFalse()
+    public void CanTransition_ClosedRejected_IsTerminal()
     {
-        // Arrange
-        var customerA = Guid.NewGuid();
-        var customerB = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerA);
-        ticket.ApprovedAt = DateTime.UtcNow.AddDays(-2);
+        var result = _sut.CanTransition(
+            CreateTicket(TicketStatusEnum.ClosedRejected),
+            TicketStatusEnum.Open,
+            ActorRoleEnum.Admin,
+            Guid.NewGuid());
 
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, customerB);
-
-        // Assert
         result.IsAllowed.Should().BeFalse();
+        result.Reason.Should().Contain("terminal");
     }
 
     [Fact]
-    public void CanTransition_WrongStaffCannotResolve_ReturnsFalse()
+    public async Task ExecuteAsync_Completed_SetsResolutionMetadata()
     {
-        // Arrange
-        var currentStaffId = Guid.NewGuid();
-        var oldStaffId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.InProgress, currentStaffId);
-        ticket.EscalatedAt = DateTime.UtcNow.AddHours(-1); // Marked as escalated
-
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Resolved, ActorRoleEnum.Staff, oldStaffId);
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-        result.Reason.Should().Contain("Assigned Staff");
-    }
-
-    #endregion
-
-    #region Group 3: Business Rules & Edge Cases (8 cases)
-
-    [Fact]
-    public void CanTransition_ReopenAfter7Days_ReturnsFalse()
-    {
-        // Arrange
-        var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerId);
-        ticket.ApprovedAt = DateTime.UtcNow.AddDays(-8); // After 7 days
-
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, customerId);
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-        result.Reason.Should().Contain("7 days");
-    }
-
-    [Fact]
-    public void CanTransition_ReopenExactly7Days_ReturnsFalse()
-    {
-        // Arrange
-        var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerId);
-        ticket.ApprovedAt = DateTime.UtcNow.AddDays(-7).AddMinutes(-1); // Just over 7 days
-
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, customerId);
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-    }
-
-    [Theory]
-    [InlineData(TicketStatusEnum.Open)]
-    [InlineData(TicketStatusEnum.Assigned)]
-    [InlineData(TicketStatusEnum.InProgress)]
-    [InlineData(TicketStatusEnum.Resolved)]
-    public void CanTransition_FromClosed_AlwaysFails(TicketStatusEnum target)
-    {
-        // Arrange
-        var ticket = CreateTicket(TicketStatusEnum.Closed);
-
-        // Act
-        var result = _sut.CanTransition(ticket, target, ActorRoleEnum.Manager, Guid.NewGuid());
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-        result.Reason.Should().Contain("closed");
-    }
-
-    [Theory]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.InProgress)] // Must go through Assigned
-    [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.Resolved)] // Must go through InProgress
-    public void CanTransition_InvalidPath_ReturnsFalse(TicketStatusEnum from, TicketStatusEnum to)
-    {
-        // Arrange
-        var ticket = CreateTicket(from, Guid.NewGuid());
-
-        // Act
-        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Manager, Guid.NewGuid());
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-        result.Reason.Should().Contain("Cannot transition");
-    }
-
-    [Fact]
-    public void CanTransition_NullAssignedStaff_CannotStart()
-    {
-        // Arrange
-        var ticket = CreateTicket(TicketStatusEnum.Assigned, PrimaryHandlerStaffId: null);
-
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, Guid.NewGuid());
-
-        // Assert
-        result.IsAllowed.Should().BeFalse();
-    }
-
-    #endregion
-
-    #region Group 4: ExecuteAsync & Metadata Updates (8 cases)
-
-    [Fact]
-    public async Task ExecuteAsync_Resolved_SetsMetadata()
-    {
-        // Arrange
         var staffId = Guid.NewGuid();
         var ticket = CreateTicket(TicketStatusEnum.InProgress, staffId);
-        var ctx = new TransitionContext
+        var context = new TransitionContext
         {
             ActorRole = ActorRoleEnum.Staff,
             ActorUserId = staffId,
-            Payload = new Dictionary<string, object?> { { "ResolutionSummary", "Fixed" } }
+            Payload = new Dictionary<string, object?> { ["ResolutionSummary"] = "Completed safely" }
         };
 
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Resolved, ctx, CancellationToken.None);
+        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Completed, context, CancellationToken.None);
 
-        // Assert
         result.IsAllowed.Should().BeTrue();
-        ticket.Status.Should().Be(TicketStatusEnum.Resolved);
-        ticket.ResolvedAt.Should().NotBeNull();
-        ticket.ResolvedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        ticket.Status.Should().Be(TicketStatusEnum.Completed);
         ticket.ResolvedByStaffId.Should().Be(staffId);
+        ticket.ResolutionSummary.Should().Be("Completed safely");
+        ticket.ResolvedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 
     [Fact]
-    public async Task ExecuteAsync_Open_DoesNotSetPostResolutionApprovalMetadata()
+    public async Task ExecuteAsync_Closed_SetsApprovalAndClosureMetadata()
     {
-        // Arrange
         var managerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.New);
-        var ctx = new TransitionContext
+        var ticket = CreateTicket(TicketStatusEnum.Completed, Guid.NewGuid());
+
+        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Closed, new TransitionContext
         {
             ActorRole = ActorRoleEnum.Manager,
             ActorUserId = managerId
-        };
+        }, CancellationToken.None);
 
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Open, ctx, CancellationToken.None);
-
-        // Assert
         result.IsAllowed.Should().BeTrue();
-        ticket.Status.Should().Be(TicketStatusEnum.Open);
-        ticket.ApprovedAt.Should().BeNull();
-        ticket.ApprovedByManagerId.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ClosedPendingRate_SetsApprovedAt()
-    {
-        // Arrange
-        var managerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.Resolved, Guid.NewGuid());
-        var ctx = new TransitionContext
-        {
-            ActorRole = ActorRoleEnum.Manager,
-            ActorUserId = managerId
-        };
-
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.ClosedPendingRate, ctx, CancellationToken.None);
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
+        ticket.Status.Should().Be(TicketStatusEnum.Closed);
+        ticket.ApprovedByManagerId.Should().Be(managerId);
         ticket.ApprovedAt.Should().NotBeNull();
-        ticket.ApprovedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_Closed_SetsClosedAt()
-    {
-        // Arrange
-        var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerId);
-        var ctx = new TransitionContext
-        {
-            ActorRole = ActorRoleEnum.Customer,
-            ActorUserId = customerId,
-            Payload = new Dictionary<string, object?> { { "Rating", 5 } }
-        };
-
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Closed, ctx, CancellationToken.None);
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
         ticket.ClosedAt.Should().NotBeNull();
-        ticket.ClosedAt!.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ClosedRejected_SetsMetadata()
-    {
-        // Arrange
-        var managerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.New);
-        var ctx = new TransitionContext
-        {
-            ActorRole = ActorRoleEnum.Manager,
-            ActorUserId = managerId,
-            Payload = new Dictionary<string, object?> { { "Reason", "Invalid ticket" } }
-        };
-
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, ctx, CancellationToken.None);
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
-        ticket.Status.Should().Be(TicketStatusEnum.ClosedRejected);
-        ticket.ClosedAt.Should().NotBeNull();
-        ticket.Reason.Should().Be("Invalid ticket");
     }
 
     [Fact]
     public async Task ExecuteAsync_Reopen_IncrementsReopenCount()
     {
-        // Arrange
         var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerId);
-        ticket.ApprovedAt = DateTime.UtcNow.AddDays(-2);
-        ticket.ReopenCount = 0;
+        var ticket = CreateTicket(TicketStatusEnum.Closed, customerId: customerId);
 
-        var ctx = new TransitionContext
+        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Open, new TransitionContext
         {
             ActorRole = ActorRoleEnum.Customer,
             ActorUserId = customerId,
-            Payload = new Dictionary<string, object?> { { "ReopenReason", "Issue not fixed" } }
-        };
+            Payload = new Dictionary<string, object?> { ["ReopenReason"] = "Issue returned" }
+        }, CancellationToken.None);
 
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Open, ctx, CancellationToken.None);
-
-        // Assert
         result.IsAllowed.Should().BeTrue();
         ticket.Status.Should().Be(TicketStatusEnum.Open);
         ticket.ReopenCount.Should().Be(1);
+        ticket.Reason.Should().Be("Issue returned");
     }
 
     [Fact]
-    public async Task ExecuteAsync_MultipleReopens_IncrementsCorrectly()
+    public async Task ExecuteAsync_DeniedTransition_DoesNotMutateTicket()
     {
-        // Arrange
-        var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate, customerId: customerId);
-        ticket.ApprovedAt = DateTime.UtcNow.AddDays(-1);
-        ticket.ReopenCount = 2; // Already reopened twice
-
-        var ctx = new TransitionContext
-        {
-            ActorRole = ActorRoleEnum.Customer,
-            ActorUserId = customerId
-        };
-
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Open, ctx, CancellationToken.None);
-
-        // Assert
-        ticket.ReopenCount.Should().Be(3);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_AnyTransition_UpdatesUpdatedAt()
-    {
-        // Arrange
-        var managerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.New);
-        var oldUpdatedAt = DateTime.UtcNow.AddSeconds(-1);
-        ticket.UpdatedAt = oldUpdatedAt;
-
-        var ctx = new TransitionContext
-        {
-            ActorRole = ActorRoleEnum.Manager,
-            ActorUserId = managerId
-        };
-
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Open, ctx, CancellationToken.None);
-
-        // Assert
-        ticket.UpdatedAt.Should().NotBeNull();
-        ticket.UpdatedAt!.Value.Should().BeAfter(oldUpdatedAt);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_FailedTransition_DoesNotUpdateTicket()
-    {
-        // Arrange
-        var customerId = Guid.NewGuid();
-        var ticket = CreateTicket(TicketStatusEnum.InProgress, Guid.NewGuid());
-        var originalStatus = ticket.Status;
+        var ticket = CreateTicket(TicketStatusEnum.Open);
         var originalUpdatedAt = ticket.UpdatedAt;
 
-        var ctx = new TransitionContext
+        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Completed, new TransitionContext
         {
-            ActorRole = ActorRoleEnum.Customer, // Invalid actor
-            ActorUserId = customerId
-        };
+            ActorRole = ActorRoleEnum.Customer,
+            ActorUserId = ticket.CustomerId
+        }, CancellationToken.None);
 
-        // Act
-        var result = await _sut.ExecuteAsync(ticket, TicketStatusEnum.Resolved, ctx, CancellationToken.None);
-
-        // Assert
         result.IsAllowed.Should().BeFalse();
-        ticket.Status.Should().Be(originalStatus); // Unchanged
-        ticket.UpdatedAt.Should().Be(originalUpdatedAt); // Unchanged
+        ticket.Status.Should().Be(TicketStatusEnum.Open);
+        ticket.UpdatedAt.Should().Be(originalUpdatedAt);
     }
-
-    #endregion
-
-    #region Group 5: Admin Override Transitions (Updated)
-
-    [Theory]
-    [InlineData(TicketStatusEnum.New, TicketStatusEnum.Open)]
-    [InlineData(TicketStatusEnum.Open, TicketStatusEnum.Assigned)]
-    [InlineData(TicketStatusEnum.Assigned, TicketStatusEnum.InProgress)]
-    [InlineData(TicketStatusEnum.InProgress, TicketStatusEnum.Resolved)]
-    [InlineData(TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate)]
-    [InlineData(TicketStatusEnum.ClosedPendingRate, TicketStatusEnum.Closed)]
-    [InlineData(TicketStatusEnum.Escalated, TicketStatusEnum.Incident)]
-    public void CanTransition_AdminOverride_AlwaysReturnsAllowed(
-        TicketStatusEnum from, TicketStatusEnum to)
-    {
-        // Arrange
-        var ticket = CreateTicket(from);
-        // Ngay cả khi không phải là Staff được assign hay Customer chủ sở hữu
-        ticket.PrimaryHandlerStaffId = Guid.NewGuid();
-        ticket.CustomerId = Guid.NewGuid();
-
-        // Act
-        var result = _sut.CanTransition(ticket, to, ActorRoleEnum.Admin, Guid.NewGuid());
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
-        result.Reason.Should().BeNullOrEmpty();
-    }
-
-    [Fact]
-    public void CanTransition_AdminReopenAfter7Days_ReturnsAllowed()
-    {
-        // Arrange
-        var ticket = CreateTicket(TicketStatusEnum.ClosedPendingRate);
-        ticket.ApprovedAt = DateTime.UtcNow.AddDays(-10); // Quá 7 ngày
-
-        // Act
-        var result = _sut.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Admin, Guid.NewGuid());
-
-        // Assert
-        result.IsAllowed.Should().BeTrue();
-        result.Reason.Should().BeNullOrEmpty();
-    }
-
-    #endregion
 }

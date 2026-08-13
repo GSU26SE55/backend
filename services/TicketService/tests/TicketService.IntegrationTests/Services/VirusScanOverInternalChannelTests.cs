@@ -91,7 +91,7 @@ public class VirusScanOverInternalChannelTests : IAsyncLifetime
     }
 
     /// <summary>Máy chủ gRPC phục vụ đúng hợp đồng chung, có thể ép trả lỗi để kiểm chiều hỏng.</summary>
-    private sealed class FakeFileServer : FileInternal.FileInternalBase
+    private class FakeFileServer : FileInternal.FileInternalBase
     {
         public byte[] Payload { get; set; } = [];
         public StatusCode? ForcedError { get; set; }

@@ -4,12 +4,12 @@ namespace TicketService.Application.CQRS.Handler.Reports;
 
 /// <summary>
 /// Sprint 7 #114 — helper chung cho report handlers.
-/// "Resolved" = Status ∈ {Resolved, ClosedPendingRate, Closed}. SLA Met/Breached từ SlaTimerStatusEnum.
+/// "Resolved" = Status ∈ {Completed, Closed}. SLA Met/Breached lấy từ SlaTimerStatusEnum.
 /// </summary>
 internal static class TicketReportHelpers
 {
     public static readonly TicketStatusEnum[] ResolvedStatuses =
-        { TicketStatusEnum.Resolved, TicketStatusEnum.ClosedPendingRate, TicketStatusEnum.Closed };
+        { TicketStatusEnum.Completed, TicketStatusEnum.Closed };
 
     public static DateTime Bucket(DateTime dt, string granularity) => granularity?.ToLowerInvariant() switch
     {

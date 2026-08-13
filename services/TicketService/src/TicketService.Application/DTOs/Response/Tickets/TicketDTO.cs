@@ -35,6 +35,11 @@ public class TicketDTO
     /// </summary>
     public int ReopenCount { get; set; }
     public bool IsIncident { get; set; }
+    public DateTime? ScheduledStartAtUtc { get; set; }
+    public int ScheduleVersion { get; set; }
+    public PendingContextEnum? PendingContext { get; set; }
+    public PauseReasonEnum? PendingReason { get; set; }
+    public string? ActiveIncidentEpisodeId { get; set; }
     public DateTime CreatedAt { get; set; }
     /// <summary>
     /// Thời gian cập nhật (UTC).

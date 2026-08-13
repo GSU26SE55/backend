@@ -9,7 +9,7 @@ public class GetStaffQuery : IRequest<StaffAssignmentProfileListResponse>
 
     /// <summary>
     /// Optional ticket priority used to return staff eligible as the primary handler.
-    /// Accepted values: P1Critical, P2High, P3Normal.
+    /// Accepted values: Urgent, P1Critical, P2High, P3Normal.
     /// </summary>
     public string? TicketPriority { get; set; }
 }

@@ -35,12 +35,19 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
         var ticket = await _uow.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
+            .Select(t => new
+            {
+                t.CustomerId,
+                PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault(),
+                AssignedStaffIds = t.Assignments.Where(a => !a.IsDeleted).Select(a => a.StaffId).ToList(),
+                ParticipantUserIds = t.Participants.Where(p => !p.IsDeleted && p.RemovedAt == null).Select(p => p.UserId).ToList()
+            })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
             return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 404, Message = "Ticket not found." };
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles))
+        var allowedUserIds = ticket.ParticipantUserIds.Concat(ticket.AssignedStaffIds).Distinct().ToList();
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles, allowedUserIds))
             return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to access this ticket." };
 
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);

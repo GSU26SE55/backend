@@ -241,7 +241,8 @@ public class MqttPasswordFileSyncServiceTests : IDisposable
     {
         var begin = content.IndexOf(MosquittoPasswordFile.BeginMarker, StringComparison.Ordinal);
         var end = content.IndexOf(MosquittoPasswordFile.EndMarker, StringComparison.Ordinal);
-        if (begin < 0 || end < begin) return content;
+        if (begin < 0 || end < begin)
+            return content;
         return content[..begin] + content[(end + MosquittoPasswordFile.EndMarker.Length)..];
     }
 
@@ -256,7 +257,8 @@ public class MqttPasswordFileSyncServiceTests : IDisposable
         //
         // Nay khẳng định đúng bất biến cần giữ: BROKER ĐỌC ĐƯỢC, nhưng KHÔNG AI NGOÀI CHỦ
         // GHI ĐƯỢC. File chỉ chứa hash PBKDF2-SHA512 `$7$`, không có plaintext.
-        if (OperatingSystem.IsWindows()) return;
+        if (OperatingSystem.IsWindows())
+            return;
 
         await Service(Device("gw-001")).SyncOnceAsync(CancellationToken.None);
 

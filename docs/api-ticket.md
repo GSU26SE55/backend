@@ -1,5 +1,80 @@
 # API Documentation — TicketService
 
+## Active ticket lifecycle (GH-1176)
+
+> **Canonical override — 2026-08-11:** This block supersedes all older lifecycle descriptions in this document. The current `TicketStatusEnum` values are `Open=1`, `Pending=2`, `InProgress=3`, `Request=4`, `ReAssign=5`, `Completed=6`, `Closed=7`, and `ClosedRejected=8`.
+
+| Status | Value | Active meaning | SLA |
+|---|---:|---|---|
+| `Open` | 1 | Manager queue; not scheduled for work | Not running |
+| `Pending` | 2 | Future scheduled work or held active work; inspect `pendingContext` (`Scheduled` / `Held`) | Not running; held cycle remains paused |
+| `InProgress` | 3 | Primary Staff is actively working | Running only for `P3Normal`, `P2High`, or `P1Critical`; never for `Urgent` |
+| `Request` | 4 | Staff escalation awaiting Manager decision | Paused |
+| `ReAssign` | 5 | Manager must confirm or replace qualified Primary Staff and schedule work | Not running |
+| `Completed` | 6 | Staff finished; Manager reviews result | Met/stopped |
+| `Closed` | 7 | Manager-approved terminal result; eligible Customer may rate or reopen within seven days | Not running |
+| `ClosedRejected` | 8 | Manager rejected an `Open` ticket | Not running |
+
+`TicketPriorityEnum`: `P1Critical=1`, `P2High=2`, `P3Normal=3`, `Urgent=4`. `PendingContextEnum`: `Scheduled=1`, `Held=2`.
+
+| Operation | Active endpoint and result |
+|---|---|
+| Assign / Reassign | `POST /api/admin/tickets/{id}/assign` or `.../reassign`; schedule within `[nowUtc-5m, nowUtc]` → `InProgress`, future schedule → `Pending/Scheduled` |
+| Reschedule | `POST /api/admin/tickets/{id}/schedule`; increments `scheduleVersion` |
+| Hold / early resume | `POST /api/staff/tickets/{id}/hold` → `Pending/Held`; only current Primary Staff can resume it early, with a reason |
+| Escalation | Staff: `InProgress → Request`; Manager reject: `Request → InProgress`; Manager approve: `Request → ReAssign` and priority rises one level |
+| Completion | `POST /api/staff/tickets/{id}/resolve` → `Completed`; Manager approve → `Closed`, reject → `InProgress` |
+| Reject open ticket | `POST /api/admin/tickets/{id}/triage-reject`; `Open → ClosedRejected` |
+
+Removed APIs/states: `POST .../triage`, `POST .../start`, force escalation, auto-close, `New`, `Assigned`, waiting variants, `Resolved`, `Escalated`, `ClosedPendingRate`, and lifecycle `Incident`.
+
+> Source of truth: `.gemini/kb/modules/ticket-service.md`, `TicketStatusEnum.cs`, `TicketPriorityEnum.cs`, and `PendingContextEnum.cs`.
+
+### Obsolete GH-1176 draft (retained below only for diff history)
+
+This section is authoritative for ticket lifecycle APIs. Lifecycle text farther below that uses
+removed statuses or endpoints is retained only as historical documentation and must not be used by
+new clients.
+
+| Status | Value | Active meaning |
+|---|---:|---|
+| `Open` | 2 | Awaiting assignment or reassignment setup |
+| `InProgress` | 4 | Primary Staff is actively working |
+| `Pending` | 5 | Scheduled work or held work; inspect `pendingContext` |
+| `Completed` | 8 | Staff submitted completion for Manager decision |
+| `ReAssign` | 9 | Awaiting qualified Primary Staff and schedule |
+| `Closed` | 11 | Manager-approved terminal result; eligible tickets may be rated/reopened for seven days |
+| `ClosedRejected` | 12 | Manager-rejected terminal ticket |
+| `Request` | 14 | Staff escalation request awaiting Manager decision |
+
+`TicketPriorityEnum` is `P1Critical=1`, `P2High=2`, `P3Normal=3`, `Urgent=4`.
+SLA runs only while status is `InProgress` and priority is not `Urgent`.
+
+| Operation | Active endpoint and result |
+|---|---|
+| Assign | `POST /api/admin/tickets/{id}/assign`; current window → `InProgress`, future → `Pending/Scheduled` |
+| Reassign | `POST /api/admin/tickets/{id}/reassign`; same current/future schedule rule |
+| Reschedule | `POST /api/admin/tickets/{id}/schedule`; increments `scheduleVersion` |
+| Hold | `POST /api/staff/tickets/{id}/hold`; requires reason, note, and future appointment → `Pending/Held` |
+| Early resume | `POST /api/staff/tickets/{id}/resume`; only current Primary Staff and only `Pending/Held` |
+| Completion | `POST /api/staff/tickets/{id}/resolve` → `Completed`; Manager approve → `Closed`, reject → correction `InProgress` |
+| Reject open ticket | `POST /api/admin/tickets/{id}/triage-reject`; `Open → ClosedRejected` |
+
+Removed APIs: `POST .../triage`, `POST .../start`, and force escalation. Auto-close is removed;
+rating reminders preserve `Closed` status.
+
+> **GH-1176 lifecycle override (2026-08-11):** The canonical statuses are
+> `Open=1`, `Pending=2`, `InProgress=3`, `Request=4`, `ReAssign=5`, `Completed=6`,
+> `Closed=7`, and `ClosedRejected=8`. Priority adds `Urgent=4`.
+> Any older examples below that mention `New`, `Assigned`, waiting variants, `Resolved`,
+> `Escalated`, `ClosedPendingRate`, lifecycle `Incident`, `/triage`, or `/start` are superseded.
+> Assignment/reassignment requires `priority`, `primaryHandlerStaffId`, and offset-aware
+> `scheduledStartAt`: `[nowUtc-5m, nowUtc]` starts directly in `InProgress`; future work enters
+> `Pending/Scheduled`. SLA runs only for non-Urgent `InProgress`. Hold produces
+> `Pending/Held`; only its active Primary Staff may resume early with a reason. Completion is
+> `InProgress → Completed → Closed`; eligible unrated non-merged `Closed` tickets may be rated
+> or reopened within seven days. See `logs/GH-1176/plan.md` and `.gemini/kb/modules/ticket-service.md`.
+
 > Base URL: `http://localhost:{port}/api`
 > Content-Type: `application/json`
 > Response wrapper chuẩn: `CommonResponse<T>`
@@ -61,8 +136,7 @@ Ví dụ: `GET /api/admin/tickets?PageNumber=1&PageSize=20&SortBy=priority&SortD
 | `priority` | độ ưu tiên | enum `TicketPriorityEnum` | Không |
 | `createdAt` *(default)* | ngày tạo | datetime | Không |
 
-**`TicketStatusEnum`:** `New=1` (chờ triage) · `Open=2` (đã triage, chờ gán Staff) · `Assigned=3` · `InProgress=4` · `WaitingCustomer=5` · `WaitingParts=6` · `WaitingOnsiteSchedule=7` · `Resolved=8` · `Escalated=9` · `ClosedPendingRate=10` · `Closed=11` · `ClosedRejected=12` · `Incident=13`. (**13 giá trị — KHÔNG có `Approved`**.)
-**`TicketPriorityEnum`:** `P1Critical=1` (SLA ngắn nhất) · `P2High=2` · `P3Normal=3`.
+> **Historical documentation notice:** The enum definitions in the sections below this notice predate GH-1176 and are not active API contracts. Use the canonical table at the top of this document.
 **`TicketCategoryEnum`:** `Charging=1` · `Overheat=2` · `NoPower=3` · `Performance=4` · `Other=5` · `Repair=6`.
 
 > Sort theo enum = sort theo **giá trị số** (`New=1` → `Incident=13`, P1→P3…), không theo tên hiển thị.

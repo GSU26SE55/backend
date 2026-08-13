@@ -218,26 +218,39 @@ public class BmsSwitchStateQueryHandlerTests
         var siteId = Guid.NewGuid();
         var asset = new BatteryAsset
         {
-            Id = Guid.NewGuid(), CustomerId = customerId, SiteId = siteId, SerialNumber = "BAT-001"
+            Id = Guid.NewGuid(),
+            CustomerId = customerId,
+            SiteId = siteId,
+            SerialNumber = "BAT-001"
         };
         var device = new IotDevice
         {
-            Id = Guid.NewGuid(), SiteId = siteId, DeviceCode = "GW-001",
-            DisplayName = "Gateway", Status = IotDeviceStatusEnum.Active
+            Id = Guid.NewGuid(),
+            SiteId = siteId,
+            DeviceCode = "GW-001",
+            DisplayName = "Gateway",
+            Status = IotDeviceStatusEnum.Active
         };
         var verified = new IotDeviceCommand
         {
-            Id = Guid.NewGuid(), IotDeviceId = device.Id, BatteryAssetId = asset.Id,
-            CmdId = "verified", Type = "set_bms_switch",
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            BatteryAssetId = asset.Id,
+            CmdId = "verified",
+            Type = "set_bms_switch",
             ParamsJson = "{\"target\":\"charge\",\"enable\":true}",
             ResultJson = "{\"serial\":\"BAT-001\",\"chargeEnabled\":true,\"dischargeEnabled\":false}",
             Status = IotDeviceCommandStatusEnum.Ok,
-            CreatedAt = DateTime.UtcNow.AddSeconds(-10), AckedAt = DateTime.UtcNow.AddSeconds(-9)
+            CreatedAt = DateTime.UtcNow.AddSeconds(-10),
+            AckedAt = DateTime.UtcNow.AddSeconds(-9)
         };
         var pending = new IotDeviceCommand
         {
-            Id = Guid.NewGuid(), IotDeviceId = device.Id, BatteryAssetId = asset.Id,
-            CmdId = "pending", Type = "set_bms_switch",
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            BatteryAssetId = asset.Id,
+            CmdId = "pending",
+            Type = "set_bms_switch",
             ParamsJson = "{\"target\":\"discharge\",\"enable\":true}",
             Status = IotDeviceCommandStatusEnum.Pending,
             CreatedAt = DateTime.UtcNow

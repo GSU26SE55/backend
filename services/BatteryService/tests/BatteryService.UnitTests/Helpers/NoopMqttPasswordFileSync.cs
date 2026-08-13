@@ -31,7 +31,8 @@ public sealed class NoopMqttPasswordFileSync : IMqttPasswordFileSync
     public Task SyncOnceAsync(CancellationToken ct)
     {
         CallCount++;
-        if (_throws) throw new IOException("test: mount read-only");
+        if (_throws)
+            throw new IOException("test: mount read-only");
         return Task.CompletedTask;
     }
 }

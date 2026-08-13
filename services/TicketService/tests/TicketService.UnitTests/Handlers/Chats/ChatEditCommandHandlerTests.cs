@@ -287,7 +287,7 @@ public class ChatEditCommandHandlerTests
         var ticketId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
-        var ticket = MakeTicket(ticketId, TicketStatusEnum.ClosedPendingRate);
+        var ticket = MakeTicket(ticketId, TicketStatusEnum.Closed);
         var chat = MakeChat(chatId, ticketId, authorId, DateTime.UtcNow.AddMinutes(-5), ticket);
 
         _ticketsRepo.Setup(r => r.GetByIdAsync(ticketId)).ReturnsAsync(ticket);

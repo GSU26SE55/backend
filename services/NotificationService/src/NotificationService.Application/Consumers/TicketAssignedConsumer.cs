@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
@@ -41,33 +40,12 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
         {
             var evt = context.Message;
 
-            var payload = JsonSerializer.Serialize(new
-            {
-                ticketId = evt.TicketId,
-                code = evt.Code,
-                staffId = evt.PrimaryHandlerStaffId,
-                customerId = evt.CustomerId,
-                priority = evt.Priority,
-                screen = "TicketDetail"
-            });
+            await TicketSchedulingNotificationWriter.WriteAssignmentAsync(
+                _unitOfWork, evt.TicketId, evt.Code, evt.CustomerId,
+                evt.PrimaryHandlerStaffId, evt.Priority, evt.ScheduledStartAtUtc,
+                evt.ScheduleVersion, evt.WorkStartsImmediately, context.CancellationToken);
 
-            // Staff được phân công.
-            await NotificationWriter.WriteAsync(
-                _unitOfWork, [evt.PrimaryHandlerStaffId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
-                $"You have been assigned ticket {evt.Code}",
-                $"Ticket {evt.Code} (priority {evt.Priority}) has been assigned to you.",
-                payload, "Ticket", evt.TicketId, context.CancellationToken);
-
-            // Sprint 6.2 NOTI-05 (#676) — Customer sở hữu ticket.
-            if (evt.CustomerId != Guid.Empty && evt.CustomerId != evt.PrimaryHandlerStaffId)
-            {
-                await NotificationWriter.WriteAsync(
-                    _unitOfWork, [evt.CustomerId], NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPushEmail,
-                    $"Ticket {evt.Code} now has a staff member assigned",
-                    $"Your request {evt.Code} has been assigned to a technician (priority {evt.Priority}).",
-                    payload, "Ticket", evt.TicketId, context.CancellationToken);
-            }
-            else if (evt.CustomerId == Guid.Empty)
+            if (evt.CustomerId == Guid.Empty)
             {
                 _logger.LogWarning(
                     "TicketAssigned ticket={TicketId}: CustomerId rỗng — bỏ qua notification cho Customer.", evt.TicketId);

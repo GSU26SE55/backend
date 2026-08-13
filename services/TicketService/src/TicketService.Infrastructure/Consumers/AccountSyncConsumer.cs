@@ -40,7 +40,7 @@ public class TicketAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                 {
                     staff = new StaffAccount
                     {
-                        Id = Guid.NewGuid(),
+                        Id = @event.AccountId,
                         AccountId = @event.AccountId,
                         Email = @event.Email,
                         FullName = @event.FullName,
@@ -71,7 +71,7 @@ public class TicketAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                 {
                     customer = new CustomerAccount
                     {
-                        Id = Guid.NewGuid(),
+                        Id = @event.AccountId,
                         AccountId = @event.AccountId,
                         Email = @event.Email,
                         FullName = @event.FullName,

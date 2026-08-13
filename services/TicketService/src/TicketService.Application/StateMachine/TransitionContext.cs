@@ -2,7 +2,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.StateMachine;
 
-public sealed class TransitionContext
+public class TransitionContext
 {
     public ActorRoleEnum ActorRole { get; init; }
     public Guid ActorUserId { get; init; }

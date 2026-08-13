@@ -54,7 +54,7 @@ public class TicketCreateCommand : IRequest<TicketActionResponse>, IValidatable<
         if (!IncidentDetectedAt.HasValue)
             response.ListErrors.Add(new Errors { Field = "IncidentDetectedAt", Detail = "Incident detection time must not be empty." });
 
-        if (IncidentDetectedAt.HasValue && IncidentDetectedAt.Value > DateTime.UtcNow)
+        if (IncidentDetectedAt.HasValue && IncidentDetectedAt.Value > DateTime.UtcNow.AddMinutes(5))
             response.ListErrors.Add(new Errors { Field = "IncidentDetectedAt", Detail = "Incident detection time must not be in the future." });
 
         foreach (var attachment in Attachments)

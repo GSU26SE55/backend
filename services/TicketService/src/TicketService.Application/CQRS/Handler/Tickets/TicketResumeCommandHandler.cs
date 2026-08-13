@@ -1,17 +1,10 @@
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using SharedContracts.Events;
-using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
-using TicketService.Application.Interfaces.Utils;
-using TicketService.Application.StateMachine;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -19,103 +12,55 @@ namespace TicketService.Application.CQRS.Handler.Tickets;
 public class TicketResumeCommandHandler : IRequestHandler<TicketResumeCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly ITicketStateMachine _stateMachine;
-    private readonly IActivityLogger _activityLogger;
-    private readonly ISlaService _slaService;
-    private readonly IIntegrationEventOutboxWriter _outboxWriter;
-    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
+    private readonly ITicketActivationService _activationService;
 
-    public TicketResumeCommandHandler(
-        ITicketUnitOfWork uow,
-        ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger,
-        ISlaService slaService,
-        IIntegrationEventOutboxWriter producer,
-        IPublisher publisher)
+    public TicketResumeCommandHandler(ITicketUnitOfWork uow, ITicketActivationService activationService)
     {
         _uow = uow;
-        _stateMachine = stateMachine;
-        _activityLogger = activityLogger;
-        _slaService = slaService;
-        _outboxWriter = producer;
-        _publisher = publisher;
+        _activationService = activationService;
     }
 
     public async Task<TicketActionResponse> Handle(TicketResumeCommand request, CancellationToken ct)
     {
         var ticket = await _uow.Tickets.GetAllAsync()
-            .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
-
-        if (ticket == null)
+            .FirstOrDefaultAsync(x => x.Id == request.TicketId && !x.IsDeleted, ct);
+        if (ticket is null)
             return Fail(404, "Ticket not found.");
+        if (ticket.Status != TicketStatusEnum.Pending ||
+            (ticket.PendingContext != PendingContextEnum.Held && ticket.PendingContext != PendingContextEnum.Scheduled))
+            return Fail(409, "Only a held or scheduled Pending ticket can be resumed early.");
 
-        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        var primaryStaffId = await _uow.TicketAssignments.GetAllAsync()
+            .Where(x => x.TicketId == ticket.Id && !x.IsDeleted && x.Role == AssignmentRoleEnum.PrimaryHandler)
+            .Select(x => (Guid?)x.StaffId)
+            .SingleOrDefaultAsync(ct);
+        if (primaryStaffId != request.StaffId)
+            return Fail(403, "Only the active PrimaryHandler can resume this ticket early.");
+
+        ActivationResult? result = null;
+        await _uow.ExecuteInTransactionAsync(async transactionCt =>
         {
-            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
-                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
-                .Select(a => (Guid?)a.StaffId)
-                .FirstOrDefaultAsync(ct);
-        }
-
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.InProgress, ActorRoleEnum.Staff, request.StaffId);
-        if (!transitionResult.IsAllowed)
-            return Fail(403, transitionResult.Reason ?? "Cannot resume.");
-
-        var oldStatus = ticket.Status;
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.InProgress, new TransitionContext
-        {
-            ActorUserId = request.StaffId,
-            ActorRole = ActorRoleEnum.Staff,
-            ActorDisplayName = request.StaffName!
+            ticket.ScheduleVersion++;
+            result = await _activationService.ActivateAsync(new ActivationRequest(
+                ticket, request.StaffId, ticket.ScheduleVersion, DateTime.UtcNow,
+                ActivationReason.EarlyResume, request.StaffId, ActorRoleEnum.Staff,
+                request.StaffName ?? "Staff", request.Reason!.Trim()), transactionCt);
+            if (result.Activated)
+                await _uow.SaveChangesAsync(transactionCt);
         }, ct);
 
-        // SLA Timer logic
-        await _slaService.ResumeSlaAsync(ticket.Id, request.StaffId, ct);
-
-        await _activityLogger.LogAsync(
-            ticket.Id,
-            request.StaffId,
-            ActorRoleEnum.Staff,
-            request.StaffName!,
-            ActivityActionEnum.SlaResumed,
-            oldValue: oldStatus.ToString(),
-            newValue: "InProgress");
-
-        // Outbox: Status Changed & Ticket Resumed
-        await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.InProgress), ct);
-        await _outboxWriter.WriteAsync(new TicketStatusChangedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
-            (int)oldStatus, (int)TicketStatusEnum.InProgress,
-            oldStatus.ToString(), nameof(TicketStatusEnum.InProgress)), ct);
-        await _outboxWriter.WriteAsync(new TicketResumedIntegrationEvent(ticket.Id, ticket.Code), ct);
-
-        // #AUDIT-26
-        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
-            TicketAuditActionEnum.SlaResumed, ticket.Id, targetDisplay: ticket.Code), ct);
-
-        await _uow.SaveChangesAsync(ct);
+        if (result?.Activated != true)
+            return Fail(409, result?.Conflict ?? "The ticket could not be resumed.");
 
         return new TicketActionResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Work resumed.",
-            Data = new TicketActionDTO
-            {
-                Id = ticket.Id.ToString(),
-                Code = ticket.Code,
-                Status = ticket.Status
-            }
+            Message = "Work resumed early.",
+            Data = new TicketActionDTO { Id = ticket.Id.ToString(), Code = ticket.Code, Status = ticket.Status }
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message)
-    {
-        return new TicketActionResponse
-        {
-            IsSuccess = false,
-            StatusCode = statusCode,
-            Message = message,
-        };
-    }
+    private static TicketActionResponse Fail(int code, string message) => new()
+    { IsSuccess = false, StatusCode = code, Message = message };
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
+using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
@@ -12,14 +13,10 @@ using TicketService.Domain.Enums;
 namespace TicketService.Infrastructure.BackgroundJobs;
 
 /// <summary>
-/// Sprint 6.2 NOTI-07 (#678) — nhắc Customer đánh giá ticket đang treo ở CLOSED_PENDING_RATE.
+/// Reminds Customers to rate eligible unrated Closed tickets during the seven-day grace period.
 ///
-/// Spec §4.1 (reviewnotification.md) liệt kê "Rating request — Customer nhận nhắc rating (auto sau
-/// 7 ngày)" là gap 🔴 chưa tồn tại. Lưu ý về mốc thời gian: <see cref="AutoCloseBackgroundService"/>
-/// TỰ ĐÓNG ticket đúng mốc 7 ngày kể từ <c>ApprovedAt</c>, nên nhắc đúng ngày thứ 7 thì Customer
-/// gần như không còn cơ hội đánh giá. Vì vậy mốc nhắc để CẤU HÌNH được
-/// (<c>Ticket:RatingRequest:AfterDays</c>) và mặc định 3 ngày — nằm giữa cửa sổ 7 ngày.
-/// Đặt lại thành 7 nếu muốn bám nguyên văn spec.
+/// The reminder threshold is configurable through <c>Ticket:RatingRequest:AfterDays</c> and
+/// defaults to day three of the seven-day rating/reopen grace period.
 ///
 /// Idempotent: mỗi ticket chỉ nhắc 1 lần, đánh dấu bằng <see cref="ActivityActionEnum.RatingRequested"/>
 /// trong <c>ticket_activities</c> (không cần cột mới / migration).
@@ -27,7 +24,7 @@ namespace TicketService.Infrastructure.BackgroundJobs;
 public class RatingRequestBackgroundService : BackgroundService
 {
     private const int DefaultAfterDays = 3;
-    private const int DefaultAutoCloseAfterDays = 7;
+    private const int DefaultRatingGracePeriodDays = 7;
     private const int DefaultPollIntervalMinutes = 60;
     private const int BatchSize = 200;
 
@@ -53,10 +50,10 @@ public class RatingRequestBackgroundService : BackgroundService
             ? d
             : DefaultAfterDays;
 
-    private int AutoCloseAfterDays =>
-        int.TryParse(_configuration["Ticket:RatingRequest:AutoCloseAfterDays"], out var d) && d > 0
+    private int RatingGracePeriodDays =>
+        int.TryParse(_configuration["Ticket:RatingRequest:GracePeriodDays"], out var d) && d > 0
             ? d
-            : DefaultAutoCloseAfterDays;
+            : DefaultRatingGracePeriodDays;
 
     private TimeSpan PollInterval =>
         TimeSpan.FromMinutes(
@@ -101,7 +98,7 @@ public class RatingRequestBackgroundService : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var uow = scope.ServiceProvider.GetRequiredService<ITicketUnitOfWork>();
-        var producer = scope.ServiceProvider.GetRequiredService<IMessageProducerService>();
+        var outboxWriter = scope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>();
 
         var now = DateTime.UtcNow;
         var threshold = now.AddDays(-AfterDays);
@@ -109,7 +106,10 @@ public class RatingRequestBackgroundService : BackgroundService
         // Chỉ ticket còn chờ đánh giá, đã quá mốc nhắc, và CHƯA từng được nhắc.
         var candidates = await uow.Tickets.GetAllAsync()
             .Where(t => !t.IsDeleted
-                        && t.Status == TicketStatusEnum.ClosedPendingRate
+                    && t.Status == TicketStatusEnum.Closed
+                    && t.RatedAt == null
+                    && t.Rating == null
+                    && t.CloseReason != TicketCloseReasonEnum.MergedDuplicate
                         && t.ApprovedAt != null
                         && t.ApprovedAt <= threshold
                         && !t.Activities.Any(a => a.Action == ActivityActionEnum.RatingRequested && !a.IsDeleted))
@@ -120,32 +120,37 @@ public class RatingRequestBackgroundService : BackgroundService
         if (candidates.Count == 0)
             return;
 
-        foreach (var ticket in candidates)
+        await uow.ExecuteInTransactionAsync(async transactionCt =>
         {
-            if (ct.IsCancellationRequested)
-                break;
-
-            var approvedAt = ticket.ApprovedAt!.Value;
-            var daysPending = (int)Math.Floor((now - approvedAt).TotalDays);
-            var daysUntilAutoClose = Math.Max(0, AutoCloseAfterDays - daysPending);
-
-            await producer.PublishAsync(new TicketRatingRequestedEvent(
-                ticket.Id, ticket.Code, ticket.CustomerId, approvedAt, daysPending, daysUntilAutoClose), ct);
-
-            await uow.TicketActivities.AddAsync(new TicketActivity
+            foreach (var ticket in candidates)
             {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                Ticket = ticket,
-                Action = ActivityActionEnum.RatingRequested,
-                ActorRole = ActorRoleEnum.System,
-                ActorDisplayName = "System",
-                Reason = $"Reminded Customer to rate after {daysPending} day(s) in CLOSED_PENDING_RATE " +
-                         $"({daysUntilAutoClose} day(s) remaining before auto-close)."
-            });
-        }
+                transactionCt.ThrowIfCancellationRequested();
 
-        await uow.SaveChangesAsync(ct);
+                var approvedAt = ticket.ApprovedAt!.Value;
+                var daysPending = (int)Math.Floor((now - approvedAt).TotalDays);
+                var daysUntilRatingDeadline = Math.Max(0, RatingGracePeriodDays - daysPending);
+                var reminder = new TicketRatingRequestedEvent(
+                    ticket.Id, ticket.Code, ticket.CustomerId, approvedAt, daysPending, daysUntilRatingDeadline)
+                {
+                    Id = DeterministicEventId.From(ticket.Id, "ticket-rating-requested")
+                };
+
+                await outboxWriter.WriteAsync(reminder, transactionCt);
+                await uow.TicketActivities.AddAsync(new TicketActivity
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = ticket.Id,
+                    Ticket = ticket,
+                    Action = ActivityActionEnum.RatingRequested,
+                    ActorRole = ActorRoleEnum.System,
+                    ActorDisplayName = "System",
+                    Reason = $"Reminded Customer to rate an eligible Closed ticket after {daysPending} day(s) " +
+                             $"({daysUntilRatingDeadline} day(s) remaining in the rating grace period)."
+                });
+            }
+
+            await uow.SaveChangesAsync(transactionCt);
+        }, ct);
 
         _logger.LogInformation("RatingRequest: đã nhắc đánh giá {Count} ticket.", candidates.Count);
     }

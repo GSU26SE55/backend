@@ -13,36 +13,6 @@ public class TicketCommandValidationTests
 {
     #region Basic & Triage & Assign Commands
     [Fact]
-    public async Task TicketTriageCommand_InvalidData_ReturnsErrors()
-    {
-        var command = new TicketTriageCommand
-        {
-            TicketId = Guid.Empty,
-            Impact = (ImpactScopeEnum)99,
-            Urgency = (UrgencyLevelEnum)99
-        };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(x => x.Field == "TicketId");
-        result.ListErrors.Should().Contain(x => x.Field == "Impact");
-        result.ListErrors.Should().Contain(x => x.Field == "Urgency");
-    }
-
-    [Fact]
-    public async Task TicketTriageCommand_ValidData_ReturnsSuccess()
-    {
-        var command = new TicketTriageCommand
-        {
-            TicketId = Guid.NewGuid(),
-            Impact = (ImpactScopeEnum)1,
-            Urgency = (UrgencyLevelEnum)1
-        };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeTrue();
-        result.ListErrors.Should().BeEmpty();
-    }
-
-    [Fact]
     public async Task TicketAssignCommand_InvalidData_ReturnsErrors()
     {
         var command = new TicketAssignCommand { TicketId = Guid.Empty, PrimaryHandlerStaffId = Guid.Empty };
@@ -55,7 +25,13 @@ public class TicketCommandValidationTests
     [Fact]
     public async Task TicketAssignCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketAssignCommand { TicketId = Guid.NewGuid(), PrimaryHandlerStaffId = Guid.NewGuid() };
+        var command = new TicketAssignCommand
+        {
+            TicketId = Guid.NewGuid(),
+            PrimaryHandlerStaffId = Guid.NewGuid(),
+            Priority = TicketPriorityEnum.P3Normal,
+            ScheduledStartAt = DateTimeOffset.UtcNow
+        };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
@@ -195,7 +171,13 @@ public class TicketCommandValidationTests
     [Fact]
     public async Task TicketHoldCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketHoldCommand { TicketId = Guid.NewGuid(), Reason = (PauseReasonEnum)1 };
+        var command = new TicketHoldCommand
+        {
+            TicketId = Guid.NewGuid(),
+            Reason = PauseReasonEnum.CustomerUnavailable,
+            Note = "Customer requested another appointment.",
+            RescheduledStartAt = DateTimeOffset.UtcNow.AddHours(1)
+        };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
@@ -213,25 +195,7 @@ public class TicketCommandValidationTests
     [Fact]
     public async Task TicketResumeCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketResumeCommand { TicketId = Guid.NewGuid() };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeTrue();
-        result.ListErrors.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task TicketStartCommand_EmptyId_ReturnsErrors()
-    {
-        var command = new TicketStartCommand { TicketId = Guid.Empty };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(x => x.Field == "TicketId");
-    }
-
-    [Fact]
-    public async Task TicketStartCommand_ValidData_ReturnsSuccess()
-    {
-        var command = new TicketStartCommand { TicketId = Guid.NewGuid() };
+        var command = new TicketResumeCommand { TicketId = Guid.NewGuid(), Reason = "Customer is available now." };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();
@@ -269,26 +233,13 @@ public class TicketCommandValidationTests
     [Fact]
     public async Task TicketReassignCommand_ValidData_ReturnsSuccess()
     {
-        var command = new TicketReassignCommand { TicketId = Guid.NewGuid(), NewPrimaryHandlerStaffId = Guid.NewGuid(), Reason = "Valid reassign reason" };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeTrue();
-        result.ListErrors.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task TicketEscalateForceCommand_EmptyId_ReturnsErrors()
-    {
-        var command = new TicketEscalateForceCommand { TicketId = Guid.Empty, Reason = (EscalationReasonEnum)99 };
-        var result = await command.ValidateAsync();
-        result.IsSuccess.Should().BeFalse();
-        result.ListErrors.Should().Contain(x => x.Field == "TicketId");
-        result.ListErrors.Should().Contain(x => x.Field == "Reason");
-    }
-
-    [Fact]
-    public async Task TicketEscalateForceCommand_ValidData_ReturnsSuccess()
-    {
-        var command = new TicketEscalateForceCommand { TicketId = Guid.NewGuid(), Reason = (EscalationReasonEnum)1 };
+        var command = new TicketReassignCommand
+        {
+            TicketId = Guid.NewGuid(),
+            NewPrimaryHandlerStaffId = Guid.NewGuid(),
+            Reason = "Valid reassign reason",
+            ScheduledStartAt = DateTimeOffset.UtcNow
+        };
         var result = await command.ValidateAsync();
         result.IsSuccess.Should().BeTrue();
         result.ListErrors.Should().BeEmpty();

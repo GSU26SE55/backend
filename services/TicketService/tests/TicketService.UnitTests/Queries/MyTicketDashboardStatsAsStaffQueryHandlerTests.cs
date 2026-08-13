@@ -92,7 +92,7 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
 
         var t1 = MakeTicket(TicketStatusEnum.InProgress);
-        var t2 = MakeTicket(TicketStatusEnum.Resolved);
+        var t2 = MakeTicket(TicketStatusEnum.Completed);
         var t3 = MakeTicket(TicketStatusEnum.InProgress); // staff khác — không tính
 
         var result = await MakeHandler(
@@ -101,7 +101,7 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
         ).Handle(new MyTicketDashboardStatsAsStaffQuery(), default);
 
         result.IsSuccess.Should().BeTrue();
-        result.Data!.OpenCount.Should().Be(1);
+        result.Data!.OpenCount.Should().Be(2);
         result.Data.ResolvedCount.Should().Be(1);
         result.Data.CountByStatus["InProgress"].Should().Be(1);
     }
@@ -114,9 +114,9 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
 
         var t1 = MakeTicket(TicketStatusEnum.InProgress, HealthyTimer());
         var t2 = MakeTicket(TicketStatusEnum.InProgress, NearBreachTimer());
-        var t3 = MakeTicket(TicketStatusEnum.Escalated, Timer(SlaTimerStatusEnum.Breached));
-        var t4 = MakeTicket(TicketStatusEnum.WaitingParts, Timer(SlaTimerStatusEnum.Paused));
-        var t5 = MakeTicket(TicketStatusEnum.New, HealthyTimer()); // New không thuộc nhóm monitored
+        var t3 = MakeTicket(TicketStatusEnum.ReAssign, Timer(SlaTimerStatusEnum.Breached));
+        var t4 = MakeTicket(TicketStatusEnum.Pending, Timer(SlaTimerStatusEnum.Paused));
+        var t5 = MakeTicket(TicketStatusEnum.Open, HealthyTimer()); // Open is not monitored.
         var t6 = MakeTicket(TicketStatusEnum.InProgress);          // không có timer — không monitored
 
         var result = await MakeHandler(
@@ -125,13 +125,13 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
              AssignPrimary(t4.Id, myId), AssignPrimary(t5.Id, myId), AssignPrimary(t6.Id, myId)]
         ).Handle(new MyTicketDashboardStatsAsStaffQuery(), default);
 
-        result.Data!.SlaMonitoredCount.Should().Be(4);
+        result.Data!.SlaMonitoredCount.Should().Be(2);
         result.Data.NearBreachCount.Should().Be(1);
-        result.Data.BreachedCount.Should().Be(1);
-        result.Data.PausedCount.Should().Be(1);
+        result.Data.BreachedCount.Should().Be(0);
+        result.Data.PausedCount.Should().Be(0);
         result.Data.SlaRisk.Near.Should().Be(1);
-        result.Data.SlaRisk.Breached.Should().Be(1);
-        result.Data.SlaRisk.Healthy.Should().Be(2); // healthy running + paused
+        result.Data.SlaRisk.Breached.Should().Be(0);
+        result.Data.SlaRisk.Healthy.Should().Be(1);
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
         var myId = Guid.NewGuid();
         _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
 
-        var t1 = MakeTicket(TicketStatusEnum.Resolved);
+        var t1 = MakeTicket(TicketStatusEnum.Completed);
         var t2 = MakeTicket(TicketStatusEnum.Closed);
         var t3 = MakeTicket(TicketStatusEnum.ClosedRejected);
 
@@ -150,7 +150,7 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
         ).Handle(new MyTicketDashboardStatsAsStaffQuery(), default);
 
         result.Data!.ResolvedCount.Should().Be(2);
-        result.Data.OpenCount.Should().Be(0);
+        result.Data.OpenCount.Should().Be(1);
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
 
         var t1 = MakeTicket(TicketStatusEnum.Closed, Timer(SlaTimerStatusEnum.Met));
         var t2 = MakeTicket(TicketStatusEnum.Closed, Timer(SlaTimerStatusEnum.Met));
-        var t3 = MakeTicket(TicketStatusEnum.Escalated, Timer(SlaTimerStatusEnum.Breached));
+        var t3 = MakeTicket(TicketStatusEnum.ReAssign, Timer(SlaTimerStatusEnum.Breached));
 
         var result = await MakeHandler(
             [t1, t2, t3],

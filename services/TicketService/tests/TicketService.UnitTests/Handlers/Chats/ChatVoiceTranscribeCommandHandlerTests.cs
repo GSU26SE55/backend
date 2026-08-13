@@ -11,7 +11,7 @@ using TicketService.UnitTests.Utils;
 namespace TicketService.UnitTests.Handlers.Chats;
 
 /// <summary>Contract tests for the asynchronous, metadata-only voice request.</summary>
-public sealed class ChatVoiceTranscribeCommandHandlerTests
+public class ChatVoiceTranscribeCommandHandlerTests
 {
     [Fact]
     public async Task ValidateAsync_ValidUploadedAudioMetadata_Succeeds()

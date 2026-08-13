@@ -26,6 +26,7 @@ public sealed class RedisDistributedLeaseTests : IAsyncLifetime
 
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(30);
 
+    [Obsolete]
     public async Task InitializeAsync()
     {
         _redis = new RedisBuilder().WithImage("redis:7-alpine").Build();

@@ -32,15 +32,11 @@ public class TicketStaffSuggestionsQueryHandler
     /// </remarks>
     private static readonly TicketStatusEnum[] ActiveStatuses =
     {
-        TicketStatusEnum.New,
         TicketStatusEnum.Open,
-        TicketStatusEnum.Assigned,
+        TicketStatusEnum.Pending,
         TicketStatusEnum.InProgress,
-        TicketStatusEnum.WaitingCustomer,
-        TicketStatusEnum.WaitingParts,
-        TicketStatusEnum.WaitingOnsiteSchedule,
-        TicketStatusEnum.Escalated,
-        TicketStatusEnum.Incident
+        TicketStatusEnum.Request,
+        TicketStatusEnum.ReAssign
     };
 
     public TicketStaffSuggestionsQueryHandler(ITicketUnitOfWork uow, IAiStaffSuggestClient ai)

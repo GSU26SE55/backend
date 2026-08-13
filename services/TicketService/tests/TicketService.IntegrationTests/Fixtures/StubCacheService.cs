@@ -7,7 +7,7 @@ namespace TicketService.IntegrationTests.Fixtures;
 /// In-memory ICacheService cho integration test — production dùng RedisCacheService,
 /// không sẵn trong test env (#518 SpamDetector phụ thuộc ICacheService).
 /// </summary>
-internal sealed class StubCacheService : ICacheService
+internal class StubCacheService : ICacheService
 {
     private readonly ConcurrentDictionary<string, object?> _store = new();
     private readonly object _leaseLock = new();

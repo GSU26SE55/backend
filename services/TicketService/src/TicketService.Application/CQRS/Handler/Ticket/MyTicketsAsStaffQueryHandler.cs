@@ -36,7 +36,7 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
 
         var assignedTicketIds = _unitOfWork.TicketAssignments != null
             ? _unitOfWork.TicketAssignments.GetAllAsync()
-                .Where(a => a.StaffId == staffId && a.Role == AssignmentRoleEnum.PrimaryHandler && !a.IsDeleted)
+                .Where(a => a.StaffId == staffId && !a.IsDeleted)
                 .Select(a => a.TicketId)
             : Enumerable.Empty<Guid>().AsQueryable();
 

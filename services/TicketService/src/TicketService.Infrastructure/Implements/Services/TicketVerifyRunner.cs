@@ -17,15 +17,11 @@ public class TicketVerifyRunner : ITicketVerifyRunner
     // Ticket còn "đang mở" (chưa kết thúc) — dùng để dò candidate trùng.
     private static readonly TicketStatusEnum[] OpenStatuses =
     {
-        TicketStatusEnum.New,
         TicketStatusEnum.Open,
-        TicketStatusEnum.Assigned,
+        TicketStatusEnum.Pending,
         TicketStatusEnum.InProgress,
-        TicketStatusEnum.WaitingCustomer,
-        TicketStatusEnum.WaitingParts,
-        TicketStatusEnum.WaitingOnsiteSchedule,
-        TicketStatusEnum.Escalated,
-        TicketStatusEnum.Incident
+        TicketStatusEnum.Request,
+        TicketStatusEnum.ReAssign
     };
 
     private readonly ITicketUnitOfWork _uow;

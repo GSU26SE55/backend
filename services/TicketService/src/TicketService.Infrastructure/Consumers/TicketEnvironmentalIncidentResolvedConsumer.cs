@@ -17,14 +17,11 @@ public class TicketEnvironmentalIncidentResolvedConsumer : IConsumer<Environment
 {
     private static readonly TicketStatusEnum[] ClosableStatuses =
     {
-        TicketStatusEnum.New,
         TicketStatusEnum.Open,
-        TicketStatusEnum.Assigned,
+        TicketStatusEnum.Pending,
         TicketStatusEnum.InProgress,
-        TicketStatusEnum.WaitingCustomer,
-        TicketStatusEnum.WaitingParts,
-        TicketStatusEnum.WaitingOnsiteSchedule,
-        TicketStatusEnum.Escalated
+        TicketStatusEnum.Request,
+        TicketStatusEnum.ReAssign
     };
 
     private readonly ITicketUnitOfWork _uow;

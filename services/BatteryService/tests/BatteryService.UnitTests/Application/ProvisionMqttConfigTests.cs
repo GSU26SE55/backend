@@ -25,22 +25,22 @@ public class ProvisionMqttConfigTests
         string? mqttHash = null,
         string? mqttPlaintext = null,
         int pollingSeconds = 10) => new()
-    {
-        Id = id,
-        DeviceCode = deviceCode,
-        DisplayName = "test",
-        SiteId = Guid.NewGuid(),
-        Status = IotDeviceStatusEnum.Pending,
-        ApiKeyHash = "hash",
-        ApiKeyLastFour = "abcd",
-        ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault,
-        ApiKeyIssuedAt = DateTime.UtcNow.AddDays(-1),
-        HeartbeatIntervalSeconds = 60,
-        PollingIntervalSeconds = pollingSeconds,
-        MqttUsername = mqttUsername,
-        MqttPasswordHash = mqttHash,
-        MqttPasswordPlaintext = mqttPlaintext
-    };
+        {
+            Id = id,
+            DeviceCode = deviceCode,
+            DisplayName = "test",
+            SiteId = Guid.NewGuid(),
+            Status = IotDeviceStatusEnum.Pending,
+            ApiKeyHash = "hash",
+            ApiKeyLastFour = "abcd",
+            ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault,
+            ApiKeyIssuedAt = DateTime.UtcNow.AddDays(-1),
+            HeartbeatIntervalSeconds = 60,
+            PollingIntervalSeconds = pollingSeconds,
+            MqttUsername = mqttUsername,
+            MqttPasswordHash = mqttHash,
+            MqttPasswordPlaintext = mqttPlaintext
+        };
 
     private static ProvisionIotDeviceCommand Cmd(Guid id, string deviceCode = "GW-ESP32-001") => new()
     {

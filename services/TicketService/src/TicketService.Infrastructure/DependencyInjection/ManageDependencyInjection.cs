@@ -9,7 +9,6 @@ using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Idempotency;
 using SharedInfrastructure.Services;
 using TicketService.Application.Common.Models;
-using TicketService.Application.Common.Services;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
@@ -34,6 +33,12 @@ public static class ManageDependencyInjection
         services.AddDatabase(configuration);
         services.AddRepositories();
         services.AddHelpers();
+        services.AddOptions<TicketScheduleOptions>()
+            .Bind(configuration.GetSection(TicketScheduleOptions.SectionName))
+            .Validate(options => options.CurrentWindowMinutes > 0, "Ticket:Schedule:CurrentWindowMinutes must be greater than zero.")
+            .Validate(options => options.PollIntervalSeconds > 0, "Ticket:Schedule:PollIntervalSeconds must be greater than zero.")
+            .Validate(options => options.BatchSize > 0, "Ticket:Schedule:BatchSize must be greater than zero.")
+            .ValidateOnStart();
         services.AddAiVerify(configuration);
         services.AddOutbox(configuration);
 
@@ -101,6 +106,7 @@ public static class ManageDependencyInjection
             TicketService.Infrastructure.Observability.SlaMetricsRecorder>();
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
+        services.AddHostedService<TicketScheduleActivationBackgroundService>();
 
         // Read receipt — channel-based bulk writer (#541/#542)
         services.AddSingleton<IChatReadReceiptQueue, ChatReadReceiptQueue>();
@@ -114,7 +120,7 @@ public static class ManageDependencyInjection
         services.AddHostedService<SlaGaugeBackgroundService>();
         services.AddHostedService<BackgroundJobs.TicketAuditOutboxRelayBackgroundService>(); // Sprint audit #AUDIT-25
 
-        // Sprint 6.2 NOTI-07 (#678) — nhắc Customer đánh giá ticket treo ở CLOSED_PENDING_RATE.
+        // Remind Customers to rate eligible unrated Closed tickets during the grace period.
         services.AddHostedService<BackgroundJobs.RatingRequestBackgroundService>();
     }
 
@@ -214,6 +220,7 @@ public static class ManageDependencyInjection
         });
 
         // #567 — FileStorageService upload client (dùng Bearer token forwarded từ original request)
+        services.AddScoped<ITicketActivationService, TicketActivationService>();
     }
 
     /// <summary>

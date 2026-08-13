@@ -116,7 +116,7 @@ public class TicketApiFactory : WebApplicationFactory<Program>
     }
 }
 
-internal sealed class StubBatteryLookupClient : IBatteryLookupClient
+internal class StubBatteryLookupClient : IBatteryLookupClient
 {
     public Task<string?> GetSerialAsync(Guid assetId, CancellationToken ct) =>
         Task.FromResult<string?>("TEST-BATTERY-001");

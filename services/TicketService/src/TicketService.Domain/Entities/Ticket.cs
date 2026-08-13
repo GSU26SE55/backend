@@ -47,6 +47,11 @@ public class Ticket : AuditableEntity
     public DateTime? EscalatedAt { get; set; }
     public EscalationReasonEnum? EscalationReason { get; set; }
     public bool IsIncident { get; set; }
+    public DateTime? ScheduledStartAtUtc { get; set; }
+    public int ScheduleVersion { get; set; }
+    public PendingContextEnum? PendingContext { get; set; }
+    public PauseReasonEnum? PendingReason { get; set; }
+    public Guid? ActiveIncidentEpisodeId { get; set; }
 
     /// <summary>
     /// Thời điểm Customer phát hiện pin bất thường (Customer điền khi tạo ticket thủ công).

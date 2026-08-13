@@ -1,13 +1,16 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using SharedContracts.Common.Responses;
+using Microsoft.Extensions.Options;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
+using TicketService.Application.Common.Models;
+using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
@@ -22,7 +25,8 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;
-    private readonly ISlaCalculator _slaCalculator;
+    private readonly ITicketActivationService _activationService;
+    private readonly int _currentWindowMinutes;
 
     public TicketAssignCommandHandler(
         ITicketUnitOfWork uow,
@@ -30,18 +34,25 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
         IPublisher publisher,
-        ISlaCalculator slaCalculator)
+        ITicketActivationService activationService,
+        IOptions<TicketScheduleOptions>? scheduleOptions = null)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _outboxWriter = producer;
         _publisher = publisher;
-        _slaCalculator = slaCalculator;
+        _activationService = activationService;
+        _currentWindowMinutes = scheduleOptions?.Value.CurrentWindowMinutes ?? 5;
     }
 
     public async Task<TicketActionResponse> Handle(TicketAssignCommand request, CancellationToken ct)
     {
+        var nowUtc = DateTime.UtcNow;
+        var schedule = TicketScheduleClassifier.Classify(request.ScheduledStartAt, nowUtc, _currentWindowMinutes);
+        if (schedule.Kind == ScheduleKind.InvalidPast)
+            return Fail(400, "ScheduledStartAt cannot be older than the five-minute current window.");
+
         var ticket = await _uow.Tickets.GetAllAsync()
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
@@ -62,22 +73,45 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
         if (!primaryStaff.IsAvailable)
             return Fail(403, "The PrimaryHandler staff member is currently unavailable to take on new tickets.");
 
-        // Tier validation — PrimaryHandler phải đủ tier theo priority của ticket
-        if (ticket.Priority.HasValue && !AssignmentRoleHelper.ValidatePrimaryHandlerTier(ticket.Priority.Value, primaryStaff.SkillTier))
+        if (!AssignmentRoleHelper.ValidatePrimaryHandlerTier(request.Priority, primaryStaff.SkillTier))
         {
-            var required = AssignmentRoleHelper.GetTierRequirementMessage(ticket.Priority.Value);
-            return Fail(403, $"Ticket priority {ticket.Priority} requires the PrimaryHandler to have tier {required}. The assigned staff member currently has tier {primaryStaff.SkillTier}.");
+            var required = AssignmentRoleHelper.GetTierRequirementMessage(request.Priority);
+            return Fail(403, $"Ticket priority {request.Priority} requires the PrimaryHandler to have tier {required}. The assigned staff member currently has tier {primaryStaff.SkillTier}.");
         }
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, request.ManagerId);
+        var targetStatus = schedule.Kind == ScheduleKind.Future
+            ? TicketStatusEnum.Pending
+            : TicketStatusEnum.InProgress;
+        var transitionResult = _stateMachine.CanTransition(ticket, targetStatus, ActorRoleEnum.Manager, request.ManagerId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Transition not allowed.");
 
         // Set in-memory cho state machine
         ticket.PrimaryHandlerStaffId = request.PrimaryHandlerStaffId;
+        ticket.Priority = request.Priority;
+        ticket.ScheduledStartAtUtc = schedule.ScheduledStartAtUtc;
+        ticket.ScheduleVersion++;
+        ticket.PendingContext = schedule.Kind == ScheduleKind.Future ? PendingContextEnum.Scheduled : null;
+        ticket.PendingReason = null;
 
         await _uow.ExecuteInTransactionAsync(async transactionCt =>
         {
+            if (ticket.ReopenCount > 0 && ticket.IsIncident && request.Priority != TicketPriorityEnum.Urgent)
+            {
+                await _activityLogger.LogAsync(
+                    ticket.Id,
+                    request.ManagerId,
+                    ActorRoleEnum.Manager,
+                    request.ManagerName,
+                    ActivityActionEnum.IncidentDeclassified,
+                    oldValue: ticket.ActiveIncidentEpisodeId?.ToString(),
+                    newValue: request.Priority.ToString(),
+                    reason: request.Notes);
+
+                ticket.IsIncident = false;
+                ticket.ActiveIncidentEpisodeId = null;
+            }
+
             // Upsert TicketAssignment — PrimaryHandler (restore soft-deleted row nếu tồn tại)
             var primaryAssignment = await _uow.TicketAssignments.GetAllAsync()
                 .FirstOrDefaultAsync(a => a.TicketId == ticket.Id && a.StaffId == request.PrimaryHandlerStaffId, ct);
@@ -171,15 +205,67 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
                 }
             }
 
-            await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Assigned, new TransitionContext
-            {
-                ActorUserId = request.ManagerId,
-                ActorRole = ActorRoleEnum.Manager,
-                ActorDisplayName = request.ManagerName!
-            }, ct);
+            // TicketParticipant — Assigning Manager (auto-subscribe to internal chat notifications)
+            // GetAllAsync() returns IQueryable — do NOT await (be-rules §3)
+            var managerParticipantExists = await _uow.TicketParticipants
+                .GetAllAsync()
+                .AnyAsync(p => p.TicketId == ticket.Id
+                    && p.UserId == request.ManagerId
+                    && p.RemovedAt == null
+                    && !p.IsDeleted, ct);
 
-            // Sprint Bonus NS-12 (#656, R1) — tạo SlaTimer idempotent
-            await EnsureSlaTimerAsync(ticket, ct);
+            if (!managerParticipantExists)
+            {
+                await _uow.TicketParticipants.AddAsync(new TicketParticipant
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = ticket.Id,
+                    Ticket = ticket,
+                    UserId = request.ManagerId,
+                    UserRole = ActorRoleEnum.Manager,
+                    ParticipantType = ParticipantTypeEnum.Watcher,
+                    CanPost = true,
+                    CanViewInternal = true,
+                    AddedByUserId = request.ManagerId,
+                    AddedAt = DateTime.UtcNow
+                });
+            }
+
+            // Persist assignment before activation so the transactional outbox publishes the
+            // assigned/scheduled notification before the work-start notification.
+            await _outboxWriter.WriteAsync(new TicketAssignedEvent(
+                ticket.Id,
+                ticket.Code,
+                request.PrimaryHandlerStaffId,
+                ticket.Priority.ToString()!,
+                ticket.CustomerId,
+                ticket.ScheduledStartAtUtc,
+                ticket.ScheduleVersion,
+                targetStatus == TicketStatusEnum.InProgress), ct);
+
+            if (targetStatus == TicketStatusEnum.Pending)
+            {
+                await _stateMachine.ExecuteAsync(ticket, targetStatus, new TransitionContext
+                {
+                    ActorUserId = request.ManagerId,
+                    ActorRole = ActorRoleEnum.Manager,
+                    ActorDisplayName = request.ManagerName!
+                }, ct);
+            }
+            else
+            {
+                var activation = await _activationService.ActivateAsync(new ActivationRequest(
+                    ticket,
+                    request.PrimaryHandlerStaffId,
+                    ticket.ScheduleVersion,
+                    nowUtc,
+                    ActivationReason.Immediate,
+                    request.ManagerId,
+                    ActorRoleEnum.Manager,
+                    request.ManagerName ?? "Manager"), ct);
+                if (!activation.Activated)
+                    throw new InvalidOperationException(activation.Conflict ?? "Ticket activation failed.");
+            }
 
             await _activityLogger.LogAsync(
                 ticket.Id,
@@ -190,9 +276,6 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
                 oldValue: null,
                 newValue: request.PrimaryHandlerStaffId.ToString(),
                 reason: request.Notes);
-
-            // Sprint 6.2 NOTI-05 (#676) — kèm CustomerId để NotificationService notify được Customer.
-            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.PrimaryHandlerStaffId, ticket.Priority.ToString()!, ticket.CustomerId), ct);
 
             await _publisher.Publish(TicketAuditTrailNotification.For(
                 TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,
@@ -214,31 +297,6 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
                 Status = ticket.Status,
             }
         };
-    }
-
-    private async Task EnsureSlaTimerAsync(TicketService.Domain.Entities.Ticket ticket, CancellationToken ct)
-    {
-        if (ticket.Priority is null)
-            return;
-
-        var hasTimer = await _uow.SlaTimers.GetAllAsync()
-            .AnyAsync(t => t.TicketId == ticket.Id, ct);
-        if (hasTimer)
-            return;
-
-        var now = DateTime.UtcNow;
-        var dueAt = _slaCalculator.CalculateDueDate(now, ticket.Priority.Value);
-
-        await _uow.SlaTimers.AddAsync(new SlaTimer
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            Priority = ticket.Priority.Value,
-            StartedAt = now,
-            DueAt = dueAt,
-            OriginalDueAt = dueAt,
-            Status = SlaTimerStatusEnum.Running
-        });
     }
 
     private static TicketActionResponse Fail(int statusCode, string message)

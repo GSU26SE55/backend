@@ -30,8 +30,9 @@ public class TicketRateCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Test",
-            Status = TicketStatusEnum.ClosedPendingRate,
-            CustomerId = customerId
+            Status = TicketStatusEnum.Closed,
+            CustomerId = customerId,
+            ClosedAt = DateTime.UtcNow.AddDays(-1)
         };
 
         var command = new TicketRateCommand
@@ -54,7 +55,7 @@ public class TicketRateCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Data!.Status.Should().Be(TicketStatusEnum.Closed);
 
-        _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Closed, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        _stateMachine.Verify(x => x.ExecuteAsync(ticket, It.IsAny<TicketStatusEnum>(), It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Never);
         _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketRatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -94,6 +95,6 @@ public class TicketRateCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
+        result.StatusCode.Should().Be(409);
     }
 }

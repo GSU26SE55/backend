@@ -26,7 +26,7 @@ public record TicketStatusChangedEvent(
     string NewStatusName
 ) : IntegrationEvent;
 
-/// <summary>Manager duyệt kết quả xử lý → ticket vào CLOSED_PENDING_RATE, chờ Customer đánh giá.</summary>
+/// <summary>Manager approves completed work and closes the ticket; rating remains available during the grace period.</summary>
 public record TicketApprovedEvent(
     Guid TicketId,
     string Code,
@@ -55,10 +55,7 @@ public record TicketRejectedEvent(
     DateTime RejectedAt
 ) : IntegrationEvent;
 
-/// <summary>
-/// Ticket đóng hẳn — do Customer đánh giá xong hoặc do
-/// <c>AutoCloseBackgroundService</c> tự đóng sau 7 ngày ở CLOSED_PENDING_RATE.
-/// </summary>
+/// <summary>Ticket reached the Closed lifecycle state.</summary>
 public record TicketClosedEvent(
     Guid TicketId,
     string Code,
@@ -79,15 +76,12 @@ public record TicketReopenedEvent(
     DateTime ReopenedAt
 ) : IntegrationEvent;
 
-/// <summary>
-/// Nhắc Customer đánh giá ticket đang treo ở CLOSED_PENDING_RATE.
-/// Publish bởi <c>RatingRequestBackgroundService</c> (TicketService), 1 lần / ticket.
-/// </summary>
+/// <summary>Reminds the Customer to rate an eligible Closed ticket during its grace period.</summary>
 public record TicketRatingRequestedEvent(
     Guid TicketId,
     string Code,
     Guid CustomerId,
     DateTime ApprovedAt,
     int DaysPending,
-    int DaysUntilAutoClose
+    int DaysUntilRatingDeadline
 ) : IntegrationEvent;

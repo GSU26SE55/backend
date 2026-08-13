@@ -20,7 +20,7 @@ public class TicketMergeCommandHandlerTests
     public async Task Handle_ValidNewSourceWithSharedBattery_ClosesSourceAndWritesOutbox()
     {
         var customerId = Guid.NewGuid();
-        var source = CreateTicket(TicketStatusEnum.New, customerId, "TKT-SOURCE");
+        var source = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-SOURCE");
         var master = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-MASTER");
         var attachment = new TicketAttachment { Id = Guid.NewGuid(), TicketId = source.Id, Ticket = source, FileId = Guid.NewGuid(), UploadedByUserId = customerId, FileName = "photo.jpg", ContentType = "image/jpeg" };
         var (uow, _, activities, _, _, _, _, _, attachments, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { source, master }, attachmentSeed: new[] { attachment });
@@ -52,7 +52,7 @@ public class TicketMergeCommandHandlerTests
     [Fact]
     public async Task Handle_DifferentCustomer_Returns409WithoutTransaction()
     {
-        var source = CreateTicket(TicketStatusEnum.New, Guid.NewGuid(), "TKT-SOURCE");
+        var source = CreateTicket(TicketStatusEnum.Open, Guid.NewGuid(), "TKT-SOURCE");
         var master = CreateTicket(TicketStatusEnum.Open, Guid.NewGuid(), "TKT-MASTER");
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { source, master });
 
@@ -67,7 +67,7 @@ public class TicketMergeCommandHandlerTests
     public async Task Handle_NoSharedBattery_Returns409()
     {
         var customerId = Guid.NewGuid();
-        var source = CreateTicket(TicketStatusEnum.New, customerId, "TKT-SOURCE");
+        var source = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-SOURCE");
         var master = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-MASTER");
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { source, master });
         uow.SetupGet(x => x.TicketBatteryAssets).Returns(BuildBatteryRepository(new[]
@@ -87,7 +87,7 @@ public class TicketMergeCommandHandlerTests
     public async Task Handle_ConcurrencyFailure_RollsBackAndReturns409()
     {
         var customerId = Guid.NewGuid();
-        var source = CreateTicket(TicketStatusEnum.New, customerId, "TKT-SOURCE");
+        var source = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-SOURCE");
         var master = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-MASTER");
         var (uow, _, activities, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { source, master });
         var batteryId = Guid.NewGuid();

@@ -48,7 +48,7 @@ public class SpamDetectorTests
         (await detector.TryAcquireLeaseAsync(ticketId, userId)).Should().NotBeNull();
     }
 
-    private sealed class InMemoryCacheService : ICacheService
+    private class InMemoryCacheService : ICacheService
     {
         private readonly Dictionary<string, object> _store = new();
 

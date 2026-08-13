@@ -17,6 +17,8 @@ public static class NotificationCategoryMap
             // ── Ticket ──────────────────────────────────────────────────────
             [NotificationTypeEnum.TicketCreated] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketAssigned] = NotificationCategoryEnum.Ticket,
+            [NotificationTypeEnum.TicketWorkStarted] = NotificationCategoryEnum.Ticket,
+            [NotificationTypeEnum.TicketScheduleChanged] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketStatusChanged] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketResolved] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketClosed] = NotificationCategoryEnum.Ticket,

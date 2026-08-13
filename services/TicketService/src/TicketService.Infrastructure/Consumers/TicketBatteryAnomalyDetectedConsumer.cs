@@ -39,13 +39,11 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
 
         var activeStatuses = new[]
         {
-            TicketStatusEnum.New,
             TicketStatusEnum.Open,
-            TicketStatusEnum.Assigned,
+            TicketStatusEnum.Pending,
             TicketStatusEnum.InProgress,
-            TicketStatusEnum.WaitingCustomer,
-            TicketStatusEnum.WaitingParts,
-            TicketStatusEnum.WaitingOnsiteSchedule
+            TicketStatusEnum.Request,
+            TicketStatusEnum.ReAssign
         };
 
         var hasExistingTicket = await _uow.Tickets

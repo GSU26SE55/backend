@@ -37,10 +37,10 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
         if (source.Status == TicketStatusEnum.Closed || master.Status == TicketStatusEnum.Closed ||
             source.MergedIntoTicketId.HasValue || master.MergedIntoTicketId.HasValue)
             return Fail(409, "Ticket is closed or already merged and cannot be changed.");
-        if (source.Status != TicketStatusEnum.New)
-            return Fail(409, "Only a source ticket in New status can be merged.");
-        if (master.Status is not (TicketStatusEnum.New or TicketStatusEnum.Open or TicketStatusEnum.Assigned or TicketStatusEnum.InProgress))
-            return Fail(409, "Master ticket must be in New, Open, Assigned, or InProgress status.");
+        if (source.Status != TicketStatusEnum.Open)
+            return Fail(409, "Only an Open source ticket can be merged.");
+        if (master.Status is TicketStatusEnum.Completed or TicketStatusEnum.Closed or TicketStatusEnum.ClosedRejected)
+            return Fail(409, "The master ticket must be active.");
         if (source.CustomerId != master.CustomerId)
             return Fail(409, "Both tickets must belong to the same customer.");
 
@@ -48,8 +48,17 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
             .Where(x => x.TicketId == source.Id && !x.IsDeleted)
             .Select(x => x.BatteryAssetId)
             .ToListAsync(ct);
-        var hasCommonBattery = await _uow.TicketBatteryAssets.GetAllAsync()
-            .AnyAsync(x => x.TicketId == master.Id && !x.IsDeleted && sourceBatteryIds.Contains(x.BatteryAssetId), ct);
+        if (source.BatteryAssetId != Guid.Empty && !sourceBatteryIds.Contains(source.BatteryAssetId))
+            sourceBatteryIds.Add(source.BatteryAssetId);
+
+        var masterBatteryIds = await _uow.TicketBatteryAssets.GetAllAsync()
+            .Where(x => x.TicketId == master.Id && !x.IsDeleted)
+            .Select(x => x.BatteryAssetId)
+            .ToListAsync(ct);
+        if (master.BatteryAssetId != Guid.Empty && !masterBatteryIds.Contains(master.BatteryAssetId))
+            masterBatteryIds.Add(master.BatteryAssetId);
+
+        var hasCommonBattery = sourceBatteryIds.Intersect(masterBatteryIds).Any();
         if (!hasCommonBattery)
             return Fail(409, "Both tickets must share at least one battery asset.");
 

@@ -7,7 +7,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Command.Chats;
 
-public sealed class ChatVoiceTranscriptionRetryCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
+public class ChatVoiceTranscriptionRetryCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
     [JsonIgnore] public Guid TicketId { get; set; }
     [JsonIgnore] public Guid ChatId { get; set; }

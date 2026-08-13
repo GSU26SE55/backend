@@ -1,11 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
 
@@ -17,10 +15,8 @@ public class SlaTimerBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly TimeProvider _timeProvider;
 
-    public SlaTimerBackgroundService(
-        ILogger<SlaTimerBackgroundService> logger,
-        IServiceScopeFactory scopeFactory,
-        TimeProvider? timeProvider = null)
+    public SlaTimerBackgroundService(ILogger<SlaTimerBackgroundService> logger,
+        IServiceScopeFactory scopeFactory, TimeProvider? timeProvider = null)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
@@ -29,215 +25,98 @@ public class SlaTimerBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("SLA Timer Background Service is starting.");
-
         while (!stoppingToken.IsCancellationRequested)
         {
             try
-            {
-                await CheckSlaViolations(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "An error occurred while checking SLA violations.");
-            }
-
+            { await CheckSlaViolations(stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception exception) { _logger.LogError(exception, "SLA timer tick failed."); }
             await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
         }
-
-        _logger.LogInformation("SLA Timer Background Service is stopping.");
     }
 
-    public async Task CheckSlaViolations(CancellationToken stoppingToken)
+    public async Task CheckSlaViolations(CancellationToken ct)
     {
-        List<Guid> timerIds;
+        List<Guid> ids;
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
-            timerIds = await dbContext.SlaTimers
-                .AsNoTracking()
-                .Where(timer => (timer.Status == SlaTimerStatusEnum.Running || timer.Status == SlaTimerStatusEnum.Paused) && !timer.IsDeleted)
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            ids = await db.SlaTimers.AsNoTracking()
+                .Where(timer => !timer.IsDeleted && timer.Status == SlaTimerStatusEnum.Running
+                    && !timer.Ticket.IsDeleted
+                    && timer.Ticket.Status == TicketStatusEnum.InProgress
+                    && timer.Ticket.Priority != TicketPriorityEnum.Urgent)
                 .OrderBy(timer => timer.DueAt)
                 .Select(timer => timer.Id)
-                .ToListAsync(stoppingToken);
+                .ToListAsync(ct);
         }
 
-        foreach (var timerId in timerIds)
-        {
-            await ProcessTimerAsync(timerId, stoppingToken);
-        }
+        foreach (var id in ids)
+            await ProcessTimerAsync(id, ct);
     }
 
-    private async Task ProcessTimerAsync(Guid timerId, CancellationToken cancellationToken)
+    private async Task ProcessTimerAsync(Guid id, CancellationToken ct)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
-        var producer = scope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>();
-        await using var transaction = dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory"
-            ? null
-            : await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
+        var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+        var outbox = scope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>();
+        await using var transaction = db.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory"
+            ? null : await db.Database.BeginTransactionAsync(ct);
         try
         {
-            var timer = await dbContext.SlaTimers
-                .Include(value => value.Ticket)
-                // 03/08/2026 — thêm ThenInclude(Assignments).
-                //
-                // `SlaWarningEvent.StaffId` bên dưới đọc `timer.Ticket?.Assignments.FirstOrDefault(...)`,
-                // nhưng truy vấn này chỉ Include mỗi Ticket. Dự án KHÔNG bật lazy loading và
-                // `Assignments` khởi tạo sẵn là danh sách rỗng, nên FirstOrDefault luôn trả null ⇒
-                // `StaffId` **luôn null**, âm thầm, không lỗi.
-                //
-                // Hệ quả: cảnh báo sắp vỡ SLA chỉ tới Manager, KHÔNG tới Staff đang phụ trách —
-                // đúng thứ mà NOTI-05 (#676) thêm trường `StaffId` để chữa. Trường đã thêm, dữ liệu
-                // thì chưa bao giờ được nạp.
-                .ThenInclude(ticket => ticket.Assignments)
-                .SingleOrDefaultAsync(value => value.Id == timerId && !value.IsDeleted, cancellationToken);
-
-            if (timer is not null && timer.Status == SlaTimerStatusEnum.Paused)
-            {
-                await ProcessPausedTimerAsync(dbContext, producer, timer, transaction, cancellationToken);
-                return;
-            }
-
-            if (timer is null
-                || timer.Status != SlaTimerStatusEnum.Running
-                || timer.Ticket.IsDeleted
-                || timer.Ticket.Status == TicketStatusEnum.Closed
-                || timer.Ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate)
+            var timer = await db.SlaTimers
+                .Include(x => x.Ticket).ThenInclude(x => x.Assignments)
+                .SingleOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct);
+            if (timer is null || timer.Status != SlaTimerStatusEnum.Running ||
+                timer.Ticket.IsDeleted || timer.Ticket.Status != TicketStatusEnum.InProgress ||
+                timer.Ticket.Priority == TicketPriorityEnum.Urgent)
             {
                 if (transaction is not null)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                }
+                    await transaction.RollbackAsync(ct);
                 return;
             }
 
-            var currentTime = _timeProvider.GetUtcNow().UtcDateTime;
-            var timeToBreach = timer.DueAt - currentTime;
-            if (timeToBreach <= TimeSpan.Zero)
+            var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+            if (timer.DueAt <= nowUtc)
             {
                 timer.Status = SlaTimerStatusEnum.Breached;
-                timer.BreachAt = currentTime;
-                await producer.WriteAsync(new SlaBreachedEvent
+                timer.BreachAt = nowUtc;
+                await outbox.WriteAsync(new SlaBreachedEvent
                 {
                     TicketId = timer.TicketId,
-                    BreachedAt = currentTime,
+                    BreachedAt = nowUtc,
                     Priority = timer.Ticket.Priority?.ToString() ?? string.Empty,
-                    // Ticket đã được .Include ở truy vấn trên nên lấy Code không tốn thêm lượt đọc.
                     Code = timer.Ticket.Code
-                }, cancellationToken);
+                }, ct);
             }
             else
             {
-                var totalSlaDuration = timer.DueAt - timer.StartedAt;
-                var elapsedTime = currentTime - timer.StartedAt;
-                var percentage = totalSlaDuration.TotalMinutes <= 0
-                    ? 100
-                    : elapsedTime.TotalMinutes / totalSlaDuration.TotalMinutes * 100;
-
-                if (percentage >= 80 && timer.WarningSentAt is null)
+                var total = timer.DueAt - timer.StartedAt;
+                var elapsed = nowUtc - timer.StartedAt;
+                var percent = total.TotalMinutes <= 0 ? 100 : elapsed.TotalMinutes / total.TotalMinutes * 100;
+                if (percent >= 80 && timer.WarningSentAt is null)
                 {
-                    timer.WarningSentAt = currentTime;
-                    await producer.WriteAsync(new SlaWarningEvent
+                    timer.WarningSentAt = nowUtc;
+                    await outbox.WriteAsync(new SlaWarningEvent
                     {
                         TicketId = timer.TicketId,
-                        WarningAt = timer.WarningSentAt.Value,
-                        Percentage = percentage,
-                        StaffId = timer.Ticket?.Assignments.FirstOrDefault(a => a.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId,
-                        Code = timer.Ticket?.Code ?? string.Empty
-                    }, cancellationToken);
+                        WarningAt = nowUtc,
+                        Percentage = percent,
+                        StaffId = timer.Ticket.Assignments.FirstOrDefault(x => !x.IsDeleted && x.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId,
+                        Code = timer.Ticket.Code
+                    }, ct);
                 }
             }
 
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(ct);
             if (transaction is not null)
-            {
-                await transaction.CommitAsync(cancellationToken);
-            }
+                await transaction.CommitAsync(ct);
         }
         catch (DbUpdateConcurrencyException exception)
         {
             if (transaction is not null)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-            }
-            _logger.LogInformation(exception, "SLA timer {TimerId} changed concurrently; skipped until next poll.", timerId);
+                await transaction.RollbackAsync(ct);
+            _logger.LogInformation(exception, "SLA timer {TimerId} lost a concurrency race.", id);
         }
-    }
-
-    private async Task ProcessPausedTimerAsync(TicketDbContext dbContext, IIntegrationEventOutboxWriter producer,
-        TicketService.Domain.Entities.SlaTimer timer, IDbContextTransaction? transaction, CancellationToken cancellationToken)
-    {
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var openPauseEvents = await dbContext.SlaPauseEvents
-            .Where(p => p.SlaTimerId == timer.Id && p.ResumedAt == null && !p.IsDeleted)
-            .ToListAsync(cancellationToken);
-
-        if (openPauseEvents.Count != 1)
-        {
-            _logger.LogWarning("Paused SLA timer {TimerId} has {OpenPauseCount} open pause events; skipped.", timer.Id, openPauseEvents.Count);
-            if (transaction is not null)
-                await transaction.RollbackAsync(cancellationToken);
-            return;
-        }
-
-        var pauseEvent = openPauseEvents[0];
-        var maximumPause = pauseEvent.Reason switch
-        {
-            PauseReasonEnum.WaitingCustomer => TimeSpan.FromHours(48),
-            PauseReasonEnum.WaitingParts => TimeSpan.FromHours(72),
-            PauseReasonEnum.WaitingOnsiteSchedule => TimeSpan.FromHours(24),
-            _ => TimeSpan.MaxValue
-        };
-        if (now - pauseEvent.PausedAt < maximumPause)
-        {
-            if (transaction is not null)
-                await transaction.RollbackAsync(cancellationToken);
-            return;
-        }
-
-        var duration = Math.Max(0, (int)(now - pauseEvent.PausedAt).TotalMinutes);
-        pauseEvent.ResumedAt = now;
-        pauseEvent.ResumedByUserId = Guid.Empty;
-        pauseEvent.DurationMinutes = duration;
-        pauseEvent.AutoResumeReason = 1;
-        timer.TotalPausedMinutes += duration;
-        timer.DueAt = timer.DueAt.AddMinutes(duration);
-        timer.Status = SlaTimerStatusEnum.Running;
-        timer.CurrentPauseStartedAt = null;
-        timer.LastAutoResumeAt = now;
-
-        var oldStatus = timer.Ticket.Status;
-        if (oldStatus is TicketStatusEnum.WaitingCustomer or TicketStatusEnum.WaitingParts or TicketStatusEnum.WaitingOnsiteSchedule)
-        {
-            timer.Ticket.Status = TicketStatusEnum.InProgress;
-            await producer.WriteAsync(new TicketStatusChangedIntegrationEvent(timer.TicketId, timer.Ticket.Code,
-                oldStatus, TicketStatusEnum.InProgress), cancellationToken);
-        }
-
-        if (pauseEvent.Reason is PauseReasonEnum.WaitingCustomer or PauseReasonEnum.WaitingParts)
-        {
-            var primaryStaffId = timer.Ticket.Assignments
-                .FirstOrDefault(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId;
-            await producer.WriteAsync(new SlaAutoResumedEvent
-            {
-                SlaPauseEventId = pauseEvent.Id,
-                TicketId = timer.TicketId,
-                CustomerId = timer.Ticket.CustomerId,
-                PrimaryStaffId = primaryStaffId,
-                Code = timer.Ticket.Code,
-                PauseReason = (int)pauseEvent.Reason,
-                ResumedAt = now
-            }, cancellationToken);
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        if (transaction is not null)
-            await transaction.CommitAsync(cancellationToken);
     }
 }

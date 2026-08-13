@@ -18,4 +18,4 @@ public interface ISpamDetector
     Task RecordAcceptedMessageAsync(Guid ticketId, Guid userId, string body, CancellationToken cancellationToken = default);
 }
 
-public sealed record SpamLease(string Key, string OwnerToken);
+public record SpamLease(string Key, string OwnerToken);

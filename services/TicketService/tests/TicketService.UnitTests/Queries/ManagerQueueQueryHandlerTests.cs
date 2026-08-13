@@ -34,7 +34,7 @@ public class ManagerQueueQueryHandlerTests
     }
 
     private static Ticket MakeTicket(
-        TicketStatusEnum status = TicketStatusEnum.New,
+        TicketStatusEnum status = TicketStatusEnum.Open,
         TicketPriorityEnum? priority = null,
         TicketCategoryEnum category = TicketCategoryEnum.Other,
         string code = "T-001",
@@ -58,11 +58,11 @@ public class ManagerQueueQueryHandlerTests
 
 
     [Fact]
-    public async Task Handle_ReturnsOnlyNewTickets()
+    public async Task Handle_ReturnsOnlyOpenTickets()
     {
         SetupMock([
-            MakeTicket(TicketStatusEnum.New),
-            MakeTicket(TicketStatusEnum.Assigned),
+            MakeTicket(TicketStatusEnum.Open),
+            MakeTicket(TicketStatusEnum.Pending),
             MakeTicket(TicketStatusEnum.InProgress)
         ]);
 
@@ -70,7 +70,7 @@ public class ManagerQueueQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.Items.Should().HaveCount(1);
-        result.Data.Items[0].Status.Should().Be(TicketStatusEnum.New);
+        result.Data.Items[0].Status.Should().Be(TicketStatusEnum.Open);
     }
 
     [Fact]

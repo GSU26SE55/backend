@@ -14,7 +14,7 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.Consumers;
 
-public sealed class VoiceTranscriptionRequestedConsumer : IConsumer<VoiceTranscriptionRequestedEvent>
+public class VoiceTranscriptionRequestedConsumer : IConsumer<VoiceTranscriptionRequestedEvent>
 {
     private const string PendingBody = "Audio is being processed…";
     private readonly ITicketUnitOfWork _uow;

@@ -10,7 +10,7 @@ using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.Chats;
 
-public sealed class ChatVoiceTranscriptionRetryCommandHandlerTests
+public class ChatVoiceTranscriptionRetryCommandHandlerTests
 {
     [Fact]
     public async Task Handle_FailedVoiceChat_ResetsPendingWritesOutboxAndCommits()

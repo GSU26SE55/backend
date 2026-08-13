@@ -48,6 +48,10 @@ public static class NotificationTemplateCatalog
                 ("New ticket {{code}}", "Ticket {{code}} was just created, priority {{priority}}."),
             [NotificationTypeEnum.TicketAssigned] =
                 ("You have been assigned ticket {{code}}", "Priority {{priority}}. Open the ticket to view details and the deadline."),
+            [NotificationTypeEnum.TicketWorkStarted] =
+                ("Work started on ticket {{code}}", "Work began at {{startedAtUtc}}. Open the ticket to view progress."),
+            [NotificationTypeEnum.TicketScheduleChanged] =
+                ("Schedule changed for ticket {{code}}", "The next work time is {{scheduledStartAtUtc}}."),
             [NotificationTypeEnum.TicketStatusChanged] =
                 ("Ticket {{code}} status changed", "From {{oldStatusName}} to {{newStatusName}}."),
             [NotificationTypeEnum.TicketResolved] =
@@ -64,7 +68,7 @@ public static class NotificationTemplateCatalog
                 ("Ticket {{code}} reopened", "The customer was not satisfied with the resolution. Reason: {{reopenReason}}."),
             [NotificationTypeEnum.TicketRatingRequested] =
                 ("Please rate ticket {{code}}",
-                 "The ticket has been completed. {{daysUntilAutoClose}} day(s) left before it auto-closes."),
+                 "The ticket has been completed. {{daysUntilRatingDeadline}} day(s) remain in the rating window."),
             [NotificationTypeEnum.TicketMerged] =
                 ("Your ticket has been merged", "The content has been moved to the primary ticket for centralized handling."),
 

@@ -30,9 +30,8 @@ public class MaintenanceLogAddCommandHandler : IRequestHandler<MaintenanceLogAdd
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
-        // KIỂM TRA LOCK LOGIC: Không cho thêm log khi đã báo Resolved hoặc đã Closed
-        if (ticket.Status == TicketStatusEnum.Resolved ||
-            ticket.Status == TicketStatusEnum.ClosedPendingRate ||
+        // KIỂM TRA LOCK LOGIC: Không cho thêm log khi đã báo Completed hoặc đã Closed
+        if (ticket.Status == TicketStatusEnum.Completed ||
             ticket.Status == TicketStatusEnum.Closed)
         {
             return Fail(403, "Ticket is pending approval or already completed. Cannot add a new log.");

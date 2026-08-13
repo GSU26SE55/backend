@@ -223,7 +223,8 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
     /// </remarks>
     private static string Truncate(string? payload, int max = 512)
     {
-        if (string.IsNullOrEmpty(payload)) return string.Empty;
+        if (string.IsNullOrEmpty(payload))
+            return string.Empty;
         return payload.Length <= max ? payload : payload[..max] + "…(cắt bớt)";
     }
 
@@ -482,7 +483,8 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
         IotDeviceCommandStatusEnum status,
         string? error)
     {
-        if (status == IotDeviceCommandStatusEnum.Ok) return null;
+        if (status == IotDeviceCommandStatusEnum.Ok)
+            return null;
         if (status == IotDeviceCommandStatusEnum.Rejected)
             return "The BMS rejected the control command.";
         if (status == IotDeviceCommandStatusEnum.Unknown)

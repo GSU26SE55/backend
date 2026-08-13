@@ -25,7 +25,7 @@ public class ActivityLoggerTests
             actorId,
             ActorRoleEnum.Manager,
             "Manager A",
-            ActivityActionEnum.TriageApproved,
+            ActivityActionEnum.Approved,
             "Old",
             "New",
             "Because I said so");
@@ -35,7 +35,7 @@ public class ActivityLoggerTests
             a.TicketId == ticketId &&
             a.ActorUserId == actorId &&
             a.ActorRole == ActorRoleEnum.Manager &&
-            a.Action == ActivityActionEnum.TriageApproved &&
+            a.Action == ActivityActionEnum.Approved &&
             a.Reason == "Because I said so")), Times.Once);
     }
 }
