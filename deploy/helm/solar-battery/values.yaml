@@ -29,6 +29,10 @@ global:
   # Jenkins/staging dùng `staging.example.com`, prod dùng `api.example.com`.
   domain: capstonegsu26se55.mooo.com
 
+  # Public browser origin. Empty means https://{global.domain}. Production sets
+  # this explicitly so email links, OAuth and CORS cannot drift apart.
+  frontendOrigin: ""
+
   # ASP.NET environment — Development / Staging / Production
   # ⚠️ Đặt `Production` thì CORS whitelist trở thành BẮT BUỘC (#AUTH-05): thiếu
   # `Cors__AllowedOrigins__0` là mọi pod CrashLoopBackOff. Chart tự sinh origin từ `domain`

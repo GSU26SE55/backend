@@ -72,7 +72,7 @@ pipeline {
                     }
                     git diff --check
 
-                    for tool in git docker trivy syft cosign helm ssh scp; do
+                    for tool in git docker shellcheck trivy syft cosign helm ssh scp; do
                       command -v "${tool}" >/dev/null 2>&1 || {
                         echo "Missing required Jenkins production tool: ${tool}" >&2
                         exit 1
@@ -258,6 +258,8 @@ pipeline {
                 sh '''
                     set -eu
 
+                    shellcheck deploy/scripts/*.sh
+
                     helm repo add prometheus-community \
                       https://prometheus-community.github.io/helm-charts \
                       --force-update
@@ -271,6 +273,45 @@ pipeline {
                       -f deploy/helm/solar-battery/values-vps-small.yaml \
                       -f deploy/helm/solar-battery/values-production.yaml \
                       --set-string iot.mqttNodeIp=10.0.0.10
+
+                    helm template solar deploy/helm/solar-battery \
+                      --namespace solar-prod \
+                      -f deploy/helm/solar-battery/values.yaml \
+                      -f deploy/helm/solar-battery/values-vps-small.yaml \
+                      -f deploy/helm/solar-battery/values-production.yaml \
+                      --set-string iot.mqttNodeIp=10.0.0.10 \
+                      > rendered-production.yaml
+
+                    if grep -Eq \
+                      'CHANGE_ME|Admin@123|capstonegsu26se55[.]mooo[.]com' \
+                      rendered-production.yaml
+                    then
+                      echo 'Production Helm render contains a forbidden placeholder' >&2
+                      exit 1
+                    fi
+
+                    for expected in \
+                      'Cors__AllowedOrigins__0: "https://solars.io.vn"' \
+                      'Frontend__WebBaseUrl: "https://solars.io.vn"' \
+                      'GoogleOAuth__RedirectUri: "https://api.solars.io.vn/api/auth/google/callback"' \
+                      'GoogleOAuth__AllowedRedirectUris__0: "https://api.solars.io.vn/api/auth/google/callback"' \
+                      'Ai__GrpcAddress: "https://ai.solars.io.vn"' \
+                      'Ai__HttpBaseUrl: "https://ai.solars.io.vn"' \
+                      'TicketAi__AiGrpcAddress: "https://ai.solars.io.vn"'
+                    do
+                      grep -Fq "${expected}" rendered-production.yaml || {
+                        echo "Missing production URL contract: ${expected}" >&2
+                        exit 1
+                      }
+                    done
+
+                    if grep -E \
+                      '(Ai__GrpcAddress|Ai__HttpBaseUrl|TicketAi__AiGrpcAddress):.*(/docs|/openapi[.]json)' \
+                      rendered-production.yaml
+                    then
+                      echo 'AI application base URL must not point to documentation' >&2
+                      exit 1
+                    fi
 
                     tar -czf "backend-deployment-${RELEASE_SHA}.tar.gz" deploy
                 '''

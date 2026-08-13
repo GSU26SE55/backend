@@ -196,6 +196,18 @@ Backend templates:
 - `deploy/production/monitoring.env.example` -> `/opt/solar-platform/secrets/monitoring.env`
 - Cosign public key -> `/opt/solar-platform/config/cosign.pub`
 
+Ba URL bắt buộc trong `/opt/solar-platform/config/host.env`:
+
+```text
+FRONTEND_PUBLIC_ORIGIN=https://solars.io.vn
+AI_GRPC_ADDRESS=https://ai.solars.io.vn
+AI_HTTP_BASE_URL=https://ai.solars.io.vn
+```
+
+Các giá trị trên là **origin**, không có dấu `/` cuối và không có path. Tuyệt đối không đặt
+`AI_HTTP_BASE_URL=https://ai.solars.io.vn/docs`: `/docs` chỉ là Swagger UI. Backend gọi REST
+fallback qua các path ứng dụng như `/ready`, `/predict/` và gọi gRPC HTTP/2 trên cùng origin 443.
+
 IoT templates:
 
 - `deploy/production/host.env.example` của repo IoT -> `/opt/solar-iot/config/host.env`
@@ -235,9 +247,35 @@ sudo chmod 0640 /opt/solar-platform/config/host.env \
 - Unsubscribe HMAC secret.
 - MQTT password.
 
+Trong Google Cloud Console, OAuth client của production phải có chính xác:
+
+- Authorized JavaScript origin: `https://solars.io.vn` (nếu client-side flow sử dụng origin này).
+- Authorized redirect URI: `https://api.solars.io.vn/api/auth/google/callback`.
+
+Không thêm `/auth-service` vào redirect URI; ApiGateway public route không có prefix đó.
+
 Giá trị `Mqtt__Password` trong backend và IoT phải giống tuyệt đối; username production phải là `backend-bridge`. Có thể sinh secret bằng `openssl rand -base64 48`, nhưng tránh ký tự newline.
 
 Không dùng `minioadmin`, `guest`, khóa dev, `CHANGE_ME`, mật khẩu dưới 32 ký tự cho các API key/JWT, hoặc sender MailJet chưa verify. Script preflight sẽ chặn những trường hợp này.
+
+### Bắt buộc xoay secret đã từng xuất hiện trong Git
+
+File legacy `env.prod.example` trước đây từng chứa giá trị trông như secret thật. Việc thay bằng
+placeholder ở commit hiện tại không xóa chúng khỏi lịch sử Git. Trước khi production chạy, phải
+thu hồi và tạo lại toàn bộ PostgreSQL/admin/Grafana password, JWT signing key, MailJet API key,
+Google OAuth client secret, Discord webhook và sensor ingest key từng dùng trong file đó. Không
+tái sử dụng giá trị cũ; cập nhật giá trị mới trực tiếp trong Jenkins/VPS secret store.
+
+Firmware production generic đã ghim hai endpoint không bí mật:
+
+```text
+BACKEND_URL=https://api.solars.io.vn
+MQTT_BROKER_HOST=mqtt.solars.io.vn
+```
+
+Mỗi thiết bị vẫn phải được provision `deviceCode`, API key, MQTT credential, Wi-Fi và mật khẩu
+AP/portal riêng qua NVS/khâu lắp đặt trước khi giao khách. Không dùng các placeholder compile-time
+trong `config.example.h` làm credential vận hành.
 
 ## 8. TLS MQTT và WireGuard AI -> Loki
 

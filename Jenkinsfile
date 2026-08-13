@@ -149,6 +149,29 @@ pipeline {
                               echo 'Production Helm render contains a forbidden placeholder' >&2
                               exit 1
                             fi
+
+                            for expected in \
+                              'Cors__AllowedOrigins__0: "https://solars.io.vn"' \
+                              'Frontend__WebBaseUrl: "https://solars.io.vn"' \
+                              'GoogleOAuth__RedirectUri: "https://api.solars.io.vn/api/auth/google/callback"' \
+                              'GoogleOAuth__AllowedRedirectUris__0: "https://api.solars.io.vn/api/auth/google/callback"' \
+                              'Ai__GrpcAddress: "https://ai.solars.io.vn"' \
+                              'Ai__HttpBaseUrl: "https://ai.solars.io.vn"' \
+                              'TicketAi__AiGrpcAddress: "https://ai.solars.io.vn"'
+                            do
+                              grep -Fq "${expected}" rendered-production.yaml || {
+                                echo "Missing production URL contract: ${expected}" >&2
+                                exit 1
+                              }
+                            done
+
+                            if grep -E \
+                              '(Ai__GrpcAddress|Ai__HttpBaseUrl|TicketAi__AiGrpcAddress):.*(/docs|/openapi[.]json)' \
+                              rendered-production.yaml
+                            then
+                              echo 'AI application base URL must not point to documentation' >&2
+                              exit 1
+                            fi
                         '''
                     }
                 }

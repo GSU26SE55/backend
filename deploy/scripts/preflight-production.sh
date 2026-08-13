@@ -30,6 +30,9 @@ read_env() {
 
 PLATFORM_PUBLIC_DOMAIN="$(read_env PLATFORM_PUBLIC_DOMAIN)"
 PLATFORM_PUBLIC_IPV4="$(read_env PLATFORM_PUBLIC_IPV4)"
+FRONTEND_PUBLIC_ORIGIN="$(read_env FRONTEND_PUBLIC_ORIGIN)"
+AI_GRPC_ADDRESS="$(read_env AI_GRPC_ADDRESS)"
+AI_HTTP_BASE_URL="$(read_env AI_HTTP_BASE_URL)"
 MQTT_NODE_IP="$(read_env MQTT_NODE_IP)"
 MQTT_AUTH_DIR="$(read_env MQTT_AUTH_DIR)"
 PLATFORM_PRIVATE_IPV4="$(read_env PLATFORM_PRIVATE_IPV4)"
@@ -40,12 +43,32 @@ export KUBECONFIG
 
 : "${PLATFORM_PUBLIC_DOMAIN:?PLATFORM_PUBLIC_DOMAIN is required}"
 : "${PLATFORM_PUBLIC_IPV4:?PLATFORM_PUBLIC_IPV4 is required}"
+: "${FRONTEND_PUBLIC_ORIGIN:?FRONTEND_PUBLIC_ORIGIN is required}"
+: "${AI_GRPC_ADDRESS:?AI_GRPC_ADDRESS is required}"
+: "${AI_HTTP_BASE_URL:?AI_HTTP_BASE_URL is required}"
 : "${MQTT_NODE_IP:?MQTT_NODE_IP is required}"
 : "${MQTT_AUTH_DIR:?MQTT_AUTH_DIR is required}"
 : "${PLATFORM_PRIVATE_IPV4:?PLATFORM_PRIVATE_IPV4 is required}"
 : "${ACME_EMAIL:?ACME_EMAIL is required}"
 : "${KUBECONFIG:?KUBECONFIG is required}"
 : "${K3S_NAMESPACE:?K3S_NAMESPACE is required}"
+
+[[ "${FRONTEND_PUBLIC_ORIGIN}" == "https://${PLATFORM_PUBLIC_DOMAIN}" ]] || {
+  printf 'FRONTEND_PUBLIC_ORIGIN must equal https://%s (no path or trailing slash)\n' \
+    "${PLATFORM_PUBLIC_DOMAIN}" >&2
+  exit 1
+}
+for ai_url in "${AI_GRPC_ADDRESS}" "${AI_HTTP_BASE_URL}"; do
+  [[ "${ai_url}" =~ ^https://[^/:[:space:]]+(:443)?$ ]] || {
+    printf 'AI endpoints must be HTTPS origins only (do not append /docs or another path): %s\n' \
+      "${ai_url}" >&2
+    exit 1
+  }
+done
+[[ "${AI_GRPC_ADDRESS}" == "${AI_HTTP_BASE_URL}" ]] || {
+  printf 'AI_GRPC_ADDRESS and AI_HTTP_BASE_URL must share the public AI origin\n' >&2
+  exit 1
+}
 
 [[ "${MQTT_NODE_IP}" == "${PLATFORM_PRIVATE_IPV4}" ]] || {
   printf 'MQTT_NODE_IP must equal PLATFORM_PRIVATE_IPV4 on the shared backend + IoT VPS\n' >&2
@@ -88,6 +111,18 @@ for host in \
     exit 1
   }
 done
+
+ai_host="${AI_HTTP_BASE_URL#https://}"
+ai_host="${ai_host%:443}"
+getent ahostsv4 "${ai_host}" >/dev/null || {
+  printf 'AI hostname does not resolve from the platform VPS: %s\n' "${ai_host}" >&2
+  exit 1
+}
+curl --fail --silent --show-error "${AI_HTTP_BASE_URL}/ready" |
+  jq -e '.ready == true' >/dev/null || {
+    printf 'AI HTTPS readiness check failed: %s/ready\n' "${AI_HTTP_BASE_URL}" >&2
+    exit 1
+  }
 
 available_kib="$(df -Pk "${root}" | awk 'NR == 2 {print $4}')"
 (( available_kib >= 31457280 )) || {

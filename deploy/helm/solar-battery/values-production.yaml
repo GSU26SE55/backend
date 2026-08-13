@@ -9,6 +9,7 @@
 global:
   namespace: solar-prod
   domain: solars.io.vn
+  frontendOrigin: https://solars.io.vn
   aspnetEnvironment: Production
   tlsIssuer: letsencrypt-prod
   imagePullPolicy: IfNotPresent
@@ -100,7 +101,8 @@ config:
   RabbitMQ__VirtualHost: /solar-prod
   ADMIN_EMAIL: admin@solars.io.vn
 
-  # AI VPS: gRPC over HTTP/2 on 443, HTTPS REST as fallback.
+  # AI VPS: gRPC over HTTP/2 on 443, HTTPS REST as fallback. Never append
+  # /docs: that path is only Swagger UI, not an application base URL.
   Ai__Enabled: "true"
   Ai__GrpcAddress: https://ai.solars.io.vn
   Ai__HttpBaseUrl: https://ai.solars.io.vn

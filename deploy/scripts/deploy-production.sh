@@ -75,14 +75,18 @@ done
 cosign verify --key "${root}/config/cosign.pub" "${alert_relay_image}" >/dev/null
 
 platform_domain="$(read_env PLATFORM_PUBLIC_DOMAIN "${host_env}")"
+frontend_origin="$(read_env FRONTEND_PUBLIC_ORIGIN "${host_env}")"
+ai_grpc_address="$(read_env AI_GRPC_ADDRESS "${host_env}")"
+ai_http_base_url="$(read_env AI_HTTP_BASE_URL "${host_env}")"
 mqtt_node_ip="$(read_env MQTT_NODE_IP "${host_env}")"
 mqtt_auth_dir="$(read_env MQTT_AUTH_DIR "${host_env}")"
 kubeconfig="$(read_env KUBECONFIG "${host_env}")"
 namespace="$(read_env K3S_NAMESPACE "${host_env}")"
 helm_release="$(read_env HELM_RELEASE "${host_env}")"
 
-[[ -n "${platform_domain}" && -n "${mqtt_node_ip}" && -n "${mqtt_auth_dir}" && -n "${kubeconfig}" \
-  && -n "${namespace}" && -n "${helm_release}" ]] || {
+[[ -n "${platform_domain}" && -n "${frontend_origin}" && -n "${ai_grpc_address}" \
+  && -n "${ai_http_base_url}" && -n "${mqtt_node_ip}" && -n "${mqtt_auth_dir}" \
+  && -n "${kubeconfig}" && -n "${namespace}" && -n "${helm_release}" ]] || {
   printf 'host.env is incomplete\n' >&2
   exit 1
 }
@@ -148,6 +152,10 @@ helm_args=(
   -f "${chart_dir}/values-vps-small.yaml"
   -f "${chart_dir}/values-production.yaml"
   --set-string "global.domain=${platform_domain}"
+  --set-string "global.frontendOrigin=${frontend_origin}"
+  --set-string "config.Ai__GrpcAddress=${ai_grpc_address}"
+  --set-string "config.Ai__HttpBaseUrl=${ai_http_base_url}"
+  --set-string "config.TicketAi__AiGrpcAddress=${ai_grpc_address}"
   --set-string "iot.mqttNodeIp=${mqtt_node_ip}"
   --set-string "iot.mqttPasswordSync.hostPath=${mqtt_auth_dir}"
   --set-string "monitoring.alertmanagerDiscord.image=${alert_relay_image}"
