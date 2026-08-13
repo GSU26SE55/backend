@@ -80,7 +80,11 @@ public static class MassTransitExtensions
 
             x.UsingRabbitMq((context, cfg) =>
             {
-                cfg.Host(configuration["RabbitMQ:Host"], "/", h =>
+                var virtualHost = configuration["RabbitMQ:VirtualHost"];
+                if (string.IsNullOrWhiteSpace(virtualHost))
+                    virtualHost = "/";
+
+                cfg.Host(configuration["RabbitMQ:Host"], virtualHost, h =>
                 {
                     h.Username(configuration["RabbitMQ:Username"]!);
                     h.Password(configuration["RabbitMQ:Password"]!);

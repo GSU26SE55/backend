@@ -149,7 +149,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: mc
-        image: minio/mc:latest
+        image: {{ .Values.minio.clientImage }}
         resources:
           {{- toYaml .Values.minio.initJob.resources | nindent 10 }}
         command:

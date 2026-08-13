@@ -18,7 +18,7 @@ if [ "${SKIP_AUDIT:-0}" = "1" ]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 FAIL_ON="${AUDIT_FAIL_ON:-high}"
 case "$FAIL_ON" in

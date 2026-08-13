@@ -262,13 +262,13 @@ fi
 HELM_TPL_DIR="deploy/helm/solar-battery/templates"
 UNDERSCORE_HITS=""
 if [ -d "$HELM_TPL_DIR" ]; then
-  for f in $(find "$HELM_TPL_DIR" -type f -name '_*' 2>/dev/null); do
+  while IFS= read -r f; do
     case "$f" in *.tpl) continue;; esac          # *.tpl là partial theo quy ước, bỏ qua
     if ! grep -qE '\{\{-?[[:space:]]*define' "$f"; then
       UNDERSCORE_HITS="${UNDERSCORE_HITS}  $f
 "
     fi
-  done
+  done < <(find "$HELM_TPL_DIR" -type f -name '_*' 2>/dev/null)
 fi
 
 if [ -n "$UNDERSCORE_HITS" ]; then
@@ -316,7 +316,7 @@ if [ -n "$DUP_CONSUMERS" ]; then
   echo "FAIL: tên class consumer bị TRÙNG giữa các service ⇒ chung queue RabbitMQ, mất message:"
   for c in $DUP_CONSUMERS; do
     echo "  $c"
-    grep -rl "class[[:space:]]\+$c[[:space:]]*:" --include='*.cs' services/ 2>/dev/null | sed 's/^/      /'
+    grep -rl "class[[:space:]]\+${c}[[:space:]]*:" --include='*.cs' services/ 2>/dev/null | sed 's/^/      /'
   done
   echo "Fix: đổi tên MỘT bên theo lệ sẵn có — tiền tố service (TicketXxxConsumer) hoặc"
   echo "     hậu tố mô tả việc (XxxSyncConsumer / XxxWelcomeConsumer)."

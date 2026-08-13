@@ -1,0 +1,10 @@
+[Unit]
+Description=Synchronize cert-manager MQTT certificate into the Docker IoT runtime
+After=k3s.service docker.service
+Requires=k3s.service docker.service
+
+[Service]
+Type=oneshot
+Environment=KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+ExecStart=/usr/local/sbin/solar-sync-mqtt-tls
+UMask=0027

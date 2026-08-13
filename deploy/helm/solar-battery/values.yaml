@@ -8,7 +8,10 @@
 # --------------------------------------------------------------------
 global:
   # Image registry. Jenkins push image với tag = git SHA về đây.
-  imageRegistry: ghcr.io/gsu26se55
+  # Deliberately not named `global.imageRegistry`: common subcharts consume that
+  # reserved key and would incorrectly rewrite every Prometheus/Grafana image
+  # into the private application registry.
+  appImageRegistry: ghcr.io/gsu26se55
 
   # Tag mặc định. Jenkins override `--set global.imageTag=abc1234` lúc deploy.
   imageTag: latest
@@ -25,6 +28,10 @@ global:
   # Domain public dùng cho Ingress của ApiGateway.
   # Jenkins/staging dùng `staging.example.com`, prod dùng `api.example.com`.
   domain: capstonegsu26se55.mooo.com
+
+  # Public browser origin. Empty means https://{global.domain}. Production sets
+  # this explicitly so email links, OAuth and CORS cannot drift apart.
+  frontendOrigin: ""
 
   # ASP.NET environment — Development / Staging / Production
   # ⚠️ Đặt `Production` thì CORS whitelist trở thành BẮT BUỘC (#AUTH-05): thiếu
@@ -68,6 +75,7 @@ services:
   apigateway:
     enabled: true
     image: apigateway          # image tên `ghcr.io/.../apigateway:<tag>`
+    digest: ""                 # production Jenkins override bằng sha256:...
     replicas: 1
     port: 8080
     resources:
@@ -87,6 +95,7 @@ services:
   authservice:
     enabled: true
     image: authservice
+    digest: ""
     replicas: 1
     port: 8080
     resources:
@@ -106,6 +115,7 @@ services:
   emailservice:
     enabled: true
     image: emailservice
+    digest: ""
     replicas: 1
     port: 8080
     resources:
@@ -115,6 +125,7 @@ services:
   smsservice:
     enabled: true
     image: smsservice
+    digest: ""
     replicas: 1
     port: 8080
     resources:
@@ -124,6 +135,7 @@ services:
   filestorageservice:
     enabled: true
     image: filestorageservice
+    digest: ""
     replicas: 1
     port: 8080
     resources:
@@ -133,8 +145,10 @@ services:
   batteryservice:
     enabled: true
     image: batteryservice
+    digest: ""
     replicas: 1
     port: 8080
+    grpcPort: 8081
     resources:
       requests: { cpu: 150m, memory: 256Mi }
       limits:   { cpu: 750m, memory: 768Mi }
@@ -156,6 +170,7 @@ services:
   ticketservice:
     enabled: true
     image: ticketservice
+    digest: ""
     replicas: 1
     port: 8080
     resources:
@@ -170,6 +185,7 @@ services:
   notificationservice:
     enabled: true
     image: notificationservice
+    digest: ""
     replicas: 1
     port: 8080
     resources:
@@ -185,6 +201,7 @@ services:
   auditaggregatorservice:
     enabled: true
     image: auditaggregatorservice
+    digest: ""
     replicas: 1
     port: 8080
     resources:
@@ -225,6 +242,14 @@ postgres:
     resources:
       requests: { cpu: 20m, memory: 64Mi }
       limits:   { cpu: 100m, memory: 128Mi }
+  backup:
+    schedule: "0 */6 * * *"
+    bucket: postgres-backups
+    retentionDays: 14
+    activeDeadlineSeconds: 1800
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits:   { cpu: 500m, memory: 512Mi }
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 1Gi }
@@ -232,6 +257,8 @@ postgres:
 redis:
   enabled: true
   image: redis:7-alpine
+  appendOnly: true
+  storage: 2Gi
   resources:
     requests: { cpu: 50m,  memory: 64Mi }
     limits:   { cpu: 200m, memory: 256Mi }
@@ -240,6 +267,7 @@ rabbitmq:
   enabled: true
   image: rabbitmq:3-management-alpine
   username: guest
+  virtualHost: "/"
   storage: 2Gi
   returnPerObjectMetrics: true
   resources:
@@ -251,6 +279,7 @@ rabbitmq:
 minio:
   enabled: true
   image: minio/minio:latest
+  clientImage: minio/mc:latest
   # GH-788 — root user/password đều lấy từ Secret `solar-secrets`
   # (ObjectStorage__AccessKey / ObjectStorage__SecretKey). values.yaml nằm trong Git nên không
   # chứa credential; khoá `rootUser` cũ đã bỏ để không ai vô tình đặt lại giá trị mặc định.
@@ -272,6 +301,13 @@ minio:
   # Cần vào console: `kubectl port-forward svc/minio 9001:9001`.
   consoleIngress:
     enabled: false
+  serviceMonitor:
+    # The MinIO cluster metrics endpoint requires a bearer token when public
+    # authentication is disabled. Keep this off unless bearerTokenSecret is set.
+    enabled: false
+    bearerTokenSecret:
+      name: ""
+      key: ""
 
 # --------------------------------------------------------------------
 # Non-secret config — chuyển vào ConfigMap (mọi service envFrom)
@@ -290,6 +326,7 @@ config:
   ConnectionStrings__Redis: "redis:6379"
   RabbitMQ__Host: rabbitmq
   RabbitMQ__Username: guest
+  RabbitMQ__VirtualHost: "/"
 
   # ---------- Sprint BE-IoT-Realtime — SSE telemetry (overall.md §34.10) ----------
   Realtime__Enabled: "true"
@@ -333,7 +370,8 @@ config:
   Outbox__IntervalSeconds: "1"
   Notification__Dispatch__PollIntervalSeconds: "1"
 
-  MailJet__FromEmail: thangbpse180445@fpt.edu.vn
+  # MailJet__FromEmail belongs to solar-secrets because production must use a
+  # sender address verified by the account, never a repository default.
   MailJet__DisplayName: Solar Panel Battery Maintainance
   MailJet__SendEndpoint: https://api.mailjet.com/v3.1/send
 
@@ -404,7 +442,6 @@ config:
   ADMIN_EMAIL: admin@example.com
 
   # ----- Sprint 3 — BatteryService Anomaly Engine -----
-  ApiKeys__SensorIngest: "dev-battery-ingest-key"
   AnomalyEngine__ScanIntervalSeconds: "30"
   AnomalyEngine__DedupWindowMinutes: "30"
   AnomalyEngine__OfflineThresholdMinutes: "10"
@@ -414,8 +451,6 @@ config:
   AnomalyEngine__OutboxRelayBatchSize: "100"
 
   # ----- Sprint 5B #91/#102 — Environmental ingest API key -----
-  ApiKeys__EnvironmentalIngest: "dev-battery-environmental-key"
-
   # ----- Sprint 5B #90/#92 — Open-Meteo client + WeatherSync background -----
   Weather__BaseUrl: "https://api.open-meteo.com/"
   Weather__IntervalMinutes: "15"
@@ -458,6 +493,26 @@ config:
   Firmware__PublicBaseUrl: ""
 
 # --------------------------------------------------------------------
+# IoT broker integration. Mosquitto runs with Docker on the same VPS,
+# while BatteryService runs in k3s. The password directory is the only
+# hostPath shared across the two runtimes.
+# --------------------------------------------------------------------
+iot:
+  mqttPasswordSync:
+    enabled: false
+    hostPath: /opt/solar-iot/secrets/mosquitto
+    mountPath: /mosquitto-config
+    fileName: passwd
+  # Optional split-DNS override. Set to the VPS private/VPC address if the
+  # Reserved IP cannot hairpin back to the same Droplet. TLS still verifies
+  # mqtt.<domain> because only DNS resolution changes.
+  mqttNodeIp: ""
+  mqttTlsCertificate:
+    enabled: false
+    secretName: mqtt-public-tls
+    dnsName: ""
+
+# --------------------------------------------------------------------
 # Secret — placeholder. KHÔNG fill ở đây (sẽ commit lộ).
 # Dùng `kubectl create secret` hoặc Sealed Secrets thay thế.
 # Xem deploy/README.md hướng dẫn cách inject secret.
@@ -476,6 +531,8 @@ secrets:
 tempo:
   enabled: false
   image: grafana/tempo:latest
+  storage: 5Gi
+  storageClass: ""
   resources:
     requests: { cpu: "50m", memory: "128Mi" }
     limits: { cpu: "300m", memory: "384Mi" }
@@ -484,6 +541,7 @@ tempo:
 monitoring:
   alertmanagerDiscord:
     enabled: false              # bật khi đã cài Alertmanager + có DISCORD_WEBHOOK trong Secret
+    image: benjojo/alertmanager-discord:latest
 
   prometheusRules:
     enabled: false              # bật khi đã cài kube-prometheus-stack (CRD PrometheusRule)
@@ -499,6 +557,16 @@ monitoring:
       limits:   { cpu: 200m, memory: 256Mi }
     serviceMonitor:
       enabled: true
+
+  blackbox:
+    enabled: false
+    image: prom/blackbox-exporter:v0.25.0
+    httpTargets: []
+    mqttTarget: ""
+    mqttServerName: ""
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
 
 # --------------------------------------------------------------------
 # Subchart values — cover 8 monitoring service từ docker-compose

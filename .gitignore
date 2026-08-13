@@ -10,6 +10,10 @@
 docker-compose.override.yml
 # COMMIT: .env.Docker.example (template, không có secret)
 
+# Production deployment secrets/image locks stay on the VPS, never in Git.
+deploy/production/*.env
+!deploy/production/*.env.example
+
 # ---------- .NET build outputs ----------
 bin/
 obj/

@@ -1,16 +1,16 @@
 {{- if .Values.redis.enabled -}}
 ---
-# Redis dev/staging — không persist, chấp nhận mất cache khi restart.
-# Production muốn persist → đổi sang StatefulSet + PVC + AOF/RDB.
+# Redis keeps idempotency/replay/backplane state. A single-node deployment is
+# intentionally a StatefulSet with AOF so a pod restart does not silently erase it.
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
   labels:
     {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "redis") | nindent 4 }}
 spec:
+  serviceName: redis
   replicas: 1
-  strategy: { type: Recreate }    # KHÔNG rolling update — Redis 1 instance
   selector:
     matchLabels:
       app.kubernetes.io/component: redis
@@ -22,6 +22,12 @@ spec:
       containers:
       - name: redis
         image: {{ .Values.redis.image }}
+        args:
+        - redis-server
+        - --appendonly
+        - {{ ternary "yes" "no" .Values.redis.appendOnly | quote }}
+        - --appendfsync
+        - everysec
         ports:
         - { name: redis, containerPort: 6379 }
         readinessProbe:
@@ -31,6 +37,17 @@ spec:
           periodSeconds: 10
         resources:
           {{- toYaml .Values.redis.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.redis.storage }}
 ---
 apiVersion: v1
 kind: Service

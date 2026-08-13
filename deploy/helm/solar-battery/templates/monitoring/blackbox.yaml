@@ -1,0 +1,119 @@
+{{- if .Values.monitoring.blackbox.enabled -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-config
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+data:
+  blackbox.yml: |
+    modules:
+      http_2xx:
+        prober: http
+        timeout: 10s
+        http:
+          preferred_ip_protocol: ip4
+          valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      mqtt_tls:
+        prober: tcp
+        timeout: 10s
+        tcp:
+          preferred_ip_protocol: ip4
+          tls: true
+          tls_config:
+            server_name: {{ .Values.monitoring.blackbox.mqttServerName | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackbox-exporter
+  labels:
+    {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "blackbox-exporter") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: blackbox-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: blackbox-exporter
+    spec:
+      securityContext:
+        {{- include "solar.podSecurityContext" . | nindent 8 }}
+      containers:
+      - name: blackbox-exporter
+        image: {{ .Values.monitoring.blackbox.image }}
+        args: ["--config.file=/etc/blackbox/blackbox.yml"]
+        securityContext:
+          {{- include "solar.containerSecurityContext" . | nindent 10 }}
+        ports:
+        - { name: http, containerPort: 9115 }
+        readinessProbe:
+          httpGet: { path: /-/ready, port: http }
+        livenessProbe:
+          httpGet: { path: /-/healthy, port: http }
+        resources:
+          {{- toYaml .Values.monitoring.blackbox.resources | nindent 10 }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/blackbox
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: blackbox-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackbox-exporter
+  labels:
+    app.kubernetes.io/component: blackbox-exporter
+spec:
+  selector:
+    app.kubernetes.io/component: blackbox-exporter
+  ports:
+  - { name: http, port: 9115, targetPort: http }
+{{- if (index .Values "kube-prometheus-stack" "enabled") }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: public-http
+  labels:
+    release: monitoring
+spec:
+  jobName: public-http
+  interval: 30s
+  module: http_2xx
+  prober:
+    url: blackbox-exporter:9115
+    path: /probe
+  targets:
+    staticConfig:
+      static:
+      {{- range .Values.monitoring.blackbox.httpTargets }}
+      - {{ . | quote }}
+      {{- end }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: mqtt-tls
+  labels:
+    release: monitoring
+spec:
+  jobName: mqtt-tls
+  interval: 30s
+  module: mqtt_tls
+  prober:
+    url: blackbox-exporter:9115
+    path: /probe
+  targets:
+    staticConfig:
+      static:
+      - {{ .Values.monitoring.blackbox.mqttTarget | quote }}
+{{- end }}
+{{- end }}

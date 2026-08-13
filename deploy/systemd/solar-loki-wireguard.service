@@ -1,0 +1,16 @@
+[Unit]
+Description=Expose Loki only on the backend WireGuard address for AI Alloy
+After=k3s.service wg-quick@wg0.service network-online.target
+Requires=k3s.service wg-quick@wg0.service
+
+[Service]
+Type=simple
+Environment=KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+ExecStart=/usr/local/bin/kubectl --namespace solar-prod port-forward --address 10.20.0.1 service/loki 3100:3100
+Restart=always
+RestartSec=5s
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

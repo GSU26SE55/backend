@@ -400,13 +400,22 @@ public class MqttBridgeE2ETests
         var dbName = $"mqtt-ack-state-{Guid.NewGuid()}";
         await using var db = NewDb(dbName);
         var deviceId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        db.Sites.Add(new Site
+        {
+            Id = siteId,
+            Name = "Site command ack persistence",
+            Address = "addr",
+            CustomerId = Guid.NewGuid(),
+            InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
         db.IotDevices.Add(new IotDevice
         {
             Id = deviceId,
             DeviceCode = MosquittoBrokerFixture.DeviceACode,
             MqttUsername = MosquittoBrokerFixture.DeviceA,
             DisplayName = "GW ack persistence",
-            SiteId = Guid.NewGuid(),
+            SiteId = siteId,
             Status = IotDeviceStatusEnum.Active
         });
         db.IotDeviceCommands.Add(new IotDeviceCommand

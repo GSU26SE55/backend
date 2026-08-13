@@ -26,6 +26,8 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        {{- include "solar.podSecurityContext" . | nindent 8 }}
       imagePullSecrets:
       - name: {{ .Values.global.imagePullSecret }}
       initContainers:
@@ -61,8 +63,10 @@ spec:
           echo "notification database ready"
       containers:
       - name: notificationservice
-        image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image) }}
+        image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image "digest" ($svc.digest | default "")) }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        securityContext:
+          {{- include "solar.containerSecurityContext" . | nindent 10 }}
         ports:
         - { name: http, containerPort: {{ $svc.port }} }
         env:

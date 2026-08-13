@@ -1,0 +1,289 @@
+# Production overlay for the single-node backend + IoT VPS.
+#
+# Secrets are deliberately NOT stored here. Before the first release create:
+#   - solar-secrets
+#   - ghcr-pull
+#   - solar-monitoring-secrets
+# The production Jenkins job validates them before Helm is allowed to run.
+
+global:
+  namespace: solar-prod
+  domain: solars.io.vn
+  frontendOrigin: https://solars.io.vn
+  aspnetEnvironment: Production
+  tlsIssuer: letsencrypt-prod
+  imagePullPolicy: IfNotPresent
+  rollingUpdate:
+    # A 4-vCPU/8-GiB single node cannot safely double all nine services during rollout.
+    maxUnavailable: 1
+    maxSurge: 0
+
+services:
+  apigateway:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  authservice:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    autoscaling: { enabled: false }
+    dataProtectionKeys:
+      storage: 256Mi
+      storageClass: local-path
+  emailservice:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  smsservice:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  filestorageservice:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  batteryservice:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    autoscaling: { enabled: false }
+    firmwareStorage:
+      enabled: true
+      storageClass: local-path
+      size: 5Gi
+  ticketservice:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    autoscaling: { enabled: false }
+  notificationservice:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    autoscaling: { enabled: false }
+  auditaggregatorservice:
+    replicas: 1
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    autoscaling: { enabled: false }
+
+postgres:
+  image: timescale/timescaledb:2.17.2-pg16
+  clientImage: postgres:16.6-alpine
+  storage: 20Gi
+  backup:
+    schedule: "0 */6 * * *"
+    bucket: postgres-backups
+    retentionDays: 14
+
+redis:
+  image: redis:7.4.2-alpine
+  appendOnly: true
+  storage: 3Gi
+
+rabbitmq:
+  image: rabbitmq:3.13.7-management-alpine
+  username: solar-app
+  virtualHost: /solar-prod
+  storage: 5Gi
+  ingress:
+    # RabbitMQ AMQP and management remain ClusterIP-only. Use kubectl port-forward.
+    enabled: false
+
+minio:
+  image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+  clientImage: minio/mc:RELEASE.2025-04-16T18-13-26Z
+  storage: 30Gi
+  ingress:
+    enabled: true
+  consoleIngress:
+    enabled: false
+  # Keep MinIO metrics authenticated. Availability is still covered by pod probes
+  # and FileStorageService metrics; enable only after provisioning a bearer token.
+  serviceMonitor:
+    enabled: false
+
+config:
+  DisableHttpsRedirection: "true"
+  RabbitMQ__Username: solar-app
+  RabbitMQ__VirtualHost: /solar-prod
+  ADMIN_EMAIL: admin@solars.io.vn
+
+  # AI VPS: gRPC over HTTP/2 on 443, HTTPS REST as fallback. Never append
+  # /docs: that path is only Swagger UI, not an application base URL.
+  Ai__Enabled: "true"
+  Ai__GrpcAddress: https://ai.solars.io.vn
+  Ai__HttpBaseUrl: https://ai.solars.io.vn
+  Ai__TimeoutSeconds: "5"
+  Ai__IntervalMinutes: "5"
+  Ai__MinReadings: "30"
+  Ai__MaxScanReadings: "60"
+  Ai__PrescriptionEnabled: "true"
+  TicketAi__Enabled: "true"
+  TicketAi__BatteryServiceBaseUrl: http://batteryservice:80
+  TicketAi__AiGrpcAddress: https://ai.solars.io.vn
+  TicketAi__BatteryGrpcAddress: http://batteryservice:8081
+  TicketAi__TimeoutSeconds: "5"
+  TicketAi__MaxDuplicateCandidates: "10"
+
+  # Mosquitto runs under Docker on the same VPS. The deploy job supplies a
+  # same-VPS/VPC address as iot.mqttNodeIp while TLS still validates this DNS name.
+  Mqtt__Enabled: "true"
+  Mqtt__Host: mqtt.solars.io.vn
+  Mqtt__Port: "8883"
+  Mqtt__PublicHost: mqtt.solars.io.vn
+  Mqtt__PublicPort: "8883"
+  Mqtt__UseTls: "true"
+  Mqtt__AllowUntrustedCertificates: "false"
+  Mqtt__Username: backend-bridge
+  Mqtt__ClientId: battery-service-bridge-production
+  Mqtt__CredentialSyncIntervalSeconds: "60"
+
+iot:
+  mqttPasswordSync:
+    enabled: true
+    hostPath: /opt/solar-iot/secrets/mosquitto/auth
+    mountPath: /mosquitto-config
+    fileName: passwd
+  mqttTlsCertificate:
+    enabled: true
+    secretName: mqtt-public-tls
+    dnsName: mqtt.solars.io.vn
+
+secrets:
+  externalSecretName: solar-secrets
+
+tempo:
+  enabled: true
+  image: grafana/tempo:2.6.1
+  storage: 5Gi
+  storageClass: local-path
+  retention: 48h
+
+monitoring:
+  alertmanagerDiscord:
+    enabled: true
+    image: ghcr.io/gsu26se55/alertmanager-discord@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  prometheusRules:
+    enabled: true
+  grafanaDashboards:
+    enabled: true
+  # kube-prometheus-stack already collects kubelet/cAdvisor metrics on k3s.
+  # A second privileged cAdvisor DaemonSet would duplicate series and add risk.
+  cadvisor:
+    enabled: false
+  blackbox:
+    enabled: true
+    image: prom/blackbox-exporter:v0.25.0
+    httpTargets:
+    - https://api.solars.io.vn/health
+    - https://files.solars.io.vn/minio/health/live
+    - https://ai.solars.io.vn/ready
+    mqttTarget: mqtt.solars.io.vn:8883
+    mqttServerName: mqtt.solars.io.vn
+
+kube-prometheus-stack:
+  enabled: true
+  defaultRules:
+    create: true
+  kubeEtcd: { enabled: false }
+  kubeControllerManager: { enabled: false }
+  kubeScheduler: { enabled: false }
+  prometheusOperator:
+    resources:
+      requests: { cpu: 25m, memory: 64Mi }
+      limits:   { cpu: 200m, memory: 256Mi }
+  kube-state-metrics:
+    resources:
+      requests: { cpu: 20m, memory: 48Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+  prometheus-node-exporter:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits:   { cpu: 100m, memory: 128Mi }
+  prometheus:
+    prometheusSpec:
+      retention: 7d
+      retentionSize: 8GB
+      scrapeInterval: 15s
+      evaluationInterval: 15s
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+        limits:   { cpu: 750m, memory: 1Gi }
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests: { storage: 10Gi }
+  alertmanager:
+    alertmanagerSpec:
+      resources:
+        requests: { cpu: 15m, memory: 48Mi }
+        limits:   { cpu: 150m, memory: 192Mi }
+  grafana:
+    admin:
+      existingSecret: solar-monitoring-secrets
+      userKey: admin-user
+      passwordKey: admin-password
+    resources:
+      requests: { cpu: 30m, memory: 128Mi }
+      limits:   { cpu: 300m, memory: 512Mi }
+    persistence:
+      enabled: true
+      storageClassName: local-path
+      size: 3Gi
+    ingress:
+      enabled: true
+      ingressClassName: traefik
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        traefik.ingress.kubernetes.io/router.tls: "true"
+      hosts: [grafana.solars.io.vn]
+      path: /
+      pathType: Prefix
+      tls:
+      - secretName: grafana-tls
+        hosts: [grafana.solars.io.vn]
+
+loki-stack:
+  enabled: true
+  loki:
+    persistence:
+      enabled: true
+      storageClassName: local-path
+      size: 10Gi
+    resources:
+      requests: { cpu: 50m, memory: 192Mi }
+      limits:   { cpu: 400m, memory: 768Mi }
+    serviceMonitor:
+      enabled: true
+      additionalLabels: { release: monitoring }
+  promtail:
+    enabled: true
+    resources:
+      requests: { cpu: 15m, memory: 48Mi }
+      limits:   { cpu: 150m, memory: 192Mi }
+    serviceMonitor:
+      enabled: true
+      labels: { release: monitoring }
+
+postgres-exporter:
+  enabled: true
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits:   { cpu: 100m, memory: 128Mi }
+  serviceMonitor:
+    enabled: true
+    labels: { release: monitoring }
+
+redis-exporter:
+  enabled: true
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits:   { cpu: 100m, memory: 128Mi }
+  serviceMonitor:
+    enabled: true
+    labels: { release: monitoring }
+
+resourceQuota:
+  enabled: true
+  requestsCpu: "4"
+  requestsMemory: 7Gi
+  limitsCpu: "12"
+  limitsMemory: 16Gi
+  pvcs: "20"
