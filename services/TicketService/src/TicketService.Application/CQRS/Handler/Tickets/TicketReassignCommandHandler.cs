@@ -1,13 +1,17 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
+using TicketService.Application.Common.Models;
+using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
@@ -22,23 +26,33 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;
+    private readonly ITicketActivationService _activationService;
+    private readonly int _currentWindowMinutes;
 
     public TicketReassignCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
-        IPublisher publisher)
+        IPublisher publisher,
+        ITicketActivationService activationService,
+        IOptions<TicketScheduleOptions>? scheduleOptions = null)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _outboxWriter = producer;
         _publisher = publisher;
+        _activationService = activationService;
+        _currentWindowMinutes = scheduleOptions?.Value.CurrentWindowMinutes ?? 5;
     }
 
     public async Task<TicketActionResponse> Handle(TicketReassignCommand request, CancellationToken ct)
     {
+        var nowUtc = DateTime.UtcNow;
+        var schedule = TicketScheduleClassifier.Classify(request.ScheduledStartAt, nowUtc, _currentWindowMinutes);
+        if (schedule.Kind == ScheduleKind.InvalidPast)
+            return Fail(400, "ScheduledStartAt cannot be older than the five-minute current window.");
         var ticket = await _uow.Tickets.GetAllAsync()
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
@@ -65,7 +79,8 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
             return Fail(403, $"Ticket priority {ticket.Priority} requires the PrimaryHandler to have tier {required}.");
         }
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Assigned, ActorRoleEnum.Manager, request.ManagerId);
+        var targetStatus = schedule.Kind == ScheduleKind.Future ? TicketStatusEnum.Pending : TicketStatusEnum.InProgress;
+        var transitionResult = _stateMachine.CanTransition(ticket, targetStatus, ActorRoleEnum.Manager, request.ManagerId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Reassignment not allowed.");
 
@@ -111,6 +126,10 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
             }
 
             ticket.PrimaryHandlerStaffId = request.NewPrimaryHandlerStaffId;
+            ticket.ScheduledStartAtUtc = schedule.ScheduledStartAtUtc;
+            ticket.ScheduleVersion++;
+            ticket.PendingContext = schedule.Kind == ScheduleKind.Future ? PendingContextEnum.Scheduled : null;
+            ticket.PendingReason = null;
 
             // TicketParticipants: old PrimaryAssignee → PreviousAssignee
             if (oldStaffId.HasValue)
@@ -123,7 +142,7 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
                 {
                     oldParticipant.ParticipantType = ParticipantTypeEnum.PreviousAssignee;
                     oldParticipant.CanPost = false;
-                    oldParticipant.CanViewInternal = true;
+                    oldParticipant.CanViewInternal = false; // PreviousAssignee: public view only after handover
                     _uow.TicketParticipants.UpdateAsync(oldParticipant);
                 }
             }
@@ -157,12 +176,31 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
                 });
             }
 
-            await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Assigned, new TransitionContext
+            // Persist reassignment before activation so the transactional outbox publishes the
+            // assigned/scheduled notification before the work-start notification.
+            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code,
+                request.NewPrimaryHandlerStaffId, ticket.Priority.ToString()!, ticket.CustomerId,
+                ticket.ScheduledStartAtUtc, ticket.ScheduleVersion,
+                targetStatus == TicketStatusEnum.InProgress), transactionCt);
+
+            if (targetStatus == TicketStatusEnum.Pending)
             {
-                ActorUserId = request.ManagerId,
-                ActorRole = ActorRoleEnum.Manager,
-                ActorDisplayName = request.ManagerName!
-            }, ct);
+                await _stateMachine.ExecuteAsync(ticket, targetStatus, new TransitionContext
+                {
+                    ActorUserId = request.ManagerId,
+                    ActorRole = ActorRoleEnum.Manager,
+                    ActorDisplayName = request.ManagerName!
+                }, transactionCt);
+            }
+            else
+            {
+                var activation = await _activationService.ActivateAsync(new ActivationRequest(
+                    ticket, request.NewPrimaryHandlerStaffId, ticket.ScheduleVersion, nowUtc,
+                    ActivationReason.Immediate, request.ManagerId, ActorRoleEnum.Manager,
+                    request.ManagerName ?? "Manager"), transactionCt);
+                if (!activation.Activated)
+                    throw new InvalidOperationException(activation.Conflict ?? "Ticket activation failed.");
+            }
 
             await _activityLogger.LogAsync(
                 ticket.Id,
@@ -173,8 +211,6 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
                 oldValue: oldStaffId?.ToString(),
                 newValue: request.NewPrimaryHandlerStaffId.ToString(),
                 reason: request.Reason);
-
-            await _outboxWriter.WriteAsync(new TicketAssignedEvent(ticket.Id, ticket.Code, request.NewPrimaryHandlerStaffId, ticket.Priority.ToString()!, ticket.CustomerId), ct);
 
             await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
                 TicketAuditActionEnum.AssignedToStaff, ticket.Id, targetDisplay: ticket.Code,

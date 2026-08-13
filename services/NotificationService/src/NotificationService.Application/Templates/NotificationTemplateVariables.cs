@@ -57,7 +57,11 @@ public static class NotificationTemplateVariables
             [NotificationTypeEnum.TicketCreated] =
                 ["ticketId", "code", "customerId", "priority", "screen"],
             [NotificationTypeEnum.TicketAssigned] =
-                ["ticketId", "code", "customerId", "priority", "staffId", "screen"],
+                ["ticketId", "code", "customerId", "priority", "staffId", "scheduledStartAtUtc", "workStartsImmediately", "screen"],
+            [NotificationTypeEnum.TicketWorkStarted] =
+                ["ticketId", "code", "startedAtUtc", "scheduleVersion", "activationReason", "screen"],
+            [NotificationTypeEnum.TicketScheduleChanged] =
+                ["ticketId", "code", "previousScheduledStartAtUtc", "scheduledStartAtUtc", "scheduleVersion", "screen"],
             [NotificationTypeEnum.TicketStatusChanged] =
                 ["ticketId", "code", "oldStatus", "newStatus", "oldStatusName", "newStatusName", "screen"],
             [NotificationTypeEnum.TicketResolved] =
@@ -73,7 +77,7 @@ public static class NotificationTemplateVariables
             [NotificationTypeEnum.TicketReopened] =
                 ["ticketId", "code", "reopenReason", "reopenCount", "reopenedAt", "screen"],
             [NotificationTypeEnum.TicketRatingRequested] =
-                ["ticketId", "code", "approvedAt", "daysPending", "daysUntilAutoClose", "screen"],
+                ["ticketId", "code", "approvedAt", "daysPending", "daysUntilRatingDeadline", "screen"],
             [NotificationTypeEnum.TicketMerged] =
                 ["sourceTicketId", "masterTicketId"],
 

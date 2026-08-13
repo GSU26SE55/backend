@@ -42,8 +42,7 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
             //    khi phân công. Ticket Open do người triage thủ công KHÔNG lọt vào —
             //    mức ưu tiên của chúng đã có người chịu trách nhiệm.
             .Where(t => !t.IsDeleted && t.MergedIntoTicketId == null &&
-                        (t.Status == TicketStatusEnum.New ||
-                         (t.Status == TicketStatusEnum.Open && t.Origin == TicketOriginEnum.AutoFromAlert)));
+                        t.Status == TicketStatusEnum.Open);
 
         if (request.Priority.HasValue)
             query = query.Where(t => t.Priority == request.Priority.Value);
@@ -54,8 +53,11 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
         // Ticket New chưa có Priority (null). Postgres xếp NULL CUỐI khi ORDER BY ASC, nên
         // nếu sort thẳng theo Priority thì ticket chưa triage bị đẩy xuống sau ticket auto —
         // ngược với ý nghĩa hàng chờ. Ưu tiên nhóm New lên trước, rồi mới P1→P2→P3.
-        query = query.OrderBy(t => t.Priority == null ? 0 : 1)
-            .ThenBy(t => t.Priority).ThenBy(t => t.CreatedAt)
+        query = query.OrderBy(t => t.Priority == TicketPriorityEnum.Urgent ? 0
+                                  : t.Priority == TicketPriorityEnum.P1Critical ? 1
+                                  : t.Priority == TicketPriorityEnum.P2High ? 2
+                                  : t.Priority == TicketPriorityEnum.P3Normal ? 3 : 4)
+            .ThenBy(t => t.CreatedAt)
             .ThenBy(t => t.Id); // tie-breaker cố định — pagination ổn định
 
         // Phân trang trên entity: sau đó còn phải truy vấn phụ (chat chưa đọc) rồi mới dựng DTO,

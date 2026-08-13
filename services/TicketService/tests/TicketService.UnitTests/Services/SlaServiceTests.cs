@@ -32,7 +32,7 @@ public class SlaServiceTests
         var service = new SlaService(uow.Object);
 
         // Act
-        await service.PauseSlaAsync(ticketId, PauseReasonEnum.WaitingParts, "Note", userId, CancellationToken.None);
+        await service.PauseSlaAsync(ticketId, PauseReasonEnum.WorkBlocked, "Note", userId, CancellationToken.None);
 
         // Assert
         slaTimer.Status.Should().Be(SlaTimerStatusEnum.Paused);
@@ -40,7 +40,7 @@ public class SlaServiceTests
         slaTimer.PauseEpisodesCount.Should().Be(1);
 
         pauseEvents.Should().HaveCount(1);
-        pauseEvents[0].Reason.Should().Be(PauseReasonEnum.WaitingParts);
+        pauseEvents[0].Reason.Should().Be(PauseReasonEnum.WorkBlocked);
         pauseEvents[0].Note.Should().Be("Note");
         pauseEvents[0].PausedByUserId.Should().Be(userId);
     }
@@ -66,7 +66,7 @@ public class SlaServiceTests
         {
             Id = Guid.NewGuid(),
             SlaTimerId = slaTimer.Id,
-            Reason = PauseReasonEnum.WaitingParts,
+            Reason = PauseReasonEnum.WorkBlocked,
             PausedAt = DateTime.UtcNow.AddMinutes(-30),
             PausedByUserId = userId
         };

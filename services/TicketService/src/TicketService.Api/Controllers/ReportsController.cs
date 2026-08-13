@@ -20,7 +20,7 @@ namespace TicketService.Api.Controllers;
 /// <c>granularity</c>: <c>day</c>/<c>week</c>/<c>month</c>.
 ///
 /// <b>SLA:</b> "met" / "breached" lấy từ <c>SlaTimerStatusEnum</c> (Met/Breached); "resolved" =
-/// Status ∈ {Resolved, ClosedPendingRate, Closed}.
+/// Status ∈ {Completed, Closed}.
 ///
 /// <b>Quyền:</b> Admin/Manager cho mọi report; riêng <c>saga-failed-rate</c> chỉ Admin (SRE demo).
 /// Route phẳng <c>api/reports/...</c>.

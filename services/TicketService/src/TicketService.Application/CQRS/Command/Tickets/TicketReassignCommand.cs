@@ -15,6 +15,7 @@ public class TicketReassignCommand : IRequest<TicketActionResponse>, IValidatabl
     /// Staff mới được chỉ định làm PrimaryHandler — phải đủ tier theo priority của ticket.
     /// </summary>
     public Guid NewPrimaryHandlerStaffId { get; set; }
+    public DateTimeOffset ScheduledStartAt { get; set; }
 
     public string Reason { get; set; } = string.Empty;
 
@@ -33,6 +34,8 @@ public class TicketReassignCommand : IRequest<TicketActionResponse>, IValidatabl
 
         if (NewPrimaryHandlerStaffId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "NewPrimaryHandlerStaffId", Detail = "Invalid NewPrimaryHandlerStaffId." });
+        if (ScheduledStartAt == default)
+            response.ListErrors.Add(new Errors { Field = "ScheduledStartAt", Detail = "A required offset-aware schedule must be provided." });
 
         if (string.IsNullOrWhiteSpace(Reason))
             response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Reassignment reason must not be empty." });

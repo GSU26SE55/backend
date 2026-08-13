@@ -9,8 +9,10 @@ namespace AuthService.UnitTests.Handlers.Accounts;
 
 public class GetStaffQueryHandlerTests
 {
-    [Fact]
-    public async Task Handle_P1Priority_ReturnsOnlyAvailableActiveSeniorSpecialists()
+    [Theory]
+    [InlineData("P1Critical")]
+    [InlineData("Urgent")]
+    public async Task Handle_SeniorPriority_ReturnsOnlyAvailableActiveSeniorSpecialists(string priority)
     {
         var eligibleAccount = CreateAccount("tier3@example.com", AccountStatusEnum.Active);
         var lowerTierAccount = CreateAccount("tier2@example.com", AccountStatusEnum.Active);
@@ -27,7 +29,7 @@ public class GetStaffQueryHandlerTests
             staffProfileSeed: profiles);
 
         var response = await new GetStaffQueryHandler(uow.Object).Handle(
-            new GetStaffQuery { TicketPriority = "P1Critical" }, CancellationToken.None);
+            new GetStaffQuery { TicketPriority = priority }, CancellationToken.None);
 
         response.IsSuccess.Should().BeTrue();
         response.Data.Should().ContainSingle();

@@ -27,7 +27,10 @@ public class IntegrationEventOutboxWriter : IIntegrationEventOutboxWriter
     {
         var message = new OutboxMessage
         {
-            Id = Guid.NewGuid(),
+            // Use the integration-event identity as the outbox primary key. Random events still
+            // receive a random ID from IntegrationEvent; deterministic events gain a database
+            // uniqueness barrier across retries and concurrent producers.
+            Id = @event.Id,
             AggregateId = @event.Id,
             Type = typeof(TEvent).Name,
             Payload = JsonSerializer.Serialize<object>(@event),

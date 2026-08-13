@@ -7,6 +7,7 @@ using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Enums;
@@ -20,19 +21,22 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
+    private readonly ITicketActivationService _slaTransitions;
 
     public TicketRejectCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
-        IPublisher publisher)
+        IPublisher publisher,
+        ITicketActivationService slaTransitions)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _outboxWriter = producer;
         _publisher = publisher;
+        _slaTransitions = slaTransitions;
     }
 
     public async Task<TicketActionResponse> Handle(TicketRejectCommand request, CancellationToken ct)
@@ -63,6 +67,8 @@ public class TicketRejectCommandHandler : IRequestHandler<TicketRejectCommand, T
             ActorDisplayName = request.ManagerName!,
             Payload = new Dictionary<string, object?> { { "Reason", request.Reason } }
         }, ct);
+
+        await _slaTransitions.StartCorrectionSlaAsync(ticket, DateTime.UtcNow, ct);
 
         await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Rejected, reason: request.Reason);
 

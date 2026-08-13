@@ -29,16 +29,11 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
     // Lệch danh sách này với index → idempotency check cho qua rồi INSERT vỡ 23505.
     private static readonly TicketStatusEnum[] ActiveStatuses =
     {
-        TicketStatusEnum.New,
         TicketStatusEnum.Open,
-        TicketStatusEnum.Assigned,
+        TicketStatusEnum.Pending,
         TicketStatusEnum.InProgress,
-        TicketStatusEnum.WaitingCustomer,
-        TicketStatusEnum.WaitingParts,
-        TicketStatusEnum.WaitingOnsiteSchedule,
-        TicketStatusEnum.Escalated,
-        TicketStatusEnum.Incident,
-        TicketStatusEnum.Open
+        TicketStatusEnum.Request,
+        TicketStatusEnum.ReAssign
     };
 
     public CreateTicketFromAlertConsumer(

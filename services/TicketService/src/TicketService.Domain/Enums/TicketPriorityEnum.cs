@@ -10,5 +10,7 @@ public enum TicketPriorityEnum
     /// <summary>Cao.</summary>
     P2High = 2,
     /// <summary>Bình thường.</summary>
-    P3Normal = 3
+    P3Normal = 3,
+    /// <summary>Urgent work is tracked but never consumes an SLA timer.</summary>
+    Urgent = 4
 }

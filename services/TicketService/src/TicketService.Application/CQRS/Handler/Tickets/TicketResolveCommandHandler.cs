@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Enums;
@@ -21,19 +22,22 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
+    private readonly ITicketActivationService _slaTransitions;
 
     public TicketResolveCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
-        IPublisher publisher)
+        IPublisher publisher,
+        ITicketActivationService slaTransitions)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _outboxWriter = producer;
         _publisher = publisher;
+        _slaTransitions = slaTransitions;
     }
 
     public async Task<TicketActionResponse> Handle(TicketResolveCommand request, CancellationToken ct)
@@ -63,7 +67,7 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
                 return Fail(403, "A higher Staff Tier is required for SkillGap escalation.");
         }
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Resolved, ActorRoleEnum.Staff, request.StaffId);
+        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Completed, ActorRoleEnum.Staff, request.StaffId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot resolve.");
 
@@ -82,13 +86,15 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         }
 
         ticket.ResolutionSummary = request.ResolutionSummary;
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Resolved, new TransitionContext
+        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Completed, new TransitionContext
         {
             ActorUserId = request.StaffId,
             ActorRole = ActorRoleEnum.Staff,
             ActorDisplayName = request.StaffName!,
             Payload = new Dictionary<string, object?> { { "ResolutionSummary", request.ResolutionSummary } }
         }, ct);
+
+        await _slaTransitions.CompleteSlaAsync(ticket, ct);
 
         var action = ticket.EscalatedAt.HasValue ? ActivityActionEnum.ResolvedByEscalatedStaff : ActivityActionEnum.Resolved;
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, action, newValue: request.ResolutionSummary);
@@ -106,7 +112,7 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Ticket resolved.",
+            Message = "Ticket completed and is awaiting Manager review.",
             Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),

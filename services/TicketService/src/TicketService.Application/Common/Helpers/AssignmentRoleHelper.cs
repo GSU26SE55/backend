@@ -13,6 +13,7 @@ public static class AssignmentRoleHelper
         return priority switch
         {
             TicketPriorityEnum.P1Critical => tier >= StaffSkillTierEnum.SeniorSpecialist,
+            TicketPriorityEnum.Urgent => tier >= StaffSkillTierEnum.SeniorSpecialist,
             TicketPriorityEnum.P2High => tier >= StaffSkillTierEnum.ModuleSpecialist,
             TicketPriorityEnum.P3Normal => tier >= StaffSkillTierEnum.Generalist,
             _ => false
@@ -22,6 +23,7 @@ public static class AssignmentRoleHelper
     public static string GetTierRequirementMessage(TicketPriorityEnum priority) => priority switch
     {
         TicketPriorityEnum.P1Critical => "SeniorSpecialist (Tier 3)",
+        TicketPriorityEnum.Urgent => "SeniorSpecialist (Tier 3)",
         TicketPriorityEnum.P2High => "ModuleSpecialist (Tier 2) or higher",
         TicketPriorityEnum.P3Normal => "Generalist (Tier 1) or higher",
         _ => "unknown"

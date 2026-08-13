@@ -7,6 +7,7 @@
 .env.Production
 .env.Staging
 .env.local
+docker-compose.override.yml
 # COMMIT: .env.Docker.example (template, không có secret)
 
 # ---------- .NET build outputs ----------

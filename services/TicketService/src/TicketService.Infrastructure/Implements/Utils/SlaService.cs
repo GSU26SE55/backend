@@ -92,37 +92,11 @@ public class SlaService : ISlaService
     }
 
     public async Task PauseForCustomerInfoAsync(Guid ticketId, Guid chatId, Guid userId, CancellationToken ct)
-        => await PauseSlaAsync(ticketId, PauseReasonEnum.AwaitingCustomerChat,
-               $"Auto-paused: Staff requested customer info via chat {chatId}", userId, ct);
+        => await Task.CompletedTask;
 
     public async Task ResumeOnCustomerReplyAsync(Guid ticketId, Guid userId, CancellationToken ct)
     {
-        if (await IsClosedOrMergedAsync(ticketId, ct))
-            return;
-        var slaTimer = await _uow.SlaTimers.GetAllAsync()
-            .FirstOrDefaultAsync(st => st.TicketId == ticketId && st.Status == SlaTimerStatusEnum.Paused && !st.IsDeleted, ct);
-
-        if (slaTimer == null)
-            return;
-
-        var openPause = await _uow.SlaPauseEvents.GetAllAsync()
-            .Where(pe => pe.SlaTimerId == slaTimer.Id && pe.ResumedAt == null && !pe.IsDeleted)
-            .OrderByDescending(pe => pe.PausedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (openPause == null || openPause.Reason != PauseReasonEnum.AwaitingCustomerChat)
-            return;
-
-        openPause.ResumedAt = DateTime.UtcNow;
-        openPause.ResumedByUserId = userId;
-
-        var duration = (int)(openPause.ResumedAt.Value - openPause.PausedAt).TotalMinutes;
-        openPause.DurationMinutes = duration;
-
-        slaTimer.TotalPausedMinutes += duration;
-        slaTimer.DueAt = slaTimer.DueAt.AddMinutes(duration);
-        slaTimer.Status = SlaTimerStatusEnum.Running;
-        slaTimer.CurrentPauseStartedAt = null;
+        await Task.CompletedTask;
     }
 
     private Task<bool> IsClosedOrMergedAsync(Guid ticketId, CancellationToken ct) =>

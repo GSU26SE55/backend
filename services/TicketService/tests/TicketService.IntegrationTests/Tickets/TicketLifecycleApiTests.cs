@@ -70,30 +70,18 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         createRes.StatusCode.Should().Be(HttpStatusCode.Created);
         var ticket = (await createRes.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions))!.Data!;
 
-        // 2. Triage Ticket (Manager)
-        var triageCmd = new TicketTriageCommand
-        {
-            Impact = ImpactScopeEnum.SingleAsset,
-            Urgency = UrgencyLevelEnum.Medium,
-            ManagerComment = "Approved for processing"
-        };
-        var triageRes = await _client.PostAsJsonAsync($"/api/admin/tickets/{ticket.Id}/triage", triageCmd);
-        triageRes.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        // 3. Assign Ticket (Manager)
+        // 2. Assign Ticket for immediate work (Manager)
         var assignCmd = new TicketAssignCommand
         {
             PrimaryHandlerStaffId = Guid.Parse(TestAuthHandler.UserId),
+            Priority = TicketPriorityEnum.P3Normal,
+            ScheduledStartAt = DateTimeOffset.UtcNow,
             Notes = "Assigned to staff"
         };
         var assignRes = await _client.PostAsJsonAsync($"/api/admin/tickets/{ticket.Id}/assign", assignCmd);
         assignRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 4. Start Ticket (Staff)
-        var startRes = await _client.PostAsJsonAsync($"/api/staff/tickets/{ticket.Id}/start", new { });
-        startRes.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        // 5. Resolve Ticket (Staff)
+        // 3. Resolve Ticket (Staff)
         var resolveCmd = new TicketResolveCommand
         {
             ResolutionSummary = "Fixed by integration test"
@@ -101,11 +89,11 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         var resolveRes = await _client.PostAsJsonAsync($"/api/staff/tickets/{ticket.Id}/resolve", resolveCmd);
         resolveRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 6. Approve Ticket (Manager)
+        // 4. Approve Ticket (Manager)
         var approveRes = await _client.PostAsJsonAsync($"/api/admin/tickets/{ticket.Id}/approve", new { });
         approveRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var finalTicket = (await approveRes.Content.ReadFromJsonAsync<TicketActionResponse>(_jsonOptions))!.Data!;
-        finalTicket.Status.Should().Be(TicketStatusEnum.ClosedPendingRate);
+        finalTicket.Status.Should().Be(TicketStatusEnum.Closed);
     }
 }

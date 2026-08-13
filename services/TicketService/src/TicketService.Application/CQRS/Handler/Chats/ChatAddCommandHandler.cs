@@ -12,11 +12,9 @@ using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
-using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
-using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -38,8 +36,6 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
     private readonly IGroupMentionResolverService _groupMentionResolver;
     private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.create/mention
     private readonly IChatCacheService _chatCache;
-    private readonly ISlaService _slaService;
-    private readonly ITicketStateMachine _stateMachine;
     private readonly IChatRecipientResolver _recipientResolver;
 
 
@@ -57,8 +53,6 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         IIntegrationEventOutboxWriter outboxWriter,
         IGroupMentionResolverService groupMentionResolver,
         IChatCacheService chatCache,
-        ISlaService slaService,
-        ITicketStateMachine stateMachine,
         IChatRecipientResolver recipientResolver,
         IPublisher publisher)
     {
@@ -76,8 +70,6 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
         _outboxWriter = outboxWriter;
         _groupMentionResolver = groupMentionResolver;
         _chatCache = chatCache;
-        _slaService = slaService;
-        _stateMachine = stateMachine;
         _recipientResolver = recipientResolver;
     }
 
@@ -102,6 +94,23 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
 
         if (!_chatAuthorizationService.CanCreateChat(request.IsInternal, request.UserPermissions))
             return Fail(403, request.IsInternal ? "You do not have permission to create internal messages." : "You do not have permission to create messages.");
+
+        // Supporter and PreviousPrimaryHandler may only post internal messages.
+        // Posting to the public channel is reserved for PrimaryHandler, Manager, and Admin.
+        // GetAllAsync() returns IQueryable — do NOT await (be-rules §3); filter !IsDeleted manually.
+        if (!request.IsInternal && request.UserRole == ActorRoleEnum.Staff)
+        {
+            var assignmentRole = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == request.TicketId
+                    && a.StaffId == request.UserId
+                    && !a.IsDeleted)
+                .Select(a => (AssignmentRoleEnum?)a.Role)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (assignmentRole == AssignmentRoleEnum.Supporter
+                || assignmentRole == AssignmentRoleEnum.PreviousPrimaryHandler)
+                return Fail(403, "Supporters and previous handlers can only post internal messages.");
+        }
 
         var spamLease = await _spamDetector.TryAcquireLeaseAsync(request.TicketId, request.UserId, cancellationToken);
         if (spamLease is null)
@@ -324,41 +333,6 @@ public class ChatAddCommandHandler : IRequestHandler<ChatAddCommand, TicketActio
                 ticket.CustomerId,
                 ticket.PrimaryHandlerStaffId,
                 recipientIds), cancellationToken);
-
-            if (request.RequestCustomerInfo &&
-                request.UserRole is ActorRoleEnum.Staff or ActorRoleEnum.Manager or ActorRoleEnum.Admin)
-            {
-                await _slaService.PauseForCustomerInfoAsync(ticket.Id, chat.Id, request.UserId, cancellationToken);
-            }
-
-            if (request.UserRole == ActorRoleEnum.Customer)
-            {
-                if (ticket.Status == TicketStatusEnum.WaitingCustomer)
-                {
-                    var oldStatus = ticket.Status;
-                    await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.InProgress, new TransitionContext
-                    {
-                        ActorUserId = Guid.Empty,
-                        ActorRole = ActorRoleEnum.System,
-                        ActorDisplayName = "System"
-                    }, cancellationToken);
-
-                    await _slaService.ResumeSlaAsync(ticket.Id, request.UserId, cancellationToken);
-                    await _activityLogger.LogAsync(ticket.Id, request.UserId, ActorRoleEnum.Customer,
-                        request.UserDisplayName, ActivityActionEnum.SlaResumed,
-                        oldValue: oldStatus.ToString(), newValue: TicketStatusEnum.InProgress.ToString());
-                    await _outboxWriter.WriteAsync(new TicketStatusChangedIntegrationEvent(
-                        ticket.Id, ticket.Code, oldStatus, TicketStatusEnum.InProgress), cancellationToken);
-                    await _outboxWriter.WriteAsync(new TicketStatusChangedEvent(
-                        ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId,
-                        (int)oldStatus, (int)TicketStatusEnum.InProgress,
-                        oldStatus.ToString(), nameof(TicketStatusEnum.InProgress)), cancellationToken);
-                }
-                else
-                {
-                    await _slaService.ResumeOnCustomerReplyAsync(ticket.Id, request.UserId, cancellationToken);
-                }
-            }
 
             await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
                 TicketService.Domain.Enums.TicketAuditActionEnum.ChatCreated, ticket.Id, targetDisplay: ticket.Code,

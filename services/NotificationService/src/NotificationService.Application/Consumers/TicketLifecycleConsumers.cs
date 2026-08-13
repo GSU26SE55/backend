@@ -294,7 +294,7 @@ public class TicketReopenedConsumer : IConsumer<TicketReopenedEvent>
     }
 }
 
-/// <summary>Nhắc Customer đánh giá ticket đang treo ở CLOSED_PENDING_RATE.</summary>
+/// <summary>Reminds the Customer to rate an eligible unrated Closed ticket.</summary>
 public class TicketRatingRequestedConsumer : IConsumer<TicketRatingRequestedEvent>
 {
     private readonly INotificationUnitOfWork _unitOfWork;
@@ -320,9 +320,9 @@ public class TicketRatingRequestedConsumer : IConsumer<TicketRatingRequestedEven
                 return;
 
             var title = $"Please rate ticket {evt.Code}";
-            var body = evt.DaysUntilAutoClose > 0
+            var body = evt.DaysUntilRatingDeadline > 0
                 ? $"Ticket {evt.Code} was resolved {evt.DaysPending} day(s) ago. Please rate it within " +
-                  $"the next {evt.DaysUntilAutoClose} day(s), after which the ticket will close automatically."
+                  $"the next {evt.DaysUntilRatingDeadline} day(s) before the rating window expires."
                 : $"Ticket {evt.Code} was resolved {evt.DaysPending} day(s) ago. Please rate it to complete the process.";
             var payload = JsonSerializer.Serialize(new
             {
@@ -330,7 +330,7 @@ public class TicketRatingRequestedConsumer : IConsumer<TicketRatingRequestedEven
                 code = evt.Code,
                 approvedAt = evt.ApprovedAt,
                 daysPending = evt.DaysPending,
-                daysUntilAutoClose = evt.DaysUntilAutoClose,
+                daysUntilRatingDeadline = evt.DaysUntilRatingDeadline,
                 screen = "TicketRate"
             });
 

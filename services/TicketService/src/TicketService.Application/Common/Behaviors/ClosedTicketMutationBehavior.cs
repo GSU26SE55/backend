@@ -2,6 +2,7 @@ using System.Reflection;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using TicketService.Application.CQRS.Command.Chats;
+using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
@@ -46,6 +47,8 @@ public sealed class ClosedTicketMutationBehavior<TRequest, TResponse> : IPipelin
     }
 
     private static bool UsesCommandSpecificClosedTicketPolicy(TRequest request) => request is
+        TicketRateCommand or
+        TicketReopenCommand or
         ChatDeleteCommand or
         ChatReplyCommand or
         ChatRestoreCommand or

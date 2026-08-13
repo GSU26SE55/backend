@@ -74,6 +74,22 @@ public sealed class TicketReprioritizeCommandHandler : IRequestHandler<TicketRep
             ticket.UrgencyLevel = request.Urgency;
             ticket.Priority = priority;
 
+            if (ticket.ReopenCount > 0 && ticket.IsIncident && priority != TicketPriorityEnum.Urgent)
+            {
+                await _activityLogger.LogAsync(
+                    ticket.Id,
+                    request.ManagerId,
+                    ActorRoleEnum.Manager,
+                    request.ManagerName,
+                    ActivityActionEnum.IncidentDeclassified,
+                    oldValue: ticket.ActiveIncidentEpisodeId?.ToString(),
+                    newValue: priority.ToString(),
+                    reason: request.Reason);
+
+                ticket.IsIncident = false;
+                ticket.ActiveIncidentEpisodeId = null;
+            }
+
             var timer = await _uow.SlaTimers.GetAllAsync()
                 .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, token);
 

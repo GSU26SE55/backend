@@ -178,7 +178,7 @@ public class TicketKbReferenceHandlerTests
     public async Task Add_ResolvedTicket_AfterResolveTypes_Returns200(KbReferenceTypeEnum referenceType)
     {
         _currentUserMock.Setup(s => s.Role).Returns("Admin");
-        var ticket = BuildTicket(TicketStatusEnum.Resolved);
+        var ticket = BuildTicket(TicketStatusEnum.Completed);
         var article = BuildArticle();
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, kbRefs, _) = MockTicketUnitOfWork.BuildExtended(
@@ -203,7 +203,7 @@ public class TicketKbReferenceHandlerTests
     public async Task Add_ResolvedTicket_ConsultedDuringResolve_Returns409()
     {
         _currentUserMock.Setup(s => s.Role).Returns("Admin");
-        var ticket = BuildTicket(TicketStatusEnum.Resolved);
+        var ticket = BuildTicket(TicketStatusEnum.Completed);
         var article = BuildArticle();
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -224,7 +224,6 @@ public class TicketKbReferenceHandlerTests
     }
 
     [Theory]
-    [InlineData(TicketStatusEnum.ClosedPendingRate)]
     [InlineData(TicketStatusEnum.Closed)]
     public async Task Add_ClosedTicket_AfterResolveTypes_StillReturns409(TicketStatusEnum status)
     {

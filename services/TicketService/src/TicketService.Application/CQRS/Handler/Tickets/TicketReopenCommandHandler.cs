@@ -13,114 +13,79 @@ using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
 
-public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, TicketActionResponse>
+public sealed class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, TicketActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
-    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
-    public TicketReopenCommandHandler(
-        ITicketUnitOfWork uow,
-        ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger,
-        IIntegrationEventOutboxWriter producer,
-        IPublisher publisher)
+    public TicketReopenCommandHandler(ITicketUnitOfWork uow, ITicketStateMachine stateMachine,
+        IActivityLogger activityLogger, IIntegrationEventOutboxWriter outboxWriter, IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _outboxWriter = producer;
-        _publisher = publisher;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<TicketActionResponse> Handle(TicketReopenCommand request, CancellationToken ct)
     {
         var ticket = await _uow.Tickets.GetAllAsync()
-            .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
-
-        if (ticket == null)
+            .FirstOrDefaultAsync(x => x.Id == request.TicketId && !x.IsDeleted, ct);
+        if (ticket is null)
             return Fail(404, "Ticket not found.");
+        if (ticket.CustomerId != request.CustomerId)
+            return Fail(403, "Only the ticket owner can reopen this ticket.");
+        if (ticket.Status != TicketStatusEnum.Closed || ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate)
+            return Fail(409, "Only a non-merged Closed ticket can be reopened.");
+        if (ticket.RatedAt.HasValue || ticket.Rating.HasValue)
+            return Fail(409, "A rated ticket cannot be reopened.");
+        if (!ticket.ClosedAt.HasValue || DateTime.UtcNow - ticket.ClosedAt.Value > TimeSpan.FromDays(7))
+            return Fail(409, "The seven-day reopen window has expired.");
 
-        // BR-06: Customer reopens within 7 days
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, request.CustomerId);
-        if (!transitionResult.IsAllowed)
-            return Fail(403, transitionResult.Reason ?? "Cannot reopen ticket.");
+        var transition = _stateMachine.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, request.CustomerId);
+        if (!transition.IsAllowed)
+            return Fail(403, transition.Reason ?? "The ticket cannot be reopened.");
 
-        // Execute reopen transition
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Open, new TransitionContext
+        await _uow.ExecuteInTransactionAsync(async transactionCt =>
         {
-            ActorUserId = request.CustomerId,
-            ActorRole = ActorRoleEnum.Customer,
-            ActorDisplayName = request.CustomerName!,
-            Payload = new Dictionary<string, object?> { { "ReopenReason", request.ReopenReason } }
-        }, ct);
-
-        await _activityLogger.LogAsync(ticket.Id, request.CustomerId, ActorRoleEnum.Customer, request.CustomerName, ActivityActionEnum.Reopened, newValue: request.ReopenReason);
-
-        // Outbox: Ticket Reopened
-        await _outboxWriter.WriteAsync(new TicketReopenedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason), ct);
-
-        // Sprint 6.2 NOTI-07 (#678) — bản SharedContracts cho NotificationService (notify Manager + Staff).
-        await _outboxWriter.WriteAsync(new TicketReopenedEvent(
-            ticket.Id, ticket.Code, ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ReopenReason,
-            ticket.ReopenCount, DateTime.UtcNow), ct);
-
-        // BR-07: Auto-escalate if ReopenCount >= 2
-        if (ticket.ReopenCount >= 2)
-        {
-            var escalateResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.System, Guid.Empty);
-            if (escalateResult.IsAllowed)
+            await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Open, new TransitionContext
             {
-                var reason = EscalationReasonEnum.CustomerComplaint;
-                var note = $"Automatically escalated due to repeated reopening ({ticket.ReopenCount}).";
+                ActorUserId = request.CustomerId,
+                ActorRole = ActorRoleEnum.Customer,
+                ActorDisplayName = request.CustomerName ?? "Customer",
+                Payload = new() { ["ReopenReason"] = request.ReopenReason.Trim() }
+            }, transactionCt);
 
-                await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Escalated, new TransitionContext
-                {
-                    ActorUserId = Guid.Empty,
-                    ActorRole = ActorRoleEnum.System,
-                    ActorDisplayName = "System",
-                    Payload = new Dictionary<string, object?>
-                    {
-                        { "EscalationReason", reason },
-                        { "Note", note }
-                    }
-                }, ct);
-
-                await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System", ActivityActionEnum.Escalated, newValue: reason.ToString(), reason: note);
-
-                await _outboxWriter.WriteAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, reason, note, null, null), ct);
+            var activeAssignments = await _uow.TicketAssignments.GetAllAsync()
+                .Where(x => x.TicketId == ticket.Id && !x.IsDeleted && x.Role == AssignmentRoleEnum.PrimaryHandler)
+                .ToListAsync(transactionCt);
+            foreach (var assignment in activeAssignments)
+            {
+                assignment.Role = AssignmentRoleEnum.PreviousPrimaryHandler;
+                _uow.TicketAssignments.UpdateAsync(assignment);
             }
-        }
 
-        // #AUDIT-26
-        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
-            TicketAuditActionEnum.ReopenedByAdmin, ticket.Id, targetDisplay: ticket.Code), ct);
-
-        await _uow.SaveChangesAsync(ct);
+            await _activityLogger.LogAsync(ticket.Id, request.CustomerId, ActorRoleEnum.Customer,
+                request.CustomerName, ActivityActionEnum.Reopened, newValue: request.ReopenReason.Trim());
+            await _outboxWriter.WriteAsync(new TicketReopenedIntegrationEvent(
+                ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason.Trim()), transactionCt);
+            await _outboxWriter.WriteAsync(new TicketReopenedEvent(
+                ticket.Id, ticket.Code, ticket.CustomerId, null,
+                request.ReopenReason.Trim(), ticket.ReopenCount, DateTime.UtcNow), transactionCt);
+            await _uow.SaveChangesAsync(transactionCt);
+        }, ct);
 
         return new TicketActionResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = ticket.Status == TicketStatusEnum.Escalated ? "Ticket has been reopened and automatically escalated." : "Ticket has been reopened.",
-            Data = new TicketActionDTO
-            {
-                Id = ticket.Id.ToString(),
-                Code = ticket.Code,
-                Status = ticket.Status
-            }
+            Message = "Ticket reopened for Manager planning.",
+            Data = new TicketActionDTO { Id = ticket.Id.ToString(), Code = ticket.Code, Status = ticket.Status }
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message)
-    {
-        return new TicketActionResponse
-        {
-            IsSuccess = false,
-            StatusCode = statusCode,
-            Message = message,
-        };
-    }
+    private static TicketActionResponse Fail(int code, string message) => new()
+    { IsSuccess = false, StatusCode = code, Message = message };
 }

@@ -402,7 +402,9 @@ public class TicketDataSeeder
             Priority = TicketPriorityEnum.P3Normal,
             ImpactScope = ImpactScopeEnum.SingleAsset,
             UrgencyLevel = UrgencyLevelEnum.Low,
-            Status = TicketStatusEnum.WaitingCustomer,
+            Status = TicketStatusEnum.Pending,
+            PendingContext = PendingContextEnum.Held,
+            PendingReason = PauseReasonEnum.CustomerUnavailable,
             Origin = TicketOriginEnum.CreatedByStaff,
             IsIncident = false,
             CreatedAt = now.AddDays(-10)
@@ -419,7 +421,7 @@ public class TicketDataSeeder
             Priority = TicketPriorityEnum.P1Critical,
             ImpactScope = ImpactScopeEnum.Site,
             UrgencyLevel = UrgencyLevelEnum.High,
-            Status = TicketStatusEnum.Resolved,
+            Status = TicketStatusEnum.Completed,
             Origin = TicketOriginEnum.AutoFromAlert,
             OriginAlertId = Guid.NewGuid(),
             IsIncident = true,
@@ -489,8 +491,8 @@ public class TicketDataSeeder
 
             var status = ticket.Status switch
             {
-                TicketStatusEnum.Resolved or TicketStatusEnum.Closed => SlaTimerStatusEnum.Met,
-                TicketStatusEnum.WaitingCustomer => SlaTimerStatusEnum.Paused,
+                TicketStatusEnum.Completed or TicketStatusEnum.Closed => SlaTimerStatusEnum.Met,
+                TicketStatusEnum.Pending => SlaTimerStatusEnum.Paused,
                 _ => SlaTimerStatusEnum.Running
             };
 
@@ -569,7 +571,7 @@ public class TicketDataSeeder
                 });
             }
 
-            if (ticket.Status is TicketStatusEnum.Resolved or TicketStatusEnum.Closed && ticket.ResolvedAt.HasValue)
+            if (ticket.Status is TicketStatusEnum.Completed or TicketStatusEnum.Closed && ticket.ResolvedAt.HasValue)
             {
                 activities.Add(new TicketActivity
                 {
@@ -581,7 +583,7 @@ public class TicketDataSeeder
                         ? staffById.GetValueOrDefault(ticket.ResolvedByStaffId.Value)?.FullName
                         : "Staff",
                     Action = ActivityActionEnum.Resolved,
-                    NewValue = TicketStatusEnum.Resolved.ToString(),
+                    NewValue = TicketStatusEnum.Completed.ToString(),
                     CreatedAt = ticket.ResolvedAt.Value,
                     Ticket = ticket
                 });
@@ -665,7 +667,7 @@ public class TicketDataSeeder
         var staff = staffs.First();
         var logs = new List<MaintenanceLog>();
 
-        var resolvedTickets = tickets.Where(t => t.Status is TicketStatusEnum.Resolved or TicketStatusEnum.Closed).ToList();
+        var resolvedTickets = tickets.Where(t => t.Status is TicketStatusEnum.Completed or TicketStatusEnum.Closed).ToList();
         foreach (var ticket in resolvedTickets)
         {
             var startedAt = ticket.ResolvedAt!.Value.AddHours(-2);

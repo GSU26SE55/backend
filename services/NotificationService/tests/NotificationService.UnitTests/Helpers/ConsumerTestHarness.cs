@@ -60,6 +60,8 @@ public static class ConsumerTestHarness
         // thì không thể kiểm được điều issue nói: lỗi lần đầu có làm mất hẳn notification không.
         var writeAttempts = 0;
         var repo = new Mock<IGenericRepository<Notification>>();
+        repo.Setup(r => r.GetByIdAsync(It.IsAny<object>()))
+            .ReturnsAsync((object id) => written.FirstOrDefault(n => n.Id.Equals(id)));
         repo.Setup(r => r.AddAsync(It.IsAny<Notification>()))
             .Callback<Notification>(n =>
             {

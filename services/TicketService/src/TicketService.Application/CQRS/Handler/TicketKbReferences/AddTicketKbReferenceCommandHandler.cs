@@ -60,9 +60,8 @@ public class AddTicketKbReferenceCommandHandler : IRequestHandler<AddTicketKbRef
         // xảy ra lúc/sau khi Resolved nên vẫn cho gán ở state Resolved; từ ClosedPendingRate trở đi chặn tất cả.
         var isAfterResolveType = command.ReferenceType == KbReferenceTypeEnum.GeneratedAfterResolve ||
                                  command.ReferenceType == KbReferenceTypeEnum.ProvidedToCustomer;
-        if (ticket.Status == TicketStatusEnum.ClosedPendingRate ||
-            ticket.Status == TicketStatusEnum.Closed ||
-            (ticket.Status == TicketStatusEnum.Resolved && !isAfterResolveType))
+        if (ticket.Status == TicketStatusEnum.Closed ||
+            (ticket.Status == TicketStatusEnum.Completed && !isAfterResolveType))
         {
             // 409: xung đột với trạng thái hiện tại của ticket (không phải lỗi quyền)
             return Fail(409, "Ticket is pending approval or already completed. Cannot attach more reference documents.");

@@ -22,6 +22,7 @@ public class TicketDeclareIncidentCommand : IRequest<TicketActionResponse>, IVal
     /// Incident description.
     /// </summary>
     public string? IncidentDescription { get; set; }
+    public bool KeepCurrentPrimary { get; set; }
 
     public Task<TicketActionResponse> ValidateAsync()
     {

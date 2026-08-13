@@ -15,7 +15,7 @@ public class MyTicketsAsStaffQuery : PaginationRequest, IRequest<CommonResponse<
 
     /// <summary>
     /// true = chỉ lấy ticket đang trong vòng theo dõi SLA
-    /// (status ∈ Assigned/InProgress/WaitingCustomer/WaitingParts/WaitingOnsiteSchedule/Escalated và có SLA timer)
+    /// (status = InProgress và có SLA timer)
     /// — phục vụ bảng SLA Monitor không bị cap theo pageSize.
     /// </summary>
     public bool? SlaOpen { get; set; }

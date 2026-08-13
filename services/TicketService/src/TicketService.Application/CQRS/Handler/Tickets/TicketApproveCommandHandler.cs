@@ -39,12 +39,14 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
 
         if (ticket == null)
             return Fail(404, "Ticket not found.");
+        if (ticket.Status != TicketStatusEnum.Completed)
+            return Fail(409, "Only a Completed ticket can be approved and closed.");
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.ClosedPendingRate, ActorRoleEnum.Manager, request.ManagerId);
+        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Closed, ActorRoleEnum.Manager, request.ManagerId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot approve.");
 
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.ClosedPendingRate, new TransitionContext
+        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Closed, new TransitionContext
         {
             ActorUserId = request.ManagerId,
             ActorRole = ActorRoleEnum.Manager,
@@ -52,7 +54,14 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
             Payload = new Dictionary<string, object?> { { "Comment", request.ManagerComment } }
         }, ct);
 
-        await _activityLogger.LogAsync(ticket.Id, request.ManagerId, ActorRoleEnum.Manager, request.ManagerName, ActivityActionEnum.Approved, reason: request.ManagerComment);
+        await _activityLogger.LogAsync(
+            ticket.Id,
+            request.ManagerId,
+            ActorRoleEnum.Manager,
+            request.ManagerName,
+            ActivityActionEnum.Approved,
+            oldValue: ticket.ActiveIncidentEpisodeId?.ToString(),
+            reason: request.ManagerComment);
 
         await _outboxWriter.WriteAsync(new TicketApprovedIntegrationEvent(ticket.Id, ticket.Code, ticket.CustomerId), ct);
 

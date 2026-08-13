@@ -64,6 +64,20 @@ public class ChatRecipientResolver : IChatRecipientResolver
         // cấp cờ CanViewInternal tường minh (#522) — gộp ở vòng lặp participant bên dưới.
         Add(candidates, customerId, ActorRoleEnum.Customer);
 
+        // Khách của ticket nguồn đã bị gộp vào ticket này (merged source tickets).
+        // Họ cần nhận thông báo tin nhắn public trên ticket master để không bị mất thông tin.
+        // GetAllAsync() trả về IQueryable — KHÔNG await (be-rules §3); phải lọc !IsDeleted thủ công.
+        var mergedSourceCustomerIds = await _unitOfWork.Tickets.GetAllAsync()
+            .AsNoTracking()
+            .Where(t => !t.IsDeleted
+                        && t.MergedIntoTicketId == ticketId)
+            .Select(t => t.CustomerId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        foreach (var mergedCustomerId in mergedSourceCustomerIds)
+            Add(candidates, mergedCustomerId, ActorRoleEnum.Customer);
+
         // Người được phân công luôn là nhân sự vận hành.
         foreach (var staffId in assignedStaffIds)
             Add(candidates, staffId, ActorRoleEnum.Staff);
