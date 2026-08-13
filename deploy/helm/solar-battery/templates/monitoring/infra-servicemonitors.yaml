@@ -19,7 +19,7 @@ spec:
     interval: 15s
     scrapeTimeout: 10s
 {{- end }}
-{{- if .Values.minio.enabled }}
+{{- if and .Values.minio.enabled .Values.minio.serviceMonitor.enabled }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -37,5 +37,8 @@ spec:
     path: /minio/v2/metrics/cluster
     interval: 15s
     scrapeTimeout: 10s
+    bearerTokenSecret:
+      name: {{ .Values.minio.serviceMonitor.bearerTokenSecret.name }}
+      key: {{ .Values.minio.serviceMonitor.bearerTokenSecret.key }}
 {{- end }}
 {{- end }}

@@ -1,7 +1,7 @@
-{{- if .Values.postgres.enabled -}}
+{{- if and .Values.postgres.enabled .Values.minio.enabled -}}
 ---
-# CronJob backup Postgres mỗi 6h, ship lên Minio bucket "postgres-backups".
-# Retention 7 ngày — script tự xoá file cũ hơn.
+# Dump every application database, verify that each archive is readable, then
+# upload one timestamped directory to the private MinIO backup bucket.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -9,70 +9,100 @@ metadata:
   labels:
     {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "postgres-backup") | nindent 4 }}
 spec:
-  schedule: "0 */6 * * *"                # mỗi 6 giờ
-  concurrencyPolicy: Forbid              # không chạy song song nếu lần trước chưa xong
+  schedule: {{ .Values.postgres.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
   jobTemplate:
     spec:
       backoffLimit: 2
+      activeDeadlineSeconds: {{ .Values.postgres.backup.activeDeadlineSeconds }}
       template:
         metadata:
           labels:
             {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "postgres-backup") | nindent 12 }}
         spec:
           restartPolicy: OnFailure
-          containers:
-          - name: backup
-            # postgres:16-alpine có pg_dump sẵn, gzip có sẵn; cài thêm mc qua wget.
-            image: postgres:16-alpine
+          securityContext:
+            {{- include "solar.podSecurityContext" . | nindent 12 }}
+          initContainers:
+          - name: dump
+            image: {{ .Values.postgres.clientImage }}
+            securityContext:
+              {{- include "solar.containerSecurityContext" . | nindent 14 }}
             resources:
-              requests:
-                cpu: 20m
-                memory: 64Mi
-              limits:
-                cpu: 100m
-                memory: 128Mi
+              {{- toYaml .Values.postgres.backup.resources | nindent 14 }}
             env:
             - name: PGHOST
               value: postgres
             - name: PGUSER
               value: {{ .Values.postgres.username | quote }}
-            - name: PGDATABASE
-              value: {{ .Values.postgres.database | quote }}
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
-            - name: MC_HOST_minio
-              value: http://$(MC_USER):$(MC_PASS)@minio:9000
-            - name: MC_USER
+            - name: DATABASES
+              value: >-
+                {{ .Values.postgres.database }}
+                {{ .Values.postgres.fileStorageDatabase }}
+                {{ .Values.postgres.batteryDatabase }}
+                {{ .Values.postgres.ticketDatabase }}
+                {{ .Values.postgres.notificationDatabase }}
+                {{ .Values.postgres.smsDatabase }}
+                {{ .Values.postgres.auditAggregatorDatabase }}
+            command: ["/bin/sh", "-ec"]
+            args:
+            - |
+              timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+              destination="/backup/${timestamp}"
+              mkdir -p "${destination}"
+
+              for database in ${DATABASES}; do
+                archive="${destination}/${database}.dump"
+                echo "Backing up ${database}"
+                pg_dump --format=custom --compress=6 --file="${archive}" "${database}"
+                pg_restore --list "${archive}" >/dev/null
+              done
+
+              (cd "${destination}" && sha256sum ./*.dump > SHA256SUMS)
+              printf '%s\n' "${timestamp}" > /backup/TIMESTAMP
+            volumeMounts:
+            - name: backup
+              mountPath: /backup
+          containers:
+          - name: upload
+            image: {{ .Values.minio.clientImage }}
+            securityContext:
+              {{- include "solar.containerSecurityContext" . | nindent 14 }}
+            resources:
+              {{- toYaml .Values.postgres.backup.resources | nindent 14 }}
+            env:
+            - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef: { name: solar-secrets, key: ObjectStorage__AccessKey }
-            - name: MC_PASS
+            - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef: { name: solar-secrets, key: ObjectStorage__SecretKey }
-            command:
-            - sh
-            - -c
+            - name: BACKUP_BUCKET
+              value: {{ .Values.postgres.backup.bucket | quote }}
+            - name: RETENTION_DAYS
+              value: {{ .Values.postgres.backup.retentionDays | quote }}
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
+            command: ["/bin/sh", "-ec"]
+            args:
             - |
-              set -e
-              # Cài mc — script ngắn, ~20MB binary
-              wget -q https://dl.min.io/client/mc/release/linux-amd64/mc -O /usr/local/bin/mc
-              chmod +x /usr/local/bin/mc
-
-              ts=$(date +%Y%m%d-%H%M%S)
-              file="auth_db_${ts}.sql.gz"
-
-              # Dump + gzip → /tmp
-              pg_dump -h "$PGHOST" -U "$PGUSER" "$PGDATABASE" | gzip > "/tmp/${file}"
-              echo "[dump] /tmp/${file} ($(du -h /tmp/${file} | cut -f1))"
-
-              # Ship lên Minio bucket postgres-backups
-              mc mb -p minio/postgres-backups 2>/dev/null || true
-              mc cp "/tmp/${file}" "minio/postgres-backups/${file}"
-
-              # Retention 7 ngày — CHỈ trong path postgres-backups, không ảnh hưởng bucket khác
-              mc rm --recursive --force --older-than 7d minio/postgres-backups/ || true
-
-              echo "[ok] backup ${file} shipped"
+              timestamp="$(cat /backup/TIMESTAMP)"
+              mc alias set local http://minio:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+              mc mb --ignore-existing "local/${BACKUP_BUCKET}"
+              mc cp --recursive "/backup/${timestamp}/" "local/${BACKUP_BUCKET}/${timestamp}/"
+              mc rm --recursive --force --older-than "${RETENTION_DAYS}d" "local/${BACKUP_BUCKET}/" || true
+              mc stat "local/${BACKUP_BUCKET}/${timestamp}/SHA256SUMS" >/dev/null
+              echo "PostgreSQL backup ${timestamp} uploaded and verified"
+            volumeMounts:
+            - name: backup
+              mountPath: /backup
+          volumes:
+          - name: backup
+            emptyDir:
+              sizeLimit: 8Gi
 {{- end }}

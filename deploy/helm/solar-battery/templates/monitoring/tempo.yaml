@@ -30,6 +30,21 @@ data:
         local:
           path: /var/tempo/blocks
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tempo-data
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.tempo.storageClass }}
+  storageClassName: {{ .Values.tempo.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.tempo.storage }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,9 +62,13 @@ spec:
       labels:
         app: tempo
     spec:
+      securityContext:
+        {{- include "solar.podSecurityContext" . | nindent 8 }}
       containers:
         - name: tempo
           image: {{ .Values.tempo.image | quote }}
+          securityContext:
+            {{- include "solar.containerSecurityContext" . | nindent 12 }}
           args: ["-config.file=/etc/tempo/tempo.yml"]
           ports:
             - { name: query, containerPort: 3200 }
@@ -68,7 +87,8 @@ spec:
         - name: config
           configMap: { name: tempo-config }
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: tempo-data
 ---
 apiVersion: v1
 kind: Service

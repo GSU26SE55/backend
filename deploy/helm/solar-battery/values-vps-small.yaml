@@ -1,6 +1,8 @@
 # =====================================================================
 # values-vps-small.yaml
-# Overlay for a single 2 vCPU / 4GB RAM VPS running Jenkins + k3s.
+# Resource overlay for a single-node k3s VPS. Jenkins runs on a separate VPS.
+# Production should use at least 8 vCPU / 16 GiB; the limits remain conservative
+# so a 4 vCPU / 8 GiB temporary environment can start with reduced headroom.
 # Keep every service enabled, but avoid temporary double memory use during deploy.
 # =====================================================================
 

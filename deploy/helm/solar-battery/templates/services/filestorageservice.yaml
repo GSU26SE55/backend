@@ -25,6 +25,8 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
     spec:
+      securityContext:
+        {{- include "solar.podSecurityContext" . | nindent 8 }}
       imagePullSecrets:
       - name: {{ .Values.global.imagePullSecret }}
       initContainers:
@@ -60,8 +62,10 @@ spec:
           echo "file storage database ready"
       containers:
       - name: filestorageservice
-        image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image) }}
+        image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image "digest" ($svc.digest | default "")) }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        securityContext:
+          {{- include "solar.containerSecurityContext" . | nindent 10 }}
         ports:
         - { name: http, containerPort: {{ $svc.port }} }
         # GH-790 — cổng gRPC nội bộ (voice transcription + quét virus đính kèm). Khai biến địa chỉ

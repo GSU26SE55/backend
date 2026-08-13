@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically synchronize the public MQTT TLS certificate
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

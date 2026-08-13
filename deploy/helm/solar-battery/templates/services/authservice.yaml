@@ -26,6 +26,8 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        {{- include "solar.podSecurityContext" . | nindent 8 }}
       imagePullSecrets:
       - name: {{ .Values.global.imagePullSecret }}
       # AuthService cần đợi Postgres và auth_db ready trước khi migrate.
@@ -62,8 +64,10 @@ spec:
           echo "auth database ready"
       containers:
       - name: authservice
-        image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image) }}
+        image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image "digest" ($svc.digest | default "")) }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        securityContext:
+          {{- include "solar.containerSecurityContext" . | nindent 10 }}
         ports:
         - { name: http, containerPort: {{ $svc.port }} }
         env:

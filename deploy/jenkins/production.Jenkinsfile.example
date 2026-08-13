@@ -1,0 +1,357 @@
+// Paste this reviewed file into the centrally managed
+// `solar-backend-production` Pipeline job. The production job must not load its
+// script from a pull-request workspace.
+pipeline {
+    agent {
+        label 'docker-linux'
+    }
+
+    parameters {
+        string(
+            name: 'GIT_SHA',
+            defaultValue: '',
+            description: 'Exact main commit to deploy'
+        )
+    }
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 120, unit: 'MINUTES')
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '30',
+                artifactNumToKeepStr: '15'
+            )
+        )
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        REPOSITORY_URL = 'https://github.com/GSU26SE55/backend.git'
+        REGISTRY_HOST = 'ghcr.io'
+        REGISTRY_NAMESPACE = 'ghcr.io/gsu26se55'
+        ALERT_RELAY_UPSTREAM = 'benjojo/alertmanager-discord@sha256:7d27cd8494b269fe592cf6a9d7f6bdf14ac628bba34c381dc43cf533eaa95158'
+        DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+        DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
+        DOCKER_BUILDKIT = '1'
+    }
+
+    stages {
+        stage('Validate immutable main revision') {
+            steps {
+                script {
+                    if (!(params.GIT_SHA ==~ /[0-9a-f]{40}/)) {
+                        error('GIT_SHA must contain exactly 40 lower-case hex characters')
+                    }
+                    env.RELEASE_SHA = params.GIT_SHA
+                }
+
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: 'refs/heads/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [[
+                        $class: 'CloneOption',
+                        noTags: true,
+                        shallow: false
+                    ]],
+                    userRemoteConfigs: [[
+                        url: env.REPOSITORY_URL,
+                        credentialsId: 'backend-github-read'
+                    ]]
+                ])
+
+                sh '''
+                    set -eu
+
+                    actual_sha="$(git rev-parse HEAD)"
+                    test "${actual_sha}" = "${RELEASE_SHA}" || {
+                      echo "Refusing stale release: main=${actual_sha}, requested=${RELEASE_SHA}" >&2
+                      exit 1
+                    }
+                    git diff --check
+
+                    for tool in git docker trivy syft cosign helm ssh scp; do
+                      command -v "${tool}" >/dev/null 2>&1 || {
+                        echo "Missing required Jenkins production tool: ${tool}" >&2
+                        exit 1
+                      }
+                    done
+                    docker info >/dev/null
+                    docker buildx version >/dev/null
+                '''
+            }
+        }
+
+        stage('Rebuild and rescan trusted revision') {
+            steps {
+                sh '''
+                    set -eu
+
+                    mkdir -p security-artifacts
+                    for specification in \
+                      'apigateway|services/ApiGateway/src/ApiGateway/Dockerfile' \
+                      'authservice|services/AuthService/src/AuthService.Api/Dockerfile' \
+                      'emailservice|services/EmailService/src/EmailService.Api/Dockerfile' \
+                      'smsservice|services/SmsService/src/SmsService.Api/Dockerfile' \
+                      'filestorageservice|services/FileStorageService/src/FileStorageService.Api/Dockerfile' \
+                      'batteryservice|services/BatteryService/src/BatteryService.Api/Dockerfile' \
+                      'ticketservice|services/TicketService/src/TicketService.Api/Dockerfile' \
+                      'notificationservice|services/NotificationService/src/NotificationService.Api/Dockerfile' \
+                      'auditaggregatorservice|services/AuditAggregatorService/src/AuditAggregatorService.Api/Dockerfile'
+                    do
+                      service="${specification%%|*}"
+                      dockerfile="${specification#*|}"
+                      image="${REGISTRY_NAMESPACE}/${service}:${RELEASE_SHA}"
+
+                      docker build \
+                        --pull \
+                        --file "${dockerfile}" \
+                        --tag "${image}" \
+                        .
+
+                      test "$(docker image inspect "${image}" --format '{{.Config.User}}')" = '10001:10001'
+
+                      report="security-artifacts/trivy-${service}.json"
+                      if ! trivy image \
+                        --ignore-unfixed \
+                        --exit-code 1 \
+                        --severity HIGH,CRITICAL \
+                        --format json \
+                        --output "${report}" \
+                        "${image}"
+                      then
+                        trivy convert \
+                          --format table \
+                          --severity HIGH,CRITICAL \
+                          "${report}"
+                        exit 1
+                      fi
+
+                      syft "${image}" \
+                        -o "cyclonedx-json=security-artifacts/sbom-${service}.cdx.json"
+                    done
+
+                    docker pull "${ALERT_RELAY_UPSTREAM}"
+                    docker tag \
+                      "${ALERT_RELAY_UPSTREAM}" \
+                      "${REGISTRY_NAMESPACE}/alertmanager-discord:${RELEASE_SHA}"
+
+                    trivy image \
+                      --ignore-unfixed \
+                      --exit-code 1 \
+                      --severity HIGH,CRITICAL \
+                      --format json \
+                      --output security-artifacts/trivy-alertmanager-discord.json \
+                      "${REGISTRY_NAMESPACE}/alertmanager-discord:${RELEASE_SHA}"
+                    syft "${REGISTRY_NAMESPACE}/alertmanager-discord:${RELEASE_SHA}" \
+                      -o cyclonedx-json=security-artifacts/sbom-alertmanager-discord.cdx.json
+                '''
+            }
+
+            post {
+                always {
+                    archiveArtifacts(
+                        allowEmptyArchive: true,
+                        artifacts: 'security-artifacts/*.json'
+                    )
+                }
+            }
+        }
+
+        stage('Push, resolve digests and sign') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'backend-registry-write',
+                        usernameVariable: 'REGISTRY_USERNAME',
+                        passwordVariable: 'REGISTRY_PASSWORD'
+                    ),
+                    file(
+                        credentialsId: 'ai-cosign-private-key',
+                        variable: 'COSIGN_PRIVATE_KEY'
+                    ),
+                    file(
+                        credentialsId: 'ai-cosign-public-key',
+                        variable: 'COSIGN_PUBLIC_KEY'
+                    ),
+                    string(
+                        credentialsId: 'ai-cosign-password',
+                        variable: 'COSIGN_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+
+                        docker_config="$(mktemp -d)"
+                        trap 'rm -rf "${docker_config}"' EXIT
+                        export DOCKER_CONFIG="${docker_config}"
+
+                        printf '%s' "${REGISTRY_PASSWORD}" |
+                          docker login "${REGISTRY_HOST}" \
+                            --username "${REGISTRY_USERNAME}" \
+                            --password-stdin
+
+                        lock_file=deploy/production/image-lock.env
+                        : > "${lock_file}"
+
+                        for service in \
+                          apigateway \
+                          authservice \
+                          emailservice \
+                          smsservice \
+                          filestorageservice \
+                          batteryservice \
+                          ticketservice \
+                          notificationservice \
+                          auditaggregatorservice
+                        do
+                          image_tag="${REGISTRY_NAMESPACE}/${service}:${RELEASE_SHA}"
+                          docker push "${image_tag}"
+                          docker pull "${image_tag}"
+
+                          image_ref="$(
+                            docker image inspect "${image_tag}" \
+                              --format '{{range .RepoDigests}}{{println .}}{{end}}' |
+                              grep -E "^${REGISTRY_NAMESPACE}/${service}@sha256:[0-9a-f]{64}$" |
+                              head -n 1
+                          )"
+                          test -n "${image_ref}"
+
+                          key="$(printf '%s' "${service}" | tr '[:lower:]' '[:upper:]')_DIGEST"
+                          printf '%s=%s\n' "${key}" "${image_ref#*@}" >> "${lock_file}"
+
+                          COSIGN_PASSWORD="${COSIGN_PASSWORD}" \
+                            cosign sign --yes --key "${COSIGN_PRIVATE_KEY}" "${image_ref}"
+                          cosign verify --key "${COSIGN_PUBLIC_KEY}" "${image_ref}"
+                        done
+
+                        relay_tag="${REGISTRY_NAMESPACE}/alertmanager-discord:${RELEASE_SHA}"
+                        docker push "${relay_tag}"
+                        docker pull "${relay_tag}"
+                        relay_ref="$(
+                          docker image inspect "${relay_tag}" \
+                            --format '{{range .RepoDigests}}{{println .}}{{end}}' |
+                            grep -E "^${REGISTRY_NAMESPACE}/alertmanager-discord@sha256:[0-9a-f]{64}$" |
+                            head -n 1
+                        )"
+                        test -n "${relay_ref}"
+                        printf 'ALERTMANAGER_DISCORD_IMAGE=%s\n' "${relay_ref}" >> "${lock_file}"
+                        COSIGN_PASSWORD="${COSIGN_PASSWORD}" \
+                          cosign sign --yes --key "${COSIGN_PRIVATE_KEY}" "${relay_ref}"
+                        cosign verify --key "${COSIGN_PUBLIC_KEY}" "${relay_ref}"
+
+                        test "$(wc -l < "${lock_file}" | tr -d ' ')" = 10
+                    '''
+                }
+
+                archiveArtifacts(
+                    artifacts: 'deploy/production/image-lock.env',
+                    fingerprint: true
+                )
+            }
+        }
+
+        stage('Package dependency-complete release') {
+            steps {
+                sh '''
+                    set -eu
+
+                    helm repo add prometheus-community \
+                      https://prometheus-community.github.io/helm-charts \
+                      --force-update
+                    helm repo add grafana \
+                      https://grafana.github.io/helm-charts \
+                      --force-update
+                    helm repo update
+                    helm dependency build deploy/helm/solar-battery
+                    helm lint deploy/helm/solar-battery \
+                      -f deploy/helm/solar-battery/values.yaml \
+                      -f deploy/helm/solar-battery/values-vps-small.yaml \
+                      -f deploy/helm/solar-battery/values-production.yaml \
+                      --set-string iot.mqttNodeIp=10.0.0.10
+
+                    tar -czf "backend-deployment-${RELEASE_SHA}.tar.gz" deploy
+                '''
+            }
+        }
+
+        stage('Deploy backend + infrastructure VPS') {
+            steps {
+                lock(resource: 'solar-platform-prod') {
+                    sshagent(credentials: ['platform-vps-ssh']) {
+                        withCredentials([
+                            string(
+                                credentialsId: 'platform-vps-target',
+                                variable: 'VPS_TARGET'
+                            ),
+                            file(
+                                credentialsId: 'platform-vps-known-hosts',
+                                variable: 'VPS_KNOWN_HOSTS'
+                            )
+                        ]) {
+                            sh '''
+                                set -eu
+
+                                payload="backend-deployment-${RELEASE_SHA}.tar.gz"
+                                remote_dir="/opt/solar-platform/incoming/${RELEASE_SHA}-${BUILD_NUMBER}"
+
+                                ssh \
+                                  -o BatchMode=yes \
+                                  -o StrictHostKeyChecking=yes \
+                                  -o UserKnownHostsFile="${VPS_KNOWN_HOSTS}" \
+                                  "${VPS_TARGET}" \
+                                  "install -d -m 0750 '${remote_dir}'"
+
+                                scp \
+                                  -o BatchMode=yes \
+                                  -o StrictHostKeyChecking=yes \
+                                  -o UserKnownHostsFile="${VPS_KNOWN_HOSTS}" \
+                                  "${payload}" \
+                                  "${VPS_TARGET}:${remote_dir}/payload.tar.gz"
+
+                                ssh \
+                                  -o BatchMode=yes \
+                                  -o StrictHostKeyChecking=yes \
+                                  -o UserKnownHostsFile="${VPS_KNOWN_HOSTS}" \
+                                  "${VPS_TARGET}" \
+                                  "set -eu; \
+                                   tar -xzf '${remote_dir}/payload.tar.gz' -C '${remote_dir}'; \
+                                   chmod 0555 '${remote_dir}'/deploy/scripts/*.sh; \
+                                   '${remote_dir}/deploy/scripts/deploy-production.sh' '${RELEASE_SHA}'"
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Backend production deployment succeeded for ${params.GIT_SHA}"
+        }
+        failure {
+            echo 'Backend production deployment failed; Helm attempted an atomic rollback'
+        }
+        always {
+            sh '''
+                docker logout ghcr.io >/dev/null 2>&1 || true
+                if [ -n "${RELEASE_SHA:-}" ]; then
+                  for service in \
+                    apigateway authservice emailservice smsservice \
+                    filestorageservice batteryservice ticketservice \
+                    notificationservice auditaggregatorservice \
+                    alertmanager-discord
+                  do
+                    docker image rm \
+                      "${REGISTRY_NAMESPACE}/${service}:${RELEASE_SHA}" \
+                      >/dev/null 2>&1 || true
+                  done
+                fi
+            '''
+            deleteDir()
+        }
+    }
+}

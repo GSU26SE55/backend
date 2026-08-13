@@ -1,0 +1,18 @@
+{{- if .Values.iot.mqttTlsCertificate.enabled -}}
+---
+# Public MQTT certificate. A root-owned host reconciliation step copies this
+# Secret to /opt/solar-iot/secrets/mosquitto/tls for the Docker broker.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mqtt-public
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.iot.mqttTlsCertificate.secretName }}
+  dnsNames:
+  - {{ .Values.iot.mqttTlsCertificate.dnsName | quote }}
+  issuerRef:
+    name: {{ .Values.global.tlsIssuer }}
+    kind: ClusterIssuer
+{{- end }}

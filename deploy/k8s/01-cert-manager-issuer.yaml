@@ -1,8 +1,8 @@
 # Apply SAU khi cài cert-manager.
-# Cài cert-manager:
-#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
-# Sau đó:
-#   kubectl apply -f deploy/k8s/01-cert-manager-issuer.yaml
+# Install a reviewed, explicitly pinned cert-manager release first. Do not use
+# an unpinned `latest` URL in production.
+# Sau đó render placeholder, không apply trực tiếp file này:
+#   sed "s/__ACME_EMAIL__/ops@example.com/g" deploy/k8s/01-cert-manager-issuer.yaml | kubectl apply -f -
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -11,13 +11,13 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: cloneuser404@gmail.com
+    email: __ACME_EMAIL__
     privateKeySecretRef:
       name: letsencrypt-staging-key
     solvers:
     - http01:
         ingress:
-          class: traefik
+          ingressClassName: traefik
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -26,10 +26,10 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: cloneuser404@gmail.com
+    email: __ACME_EMAIL__
     privateKeySecretRef:
       name: letsencrypt-prod-key
     solvers:
     - http01:
         ingress:
-          class: traefik
+          ingressClassName: traefik

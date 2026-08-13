@@ -20,11 +20,14 @@ RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=build --chown=10001:10001 /app/publish .
 
 EXPOSE 8080
 # GH-verify-sensor-grpc — gRPC server (HTTP/2) nội bộ solar-net.
 EXPOSE 8081
 ENV ASPNETCORE_URLS=http://+:8080
+ENV DOTNET_EnableDiagnostics=0
+
+USER 10001:10001
 
 ENTRYPOINT ["dotnet", "BatteryService.Api.dll"]
