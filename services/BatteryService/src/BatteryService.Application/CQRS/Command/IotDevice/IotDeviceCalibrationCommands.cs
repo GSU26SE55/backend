@@ -46,26 +46,26 @@ public class CreateIotDeviceCalibrationCommand : IRequest<CommonResponse<IotDevi
         var r = new CommonResponse<IotDeviceCalibrationDto>();
 
         if (string.IsNullOrWhiteSpace(Channel))
-            Add(r, nameof(Channel), "Channel là bắt buộc.");
+            Add(r, nameof(Channel), "Channel is required.");
         else if (Channel.Length > 32)
-            Add(r, nameof(Channel), "Channel ≤ 32 ký tự.");
+            Add(r, nameof(Channel), "Channel must not exceed 32 characters.");
 
         if (string.IsNullOrWhiteSpace(Unit))
-            Add(r, nameof(Unit), "Unit là bắt buộc.");
+            Add(r, nameof(Unit), "Unit is required.");
         else if (Unit.Length > 16)
-            Add(r, nameof(Unit), "Unit ≤ 16 ký tự.");
+            Add(r, nameof(Unit), "Unit must not exceed 16 characters.");
 
         if (Scale == 0)
-            Add(r, nameof(Scale), "Scale phải khác 0.");
+            Add(r, nameof(Scale), "Scale must not be 0.");
 
         if (CalibratedAt == default)
-            Add(r, nameof(CalibratedAt), "CalibratedAt là bắt buộc.");
+            Add(r, nameof(CalibratedAt), "CalibratedAt is required.");
 
         if (ExpiresAt is not null && ExpiresAt <= CalibratedAt)
-            Add(r, nameof(ExpiresAt), "ExpiresAt phải sau CalibratedAt.");
+            Add(r, nameof(ExpiresAt), "ExpiresAt must be after CalibratedAt.");
 
         if (Notes?.Length > 500)
-            Add(r, nameof(Notes), "Notes ≤ 500 ký tự.");
+            Add(r, nameof(Notes), "Notes must not exceed 500 characters.");
 
         return Task.FromResult(r);
     }
@@ -74,7 +74,7 @@ public class CreateIotDeviceCalibrationCommand : IRequest<CommonResponse<IotDevi
     {
         r.IsSuccess = false;
         r.StatusCode = 400;
-        r.Message = "Dữ liệu calibration không hợp lệ.";
+        r.Message = "Invalid calibration data.";
         r.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

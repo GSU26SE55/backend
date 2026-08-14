@@ -43,7 +43,7 @@ public class Disable2FACommandHandler : IRequestHandler<Disable2FACommand, Commo
             .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
 
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (!account.TwoFactorEnabled && string.IsNullOrEmpty(account.TwoFactorSecret))
         {
@@ -51,13 +51,13 @@ public class Disable2FACommandHandler : IRequestHandler<Disable2FACommand, Commo
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "2FA vốn đã chưa bật.",
+                Message = "2FA was already disabled.",
                 Data = account.Id.ToString()
             };
         }
 
         // Generic message — không tiết lộ field nào sai (chống enum)
-        const string genericInvalid = "Mật khẩu hoặc mã không đúng.";
+        const string genericInvalid = "Incorrect password or code.";
 
         if (!_passwordHasher.Verify(request.Password, account.PasswordHash))
         {
@@ -122,7 +122,7 @@ public class Disable2FACommandHandler : IRequestHandler<Disable2FACommand, Commo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Tắt 2FA thành công.",
+            Message = "2FA disabled successfully.",
             Data = account.Id.ToString()
         };
     }

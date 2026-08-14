@@ -50,6 +50,7 @@ public class TicketChatTranslationConfiguration : IEntityTypeConfiguration<Ticke
 
         builder.HasIndex(e => new { e.ChatId, e.TargetLanguage })
             .IsUnique()
+            .HasFilter("is_deleted = false")
             .HasDatabaseName("ix_ticket_chat_translations_chat_lang");
 
         builder.HasOne(e => e.Chat)

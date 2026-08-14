@@ -64,21 +64,21 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Invalid UserId." });
 
         if (string.IsNullOrWhiteSpace(Body))
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Nội dung bình luận không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Comment content is required." });
         // ValidateAsync() không nhận DI nên không inject được IOptions<ChatOptions> tại đây —
         // dùng hằng số ChatOptions.MaxBodyLengthDefault làm nguồn duy nhất, tránh lặp số tay.
         // Nếu appsettings.json "Chat:MaxBodyLength" override khác giá trị này, validate ở đây
         // KHÔNG phản ánh giá trị override — chỉ chặn theo default.
         else if (Body.Length > ChatOptions.MaxBodyLengthDefault)
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = $"Nội dung bình luận tối đa {ChatOptions.MaxBodyLengthDefault} ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Body", Detail = $"Comment content must be at most {ChatOptions.MaxBodyLengthDefault} characters." });
         else if (WhitespaceOrEmojiOnlyRegex.IsMatch(Body))
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Nội dung không được chỉ chứa khoảng trắng hoặc emoji." });
+            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Content must not contain only whitespace or emoji." });
 
         if (Attachments != null && Attachments.Any())
         {
@@ -86,11 +86,11 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
             {
                 var att = Attachments[i];
                 if (att.FileId == Guid.Empty)
-                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].FileId", Detail = "FileId không được để trống." });
+                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].FileId", Detail = "FileId is required." });
                 if (string.IsNullOrWhiteSpace(att.FileName))
-                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].FileName", Detail = "FileName không được để trống." });
+                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].FileName", Detail = "FileName is required." });
                 if (string.IsNullOrWhiteSpace(att.ContentType))
-                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].ContentType", Detail = "ContentType không được để trống." });
+                    response.ListErrors.Add(new Errors { Field = $"Attachments[{i}].ContentType", Detail = "ContentType is required." });
             }
         }
 
@@ -100,9 +100,9 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
             {
                 var mention = Mentions[i];
                 if (mention.UserId == Guid.Empty)
-                    response.ListErrors.Add(new Errors { Field = $"Mentions[{i}].UserId", Detail = "UserId không được để trống." });
+                    response.ListErrors.Add(new Errors { Field = $"Mentions[{i}].UserId", Detail = "UserId is required." });
                 if (string.IsNullOrWhiteSpace(mention.DisplayName))
-                    response.ListErrors.Add(new Errors { Field = $"Mentions[{i}].DisplayName", Detail = "DisplayName không được để trống." });
+                    response.ListErrors.Add(new Errors { Field = $"Mentions[{i}].DisplayName", Detail = "DisplayName is required." });
             }
         }
 
@@ -112,11 +112,11 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
             {
                 var gm = GroupMentions[i];
                 if (gm.GroupType != "role" && gm.GroupType != "team")
-                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupType", Detail = "GroupType phải là 'role' hoặc 'team'." });
+                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupType", Detail = "GroupType must be 'role' or 'team'." });
                 else if (gm.GroupType == "role" && !ValidRoleIdentifiers.Contains(gm.GroupIdentifier))
-                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupIdentifier", Detail = "GroupIdentifier cho role phải là 'manager', 'staff', 'admin', hoặc 'customer'." });
+                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupIdentifier", Detail = "GroupIdentifier for role must be 'manager', 'staff', 'admin', or 'customer'." });
                 else if (gm.GroupType == "team" && !ValidTeamIdentifiers.Contains(gm.GroupIdentifier))
-                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupIdentifier", Detail = "GroupIdentifier cho team phải là 'tier1-staff', 'tier2-staff', hoặc 'tier3-staff'." });
+                    response.ListErrors.Add(new Errors { Field = $"GroupMentions[{i}].GroupIdentifier", Detail = "GroupIdentifier for team must be 'tier1-staff', 'tier2-staff', or 'tier3-staff'." });
             }
         }
 
@@ -124,7 +124,7 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);
@@ -135,7 +135,8 @@ public record ChatAttachmentInput(
     Guid FileId,
     string FileName,
     string ContentType,
-    long SizeBytes
+    long SizeBytes,
+    string? Url = null
 );
 
 public record ChatMentionInput(

@@ -20,7 +20,12 @@ public class MarkAllNotificationsReadCommandHandler : IRequestHandler<MarkAllNot
     {
         // Tracking ON — sẽ update. Lấy mọi noti chưa đọc của chính user.
         var unread = await _unitOfWork.Notifications.GetAllAsync()
-            .Where(n => n.UserId == request.UserId && !n.IsDeleted && n.Status != NotificationStatusEnum.Read)
+            // Sprint 6.3 NOTI3-14 (#714) — bỏ qua cả Opened: hạ Opened xuống Read là mất thông tin
+            // (Opened = user thực sự bấm mở, Read = chỉ lướt qua feed).
+            .Where(n => n.UserId == request.UserId
+                        && !n.IsDeleted
+                        && n.Status != NotificationStatusEnum.Read
+                        && n.Status != NotificationStatusEnum.Opened)
             .ToListAsync(cancellationToken);
 
         if (unread.Count == 0)
@@ -29,7 +34,7 @@ public class MarkAllNotificationsReadCommandHandler : IRequestHandler<MarkAllNot
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Không có notification chưa đọc.",
+                Message = "There are no unread notifications.",
                 Data = 0
             };
         }
@@ -48,7 +53,7 @@ public class MarkAllNotificationsReadCommandHandler : IRequestHandler<MarkAllNot
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đánh dấu tất cả đã đọc thành công.",
+            Message = "All notifications marked as read successfully.",
             Data = unread.Count
         };
     }

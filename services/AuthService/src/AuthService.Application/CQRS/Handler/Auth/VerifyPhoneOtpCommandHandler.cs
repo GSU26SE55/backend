@@ -30,19 +30,19 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (account.PhoneConfirmed)
-            return Fail(409, "Số điện thoại đã được xác thực.");
+            return Fail(409, "Phone number has already been verified.");
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
-            return Fail(423, "Tài khoản đang bị khóa. Vui lòng thử lại sau.");
+            return Fail(423, "Account is locked. Please try again later.");
 
         if (account.OtpPurpose != OtpPurposeEnum.PhoneVerify
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
             || account.OtpExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(422, "OTP không hợp lệ hoặc đã hết hạn.");
+            return Fail(422, "Invalid or expired OTP.");
 
         // #AUTH-78: track verify path.
         bool _otpMatch = SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim());
@@ -58,7 +58,7 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
                 account.LockoutEndAt = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "OTP không chính xác.");
+            return Fail(401, "Incorrect OTP.");
         }
 
         account.PhoneConfirmed = true;
@@ -78,7 +78,7 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xác thực số điện thoại thành công.",
+            Message = "Phone number verified successfully.",
             Data = account.PhoneNumber
         };
     }

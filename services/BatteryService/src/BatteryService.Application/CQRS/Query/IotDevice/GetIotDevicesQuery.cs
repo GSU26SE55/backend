@@ -3,11 +3,12 @@ using BatteryService.Application.DTOs;
 using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 
 namespace BatteryService.Application.CQRS.Query.IotDevice;
 
-public class GetIotDevicesQuery : IRequest<CommonResponse<PaginationResponse<IotDeviceDto>>>
+public class GetIotDevicesQuery : PaginationRequest, IRequest<CommonResponse<PaginationResponse<IotDeviceDto>>>
 {
     /// <summary>ID Site (Guid).</summary>
     public Guid? SiteId { get; set; }
@@ -15,15 +16,20 @@ public class GetIotDevicesQuery : IRequest<CommonResponse<PaginationResponse<Iot
     public IotDeviceStatusEnum? Status { get; set; }
     /// <summary>Từ khoá search (case-insensitive).</summary>
     public string? Keyword { get; set; }
-    /// <summary>Số trang (1-based).</summary>
-    public int Page { get; set; } = 1;
-    /// <summary>Số bản ghi mỗi trang (clamp [1, 100]).</summary>
-    public int PageSize { get; set; } = 20;
     /// <summary>Sort giảm dần theo CreatedAt nếu true.</summary>
     public bool IsDescending { get; set; } = true;
+
+    /// <summary>
+    /// Cột sort. Whitelist: deviceCode | displayName | siteName | status | currentFirmwareVersion | lastSeenAt.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Nếu set sẽ ghi đè <see cref="IsDescending"/>.</summary>
+    public string? SortDir { get; set; }
 }
 
-public class GetIotDeviceByIdQuery : IRequest<CommonResponse<IotDeviceDto>>
+public class GetIotDeviceByIdQuery : IRequest<CommonResponse<IotDeviceDetailDto>>
 {
     /// <summary>Lấy từ route — query string + body không bind để tránh nhầm lẫn nguồn.</summary>
     [JsonIgnore]

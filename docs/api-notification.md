@@ -3,24 +3,95 @@
 > Base URL: `http://localhost:{port}/api`
 > Content-Type mặc định: `application/json`
 > Response wrapper chuẩn: `CommonResponse<T>` — xem phần [Cấu trúc Response chung](#cấu-trúc-response-chung)
+>
+> **Cập nhật 30/07/2026 — Sprint 6.2 (`#672..#688`) + Sprint 6.3 (`#701..#717`).**
+> Đây là hai sprint làm thay đổi lớn nhất từ trước tới nay của service: Sprint 6.2 đưa pipeline từ
+> *"ghi DB rồi nằm im"* lên *"thật sự gửi được"*, Sprint 6.3 đưa tiếp lên *"vận hành được"*
+> (đo được, chặn spam, biết thư có tới không, feed hết nhân bản).
+> Toàn bộ điểm khác so với bản doc trước: xem [Changelog](#changelog).
 
-NotificationService quản lý notification gửi tới user theo nhiều kênh (Push/Email/SMS/InApp). Flow production chính tạo notification qua **RabbitMQ Consumer** trong `NotificationService.Application/Consumers/`. Tại thời điểm hiện tại có các consumer đã wire-up:
+---
 
-- `AlertTicketSagaFailedConsumer` ← `AlertTicketSagaFailedEvent` (Sprint 5B #238)
-- `BatteryAlertEscalationRequestedConsumer` ← `BatteryAlertEscalationRequestedEvent` (Sprint 5B #238)
-- `IotDeviceWentOfflineConsumer` ← `IotDeviceWentOfflineEvent` (Sprint IoT-1 #249)
-- `EnvironmentalIncidentDetectedConsumer` ← `EnvironmentalIncidentDetectedEvent` (Sprint IoT-2 #IoT2-31) — Push + Email + SMS, `BypassQuietHours = true`
-- `EnvironmentalIncidentResolvedConsumer` ← `EnvironmentalIncidentResolvedEvent` (Sprint IoT-2 #IoT2-31) — chỉ InApp (clear banner)
+## Mục lục
 
-> Lưu ý: `EnvironmentalIncidentDetectedConsumer` và `EnvironmentalIncidentResolvedConsumer` được khai báo trong cùng file `EnvironmentalIncidentDetectedConsumer.cs`.
+1. [Kiến trúc pipeline](#kiến-trúc-pipeline) — luồng từ event → record → giao nhận
+2. [Cấu trúc Response chung](#cấu-trúc-response-chung)
+3. [Enums](#enums) — 9 enum + bảng ánh xạ type → nhóm
+3b. [Routing qua ApiGateway](#routing-qua-apigateway) — 5 route mới
+4. [Endpoints — Notifications](#endpoints--notifications) (`/api/notifications`)
+5. [Endpoints — Device Tokens](#endpoints--device-tokens) (`/api/device-tokens`)
+6. [Endpoints — Notification Preferences](#endpoints--notification-preferences) (`/api/notification-preferences`)
+7. [Endpoints — Admin Notification Templates](#endpoints--admin-notification-templates) (`/api/admin/notification-templates`)
+7b. [Endpoints — Admin Notification Settings](#endpoints--admin-notification-settings) (`/api/admin/notification-settings`)
+8. [Endpoints — Unsubscribe một chạm](#endpoints--unsubscribe-một-chạm) (`/api/notification-unsubscribe`)
+9. [Realtime — SignalR Hub `/hubs/notifications`](#realtime--signalr-hub-hubsnotifications)
+10. [Tầng dispatch — thứ tự cổng chặn](#tầng-dispatch--thứ-tự-cổng-chặn)
+11. [Background services](#background-services) — 7 worker
+12. [Integration events](#integration-events) — publish / consume
+13. [Cấu hình (appsettings / biến môi trường)](#cấu-hình-appsettings--biến-môi-trường)
+14. [Database schema](#database-schema) — bảng + migration Sprint 6.2/6.3
+15. [Prometheus metrics](#prometheus-metrics)
+16. [Giới hạn đã biết](#giới-hạn-đã-biết)
+17. [Changelog](#changelog)
 
-Các loại notification khác trong `NotificationTypeEnum` (TicketCreated, SlaWarning, BatteryAnomalyDetected, …) hiện được tạo qua REST API `POST /api/notifications` (admin/internal tooling) hoặc sẽ mở rộng consumer sau.
+---
 
-REST API hiện tại phơi 3 nhóm endpoint:
+## Kiến trúc pipeline
 
-- **`/api/notifications`** — Người dùng cuối xem danh sách notification của chính mình; Admin / công cụ test tạo notification thủ công (backfill, smoke test).
-- **`/api/device-tokens`** — Người dùng cuối đăng ký / hủy / liệt kê push token thiết bị (Expo/FCM) cho Mobile/Web.
-- **`/api/notification-preferences`** — Người dùng cuối xem / cập nhật cài đặt kênh gửi (push/email/sms/in-app) và quiet hours của chính mình.
+```
+                    ┌──────────────────────────────────────────────┐
+   RabbitMQ event   │ 31 Consumer  (NotificationService.Application/Consumers)
+  ────────────────► │   → ghi 1 record Notification / (người nhận × channel)
+                    │   → Status = Pending                          │
+                    └──────────────────┬───────────────────────────┘
+                                       │ (DB: notifications)
+                    ┌──────────────────▼───────────────────────────┐
+                    │ NotificationDispatchBackgroundService (NOTI-01)
+                    │   quét Pending đến hạn, mỗi 5s, lô 100        │
+                    │   leader-election Redis → 1 instance xử lý    │
+                    └──────────────────┬───────────────────────────┘
+                                       │ DispatchPendingAsync
+                    ┌──────────────────▼───────────────────────────┐
+                    │ NotificationDispatcher — 6 cổng chặn          │
+                    │  preference kênh → preference NHÓM → digest   │
+                    │  → rate limit → quiet hours → địa chỉ nhận    │
+                    └───┬─────────┬─────────┬──────────┬───────────┘
+                        │         │         │          │
+                     InApp      Push      Email      SMS
+                   (SignalR)  (Composite) (bus →     (bus →
+                        │          │       EmailSvc)  SmsSvc)
+                        │          │
+                        │          ├─► SignalRPushChannel ─► NotificationHub
+                        │          │      (không cần device token, không có Delivered)
+                        │          │
+                        │          └─► ExpoPushChannel ─► Expo Push API
+                        │                 └─► push_receipts → ExpoReceiptReconcile
+                        │                                      → Delivered / token chết
+                        └─► NotificationHub → client cập nhật feed + badge ngay
+```
+
+> **ADR-0019 — kênh Push có HAI đường vận chuyển.** `CompositePushChannel` là kênh Push duy nhất
+> dispatcher nhìn thấy; nó rẽ sang SignalR, Expo hoặc cả hai theo cấu hình `push.transport` đổi được
+> lúc chạy qua `PUT /api/admin/notification-settings/push-transport`. Chi tiết:
+> [Endpoints — Admin Notification Settings](#endpoints--admin-notification-settings).
+
+**Ba điều quan trọng phải nắm trước khi đọc phần endpoint:**
+
+1. **1 sự kiện nghiệp vụ = N record `Notification`**, mỗi kênh một record. Record kênh
+   `Push`/`Email`/`Sms` là **bản ghi giao nhận**, KHÔNG phải mục hiển thị. Chỉ record `InApp` mới là
+   dòng trong feed người dùng nhìn thấy — đây là lý do `GET /api/notifications` và
+   `GET /api/notifications/unread-count` **mặc định lọc `Channel = InApp`** từ Sprint 6.3 (NOTI3-01).
+2. **Consumer chỉ ghi "ý định gửi"**, không quyết định có gửi hay không. Việc tôn trọng tuỳ chọn
+   người dùng, quiet hours, hạn mức, digest đều nằm ở `NotificationDispatcher` — nên một consumer
+   ghi đủ 4 kênh không có nghĩa người dùng sẽ nhận đủ 4 kênh.
+3. **`Status = Sent` KHÔNG có nghĩa "đã tới thiết bị"** với kênh Push — nó chỉ nghĩa là đã bàn giao
+   cho đường vận chuyển. Bằng chứng giao hàng thật là `Delivered` (Sprint 6.3 NOTI3-02/NOTI3-14).
+   **Chỉ đường Expo mới sinh ra được `Delivered`** (nhờ đối soát biên nhận). Chạy thuần
+   `push.transport = SignalR` thì `Sent` là trạng thái cuối cùng, và vì không có dữ liệu biên nhận
+   nên chuỗi bù SMS cho push critical (NOTI3-05) cũng tự nghỉ. Xem ADR-0019.
+4. **Chat bỏ qua quiet hours, digest và hạn mức** (ADR-0019). `ChatCreated` và `ChatMentioned` là
+   hội thoại giữa người thật — hoãn tới sáng hôm sau thì buổi tối nhắn tin không ai nhận được gì.
+   Muốn tắt hẳn thông báo chat thì tắt kênh Push hoặc tắt nhóm "Trao đổi" trong tuỳ chọn.
 
 ---
 
@@ -32,7 +103,7 @@ REST API hiện tại phơi 3 nhóm endpoint:
   "statusCode": 200,
   "message": "...",
   "data": { ... },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
@@ -72,7 +143,15 @@ REST API hiện tại phơi 3 nhóm endpoint:
 - `400` — Validation hoặc input không hợp lệ; body theo `CommonResponse<T>` với `listErrors`
 - `401` — Token thiếu/hết hạn/không hợp lệ (do JWT middleware trả, body không phải `CommonResponse<T>`)
 - `403` — Có token nhưng không đủ quyền (sai role)
+- `429` — Vượt hạn mức (chỉ endpoint `test-send`)
 - `500` — Lỗi server ngoài dự kiến
+
+> **Enum serialize:** NotificationService trả enum dạng **số nguyên** trong DTO nghiệp vụ
+> (`type`, `channel`, `status`, `platform`, `category`). Riêng 3 endpoint mới của Sprint 6.3 —
+> `GET /api/admin/notification-templates`, `GET /api/notification-preferences/categories`,
+> và payload SignalR `NotificationCreated` — trả **chuỗi tên enum** (`"TicketCreated"`, `"Push"`)
+> vì chúng phục vụ màn hình quản trị/hiển thị, đọc bằng mắt quan trọng hơn.
+> `NotificationCategoryPreferenceDto` trả **cả hai** (`category` số + `categoryName` chuỗi).
 
 ---
 
@@ -80,63 +159,236 @@ REST API hiện tại phơi 3 nhóm endpoint:
 
 ### `NotificationTypeEnum`
 
-Phân loại notification, dùng cho template routing và filter UI. Giá trị int **không liên tục** — `15` đã được skip, `99` reserved cho `System`.
+Phân loại notification — quyết định template, ma trận kênh (`TypeChannelMatrix`), nhóm tuỳ chọn
+(`NotificationCategoryEnum`), và có thuộc diện critical (bypass quiet hours + hạn mức + giữ vĩnh
+viễn khi retention dọn) hay không.
 
-| Giá trị | Int | Ý nghĩa |
-|---|---|---|
-| `TicketCreated` | 1 | Ticket mới được tạo |
-| `TicketAssigned` | 2 | Ticket được assign cho Staff |
-| `TicketStatusChanged` | 3 | Ticket đổi trạng thái trong state machine |
-| `TicketResolved` | 4 | Ticket chuyển sang `RESOLVED` |
-| `TicketClosed` | 5 | Ticket chuyển sang `CLOSED` |
-| `TicketEscalated` | 6 | Ticket bị escalate (P1/P2 breach hoặc Staff request) |
-| `SlaWarning` | 7 | Cảnh báo sớm sắp breach SLA |
-| `SlaBreached` | 8 | SLA đã breach |
-| `BatteryAnomalyDetected` | 9 | AI module phát hiện bất thường ở pin |
-| `EnvironmentalIncidentDetected` | 10 | Sự cố môi trường (nhiệt độ, độ ẩm,…) được phát hiện |
-| `EnvironmentalIncidentResolved` | 11 | Sự cố môi trường đã giải quyết |
-| `AccountActivated` | 12 | Account được kích hoạt thành công |
-| `AdminInvite` | 13 | Admin gửi lời mời tạo account cho Staff/Manager |
-| `IncidentDeclared` | 14 | Incident chính thức được declare (Major Incident) |
-| `BatteryAlertEscalationPending` | 16 | Sprint 5B #238 — Critical Alert chưa được ack > 5 phút (`BatteryAlertEscalationRequestedEvent`) |
-| `AlertTicketSagaFailed` | 17 | Sprint 5B #238 — Alert–Ticket Saga vào terminal state `Failed`, admin cần reprocess (`AlertTicketSagaFailedEvent`) |
-| `IotDeviceWentOffline` | 18 | Sprint IoT-1 (#249) — IoT edge device mất heartbeat > 5 phút |
-| `System` | 99 | Notification hệ thống tổng quát (maintenance, broadcast,…) |
+**34 giá trị** (1–33 liên tục + `System = 99`). Số hiệu **không liên tục** — `99` reserved cho `System`.
+
+| Giá trị | Int | Nhóm (category) | Critical? | Ý nghĩa |
+|---|---|---|---|---|
+| `TicketCreated` | 1 | Ticket | | Ticket mới được tạo → notify Manager |
+| `TicketAssigned` | 2 | Ticket | | Ticket được assign/reassign Staff → notify **Staff + Customer** (Customer thêm ở Sprint 6.2) |
+| `TicketStatusChanged` | 3 | Ticket | | Ticket đổi trạng thái trong state machine → notify Customer. **Sprint 6.2 NOTI-07: từ enum chết (0 producer) thành có producer thật** |
+| `TicketResolved` | 4 | Ticket | | Staff báo xử lý xong → notify Manager + **Customer** (Customer thêm ở Sprint 6.2) |
+| `TicketClosed` | 5 | Ticket | | Ticket đóng hẳn (Customer đánh giá xong hoặc auto-close). **Sprint 6.2 NOTI-07: từ enum chết thành có producer thật** |
+| `TicketEscalated` | 6 | **SLA** | | Ticket bị escalate. Xếp nhóm SLA (không phải Ticket) vì leo thang luôn là hệ quả của rủi ro vỡ cam kết — người tắt "cập nhật ticket" vẫn phải nhận được |
+| `SlaWarning` | 7 | SLA | | Cảnh báo sắp breach SLA → Manager **+ Staff phụ trách** (Staff thêm ở Sprint 6.2 NOTI-05) |
+| `SlaBreached` | 8 | SLA | ✅ | SLA đã breach. **Sprint 6.2 NOTI-06: phân nhánh theo priority** — xem bảng bên dưới |
+| `BatteryAnomalyDetected` | 9 | Battery | | Bất thường pin mức **Critical** → Customer. Sprint 6.2 NOTI-08: mở đủ 4 kênh (trước chỉ InApp+Push) |
+| `EnvironmentalIncidentDetected` | 10 | Environmental | ✅ | Sự cố môi trường tại site (nhiệt độ/độ ẩm/ngập) |
+| `EnvironmentalIncidentResolved` | 11 | Environmental | | Sự cố môi trường đã giải quyết (clear banner) |
+| `AccountActivated` | 12 | Account | | Account được kích hoạt thành công |
+| ~~`AdminInvite`~~ | ~~13~~ | — | | **ĐÃ GỠ 03/08/2026** — thư mời đi thẳng `AuthService → EmailService` (`SendAdminInviteEvent` → `SendAdminInviteConsumer`), **không qua NotificationService**. Ở đây nó là enum không có producer: không consumer nào ghi, không dòng `notifications` nào mang type 13. **Không dùng lại số 13.** |
+| `IncidentDeclared` | 14 | SLA | ✅ | Major Incident chính thức được declare |
+| `CascadeRiskHigh` | 15 | Battery | | Sprint Bonus NS-14 (#658) — cascade risk ≥ 0.7 trên 1 pin → Manager/Admin |
+| `BatteryAlertEscalationPending` | 16 | Battery | ✅ | Sprint 5B #238 — Critical Alert chưa ack > 5 phút |
+| `AlertTicketSagaFailed` | 17 | SLA | ✅ | Sprint 5B #238 — Alert–Ticket Saga vào terminal state `Failed`, admin cần reprocess |
+| `IotDeviceWentOffline` | 18 | Battery | | Sprint IoT-1 (#249) — IoT edge device mất heartbeat > 5 phút |
+| `ChatCreated` | 19 | Chat | | Chat public mới trên ticket |
+| `ChatMentioned` | 20 | Chat | | User được @mention trong chat |
+| `ChatReacted` | 21 | Chat | | Chat của user nhận được reaction |
+| `ParticipantAdded` | 22 | Chat | | User được thêm làm participant ticket |
+| `ParticipantRemoved` | 23 | Chat | | User bị xoá khỏi participant ticket |
+| `ParticipantRoleChanged` | 24 | Chat | | Role/type của participant trên ticket bị đổi |
+| `BlogGenerationCompleted` | 25 | Account | | **GH-671 (module Blog)** — AI sinh blog xong (`status=Draft`). Gửi **InApp cho chính người bấm generate** (`BlogGenerationStatusConsumer` dùng `evt.RequestedByUserId`) |
+| `BlogGenerationFailed` | 26 | Account | | **GH-671 (module Blog)** — AI sinh blog thất bại. Gửi **InApp cho chính người bấm generate** |
+| `ChatEscalatedToAdmin` | 27 | **SLA** | ✅ | **Sprint 6.2 NOTI-03 (#674)** — saga `ChatEscalationReview` timeout 30' (Manager không ACK) → escalate lên Admin |
+| `TicketApproved` | 28 | Ticket | | **Sprint 6.2 NOTI-07 (#678)** — Manager duyệt kết quả, ticket vào `CLOSED_PENDING_RATE` chờ Customer đánh giá |
+| `TicketRejected` | 29 | Ticket | | **Sprint 6.2 NOTI-07** — kết quả resolve bị trả lại (→ Staff), HOẶC ticket đóng do ngoài scope (→ Customer) |
+| `TicketReopened` | 30 | Ticket | | **Sprint 6.2 NOTI-07** — Customer mở lại ticket → Manager + Staff đang assign |
+| `TicketRatingRequested` | 31 | Ticket | | **Sprint 6.2 NOTI-07** — nhắc Customer đánh giá ticket đang treo |
+| `BatteryAnomalyWarning` | 32 | Battery | | **Sprint 6.2 NOTI-08 (#679)** — bất thường pin mức **Warning** (spec §3.4 T#12) → InApp + Push |
+| `BatteryAnomalyInfo` | 33 | Battery | | **Sprint 6.2 NOTI-08** — bất thường pin mức **Info** (spec §3.4 T#11) → chỉ InApp |
+| `TicketMerged` | **34** | Ticket | | **GH-83 / GH-699.1** — ticket nguồn đã được Manager gộp vào ticket khác (`POST /api/admin/tickets/{id}/merge`). Consumer báo Customer sở hữu ticket nguồn; bỏ qua nếu event không có `customerId`. Không có trong channel map ⇒ mặc định **chỉ InApp**. **Số hiệu 34, không phải 27** |
+| `System` | 99 | Account | | Notification hệ thống tổng quát (broadcast, maintenance) + **bản tin digest tổng hợp** |
+
+> ⚠️ **FE/Mobile phải mirror đủ 34 giá trị**: 1–33 **trừ 13** (`AdminInvite` đã gỡ) + `TicketMerged = 34` + `System = 99`.
+>
+> **GH-83 — `TicketMerged` từng trùng giá trị `27` với `ChatEscalatedToAdmin`.** Hai type khác nhau
+> nhưng chung số khiến `ToString()` chỉ trả một tên, `TicketMerged` không thể có khoá riêng trong
+> `NotificationCategoryMap`, biến mất khỏi `GET /api/notification-preferences/categories`, và hai
+> loại tranh cùng khoá template `(type, channel)`. Nay `TicketMerged = 34`; giá trị `27` chỉ còn là
+> `ChatEscalatedToAdmin`. Mobile đã chốt 34 và không dùng lại 27. An toàn vì chưa từng có dòng
+> notification nào mang type 27.
+>
+> Cùng đợt: `BlogGenerationCompleted (25)` / `BlogGenerationFailed (26)` trước đây thiếu khai báo
+> trong `NotificationCategoryMap` — runtime vẫn fallback về `Account`, nhưng chúng không xuất hiện
+> trong `GET /categories`. Nay cả hai đã được khai báo tường minh.
+>
+> **03/08/2026 — push mang thêm `entityType`/`entityId`.**
+>
+> `data` của Expo push nay gồm: `notificationId` + **`entityType`/`entityId`** + mọi khoá trong
+> `payload_json`. Hai khoá mới lấy thẳng từ bản ghi notification và **không cho payload ghi đè** —
+> giống cách bảo vệ `notificationId`.
+>
+> **Vì sao thêm:** trước đó client phải *đoán* mở màn nào từ khoá payload. Mobile đoán bằng
+> `ticketId`, nên thông báo về **pin** — 1.228/1.285 dòng, tức **95,6%** — bấm vào không đi đâu cả;
+> trong khi danh sách trong ứng dụng lại dùng `entityType`. Cùng một thông báo mà hai đường mở ra
+> hai màn khác nhau. Có cặp này thì cả hai dùng chung một phép suy luận.
+>
+> Client cũ bỏ qua khoá lạ nên không vỡ; client mới không thấy hai khoá này (push gửi trước khi
+> deploy) thì tự lùi về `ticketId` như cũ.
+>
+> **2026-08-03 — ba thay đổi hợp đồng event để template dựng được câu tử tế.**
+>
+> | Event | Thêm | Vì sao |
+> |---|---|---|
+> | `BatteryAnomalyDetectedEvent`<br>`BatteryAnomalyWarningDetectedEvent` | `AnomalyTypeName`, `SeverityName` | `AnomalyTypeEnum`/`AlertSeverityEnum` thuộc `BatteryService.Domain` nên subscriber **không tham chiếu được**, chỉ nhận số trần ⇒ thông báo gửi khách ghi *"Loại: 4 — Mức độ: 3"*. Bên sở hữu enum gửi kèm tên là chỗ duy nhất luôn đúng. Cùng khuôn `OldStatusName`/`NewStatusName` của `TicketStatusChangedEvent` |
+> | `SlaWarningEvent`<br>`SlaBreachedEvent` | `Code` | Trước đó payload chỉ có `TicketId` (một GUID) nên thông báo vỡ SLA **không nhắc được ticket nào** — trong khi đây đúng là loại cần biết ngay để mở ra xử lý |
+>
+> Cả ba đều **nullable / mặc định rỗng**: event cũ đã nằm trong Outbox và hàng đợi không có các trường
+> này, deserialize ra `null` và phía nhận tự lùi — `BatteryAnomalyLabels` trả về con số, câu SLA lược
+> phần mã đi thay vì hiện `"Ticket  "`. Không cần dừng hệ thống để nâng cấp.
+>
+> Phía NotificationService, `BatteryAnomalyLabels` quy tên enum về tiếng Việt (`Overheat` → *Quá nhiệt*,
+> `Critical` → *Nghiêm trọng*). Tra theo **TÊN** chứ không theo số: BatteryService chèn thêm một giá trị
+> vào giữa enum sẽ không làm nhãn ở đây dịch sai — đúng tai nạn đã xảy ra với `NotificationTypeEnum` khi
+> module Blog chiếm mất 25/26. Tên lạ ⇒ hiện chính tên đó (tiếng Anh, vẫn hiểu được) chứ không ra số.
+>
+>
+> **Sửa 2026-07-31 — số hiệu ĐÃ ĐỔI:** 7 giá trị của Sprint 6.2 là **27–33**, KHÔNG phải 25–31 như
+> bản trước ghi. Module Blog (`GH-671`) chiếm mất **25** và **26**, đẩy toàn bộ nhóm Sprint 6.2 lên
+> 2 bậc. FE/Mobile nào đã mirror theo bản cũ **phải sửa lại**, nếu không sẽ hiển thị sai loại
+> thông báo (ví dụ coi `ChatEscalatedToAdmin` thành `BlogGenerationCompleted`).
+>
+> **Cập nhật 2026-08-01 — `BlogGenerationCompleted`/`BlogGenerationFailed` NAY đã được khai báo
+> tường minh** trong `NotificationCategoryMap` (nhóm `Account`). Trước đó hai type này thiếu khai báo
+> và rơi vào nhánh dự phòng của `Resolve()` — vốn cũng trả `Account`, nên **hành vi lúc chạy không
+> đổi**; điều đổi là nó không còn im lặng nữa và test bao `EveryNotificationType_HasExplicitCategory`
+> đã xanh trở lại.
+>
+> Vì sao xếp nhóm `Account` chứ không phải một nhóm riêng: đây là **phản hồi cho một hành động người
+> dùng tự khởi xướng** (bấm nút generate), không phải cảnh báo vận hành như `Battery`/`SLA`. Người
+> nhận cũng chính là người bấm, không phát tán cho ai khác.
+>
+> **Không có type cho cảnh báo bảo mật** (đăng nhập lạ / refresh-token reuse). Đây là **cố ý**:
+> hai luồng đó đi thẳng `AuthService → EmailService` như OTP, không qua NotificationService, nên
+> không thêm enum không producer. Xem [Integration events](#integration-events).
+
+**Critical types (mặc định)** — bypass quiet hours, bypass hạn mức, giữ vĩnh viễn khi retention dọn,
+và được fallback push→SMS bảo vệ:
+`EnvironmentalIncidentDetected` · `IncidentDeclared` · `BatteryAlertEscalationPending` ·
+`AlertTicketSagaFailed` · `SlaBreached` · `ChatEscalatedToAdmin`.
+Ghi đè bằng `Notification:Dispatch:CriticalTypes` (khai báo là **thay thế hoàn toàn**, không cộng dồn).
+
+---
 
 ### `NotificationStatusEnum`
 
-Trạng thái lifecycle của notification record.
+Trạng thái lifecycle của **một record giao nhận**. Sprint 6.3 NOTI3-14 thêm `Delivered` và `Opened`.
 
 | Giá trị | Int | Ý nghĩa |
 |---|---|---|
-| `Pending` | 1 | Đã tạo trong DB, chờ Dispatcher gửi |
-| `Sent` | 2 | Đã gửi thành công qua channel (push provider/SMTP/SMS gateway) |
-| `Failed` | 3 | Gửi thất bại — đã hết số lần retry hoặc lỗi vĩnh viễn |
-| `Read` | 4 | User đã đọc notification (InApp) |
+| `Pending` | 1 | Đã tạo bản ghi, chưa giao xuống channel. Worker sẽ pick lên. **Không bao giờ bị retention dọn** |
+| `Sent` | 2 | Đã **bàn giao cho channel** (hub SignalR / Expo / Mailjet / SMS gateway). ⚠️ CHƯA chắc thiết bị nhận được |
+| `Failed` | 3 | Thất bại vĩnh viễn — hết `MaxAttempts` hoặc lỗi không thể phục hồi (`FailureReason` ghi lý do) |
+| `Read` | 4 | User đã mark read trên feed in-app |
+| `Delivered` | 5 | **Sprint 6.3** — provider **xác nhận** đã đẩy tới thiết bị. Với push: Expo receipt trả `status:"ok"`. Đây mới là bằng chứng giao hàng thật. ⚠️ **ADR-0019: chỉ đạt được khi `push.transport` là `Expo` hoặc `Both`** — chạy thuần `SignalR` thì `Sent` là trạng thái cuối của kênh Push |
+| `Opened` | 6 | **Sprint 6.3** — user đã **mở** notification (bấm push / deep link). Mạnh hơn `Read` (Read có thể chỉ do lướt feed) |
+
+**Chuyển trạng thái hợp lệ:**
+
+```
+Pending ──dispatch ok──► Sent ──receipt Expo ok──► Delivered ──user bấm──► Opened
+                         │        (chỉ khi transport = Expo | Both)
+   │                       │                      │
+   │                       └──user mark read──────┴──────────────────► Read
+   │
+   ├──hết MaxAttempts / lỗi vĩnh viễn──► Failed
+   └──hoãn (quiet hours/digest/rate limit)──► vẫn Pending, đặt NextAttemptAt
+```
+
+**Quy tắc không hạ cấp (quan trọng cho FE):**
+- Receipt Expo về sau khi user đã đọc → **giữ nguyên** `Read`/`Opened`, không hạ về `Delivered`
+  (đọc được nghĩa là chắc chắn đã nhận).
+- `PATCH {id}/read` trên record đang `Opened` → **giữ `Opened`**, trả 200 (hạ xuống `Read` là mất thông tin).
+- `SmsFailedEvent` về sau khi user đã `Read`/`Opened` → **không** hạ xuống `Failed`.
+- "Chưa đọc" = `Status != Read && Status != Opened` (dùng cho `unreadOnly` và badge).
+
+---
 
 ### `NotificationChannelEnum`
 
-Kênh phát notification.
+| Giá trị | Int | Ý nghĩa | Vai trò trong feed |
+|---|---|---|---|
+| `Push` | 1 | Push — đi qua **hub SignalR và/hoặc Expo** tuỳ `push.transport` (ADR-0019) | Bản ghi giao nhận — **không** hiện trong feed |
+| `Email` | 2 | Email — publish `SendNotificationEmailEvent` → EmailService gửi qua Mailjet | Bản ghi giao nhận |
+| `Sms` | 3 | SMS — publish `SendSmsCommand` → SmsService → gateway Android | Bản ghi giao nhận |
+| `InApp` | 4 | Mục hiển thị trong app | ✅ **Đây là feed**. `GET /api/notifications` mặc định chỉ trả kênh này |
+
+---
+
+### `PushTransportEnum` *(MỚI — ADR-0019)*
+
+Đường vận chuyển của kênh `Push`. Đây là **cấu hình cấp hệ thống** (một giá trị cho cả service), đổi
+được lúc chạy qua [`PUT /api/admin/notification-settings/push-transport`](#put-apiadminnotification-settingspush-transport).
+
+Phân biệt rõ với `NotificationPreference.PushEnabled` — cái đó là tuỳ chọn của **từng người dùng**:
+người dùng tắt kênh Push thì không nhận push bằng đường nào cả; đổi transport ở đây chỉ đổi *cách*
+gói tin đi.
+
+| Giá trị | Int | Đường đi | Cần device token | Sinh được `Delivered` | Khi nào chọn |
+|---|---|---|---|---|---|
+| `SignalR` | 1 | Hub `/hubs/notifications` của chính hệ thống. Máy nhận dựng thông báo hệ điều hành tại chỗ từ sự kiện `NotificationReceived` | **Không** | **Không** — SignalR không có cơ chế biên nhận | Không có / không muốn phụ thuộc khoá EAS-FCM; ưu tiên độ trễ thấp; người dùng chủ yếu dùng web |
+| `Expo` | 2 | Expo Push API (`https://exp.host/--/api/v2/push/send`), batch tối đa 100 message/request, trần payload 4096 byte | **Có** — không có token là **thất bại** | **Có** — nhờ đối soát biên nhận `push_receipts` | Cần push tới máy đã **đóng app**, và cần bằng chứng giao hàng thật |
+| `Both` | 3 | Gửi **cả hai** đường cho cùng một thông báo | Không bắt buộc | Có, nếu đường Expo đi được | Muốn cả hai ưu điểm: máy đang mở app nhận tức thì qua SignalR, máy đã tắt app vẫn nhận qua Expo |
+
+**Quy ước kết quả ở chế độ `Both`:** coi là **thành công khi ÍT NHẤT MỘT đường thành công**. Người
+dùng không có device token nào (chỉ dùng web) thì đó là chuyện bình thường, không phải lỗi — vẫn
+`Sent` nhờ SignalR. Chỉ khi **mọi** đường được chọn đều hỏng mới ghi `Failed`, và `failureReason`
+gộp lý do của từng đường, ví dụ:
+
+```
+SignalR: hub down; Expo: DeviceNotRegistered
+```
+
+**Giá trị mặc định khi bảng `notification_settings` còn trống:** `SignalR`
+(đổi được bằng `NOTIFICATION_PUSH_DEFAULT_TRANSPORT`). Sau khi Admin bấm một lần thì database là
+nguồn sự thật vĩnh viễn — restart service **không** ghi đè lựa chọn đó.
+
+---
+
+### `NotificationCategoryEnum` *(MỚI — Sprint 6.3 NOTI3-04 / #704)*
+
+Nhóm nghiệp vụ của notification. **Vì sao cần:** trước sprint này người dùng chỉ bật/tắt được *cả
+kênh* — tắt Email là mất luôn email SLA sắp vỡ. Không có nhóm thì người dùng buộc phải chọn giữa bị
+làm phiền và bỏ lỡ việc quan trọng, và họ luôn chọn tắt hết.
 
 | Giá trị | Int | Ý nghĩa |
 |---|---|---|
-| `Push` | 1 | Push notification qua Expo / FCM tới Mobile |
-| `Email` | 2 | Email qua SMTP |
-| `Sms` | 3 | SMS qua gateway |
-| `InApp` | 4 | Notification trong app (hiển thị trong list, không cần kênh ngoài) |
+| `Ticket` | 1 | Vòng đời ticket: tạo / gán / đổi trạng thái / duyệt / từ chối / mở lại / đánh giá |
+| `Sla` | 2 | SLA và leo thang: cảnh báo sắp vỡ, đã vỡ, escalate, sự cố nghiêm trọng, saga failed, chat escalate lên Admin |
+| `Battery` | 3 | Sức khoẻ pin và thiết bị IoT: bất thường, rủi ro lan truyền, mất heartbeat |
+| `Environmental` | 4 | Sự cố môi trường tại site (nhiệt độ / độ ẩm / ngập) |
+| `Chat` | 5 | Trao đổi trên ticket: chat, mention, reaction, thay đổi người tham gia |
+| `Account` | 6 | Tài khoản và hệ thống: kích hoạt, mời admin, thông báo hệ thống |
+
+**Bảng ánh xạ `NotificationTypeEnum` → nhóm** nằm ở `NotificationCategoryMap` (Domain layer, có test
+bao mọi giá trị enum). FE **không nên nhân bản** bảng này — gọi
+[`GET /api/notification-preferences/categories`](#get-apinotification-preferencescategories) để lấy.
+Type chưa khai báo rơi về nhóm `Account` (không ném lỗi làm chết đường gửi).
+
+---
 
 ### `NotificationFrequencyEnum`
 
-Tần suất gửi notification — đặt ở `NotificationPreference` per-user (default `Immediate`). Hiện **chưa expose** qua endpoint `/api/notification-preferences` (request/response của PUT/GET không có field `frequency`) — chỉ tồn tại ở tầng entity để hỗ trợ digest sau (§49 — Notification advanced).
+Tần suất gửi, đặt ở `NotificationPreference` per-user.
 
 | Giá trị | Int | Ý nghĩa |
 |---|---|---|
-| `Immediate` | 1 | Gửi ngay khi có sự kiện |
-| `Daily` | 2 | Gom thành digest gửi 1 lần/ngày |
+| `Immediate` | 1 | Gửi ngay khi có sự kiện (mặc định) |
+| `Daily` | 2 | Gom thành digest gửi 1 lần/ngày (cửa sổ 24 giờ) |
+
+> **Sprint 6.2 NOTI-12 (#683) — field này nay ĐÃ CÓ TÁC DỤNG THẬT.** Trước đó `Frequency` và
+> `DigestWindowMinutes` tồn tại trong entity + nhận được qua `PUT /api/notification-preferences`
+> nhưng **không dòng code nào đọc chúng**. Nay `NotificationDispatcher` + `NotificationDigestBackgroundService`
+> thực thi digest. Vẫn **chưa expose `frequency` qua REST** — FE điều khiển digest bằng
+> `digestWindowMinutes` (xem [PUT preferences](#put-apinotification-preferences)).
+
+---
 
 ### `DevicePlatformEnum`
-
-Platform của device token — dùng trong request/response của các endpoint `/api/device-tokens` (xem [Endpoints — Device Tokens](#endpoints--device-tokens)).
 
 | Giá trị | Int | Ý nghĩa |
 |---|---|---|
@@ -146,33 +398,132 @@ Platform của device token — dùng trong request/response của các endpoint
 
 ---
 
-## Endpoints
+### `PushReceiptStatusEnum` *(MỚI — Sprint 6.3 NOTI3-02 / #702)*
+
+Kết quả đối soát biên nhận Expo. **Nội bộ — chưa expose qua REST endpoint nào**, nhưng ảnh hưởng
+trực tiếp tới `Notification.Status` mà FE nhìn thấy.
+
+| Giá trị | Int | Ý nghĩa | Hệ quả |
+|---|---|---|---|
+| `Pending` | 1 | Đã gửi lên Expo, chưa hỏi được kết quả | Notification giữ `Sent` |
+| `Ok` | 2 | Expo xác nhận đã đẩy tới FCM/APNs | Notification → `Delivered` + audit `PushDelivered` |
+| `Error` | 3 | Expo báo lỗi — xem `ErrorCode` | Notification → `Failed` **chỉ khi** không còn receipt anh em nào `Ok`/`Pending` |
+| `Expired` | 4 | Hết `MaxCheckAttempts` mà Expo vẫn không trả kết quả (cửa sổ 24h của Expo đã đóng) | Notification giữ nguyên trạng thái |
+
+**Mã lỗi Expo được xử lý riêng:**
+
+| `errorCode` | Xử lý |
+|---|---|
+| `DeviceNotRegistered` | **Tắt device token** (`IsActive = false`) — nguồn rác lớn nhất; không tắt thì mọi lần gửi sau đều thất bại và vẫn tính quota |
+| `MessageTooBig` | Log **Error** — lẽ ra guard 4096 byte ở `ExpoPushChannel` đã chặn ở nguồn; lọt tới đây nghĩa là guard hụt |
+| `MessageRateExceeded` | Log **Warning** — chạm trần ~600 msg/s của project, không phải lỗi nội dung |
+| `MismatchSenderId`, `InvalidCredentials` | Log **Critical** — sai cấu hình FCM/APNs, TOÀN BỘ push đang hỏng |
+| khác | Log Warning, vẫn ghi nhận `Error` |
+
+---
+
+### `NotificationAuditActionEnum`
+
+Hành động ghi vào `notification_audit_logs` + `notification_audit_outbox` (Option C — đẩy sang
+AuditAggregatorService, không có endpoint đọc cục bộ).
+
+| Giá trị | Int | ActionCode | Severity | Ghi ở đâu |
+|---|---|---|---|---|
+| `PushSent` | 1 | `PushSent` | Info (thành công) / Warning | `NotificationDispatcher` sau khi giao push |
+| `PushFailed` | 2 | `PushFailed` | Warning | `NotificationDispatcher` khi push thất bại vĩnh viễn |
+| `PushDelivered` | 3 | `PushDelivered` | Info | `ExpoReceiptReconcileBackgroundService` khi receipt `ok` |
+| `PushOpened` | 4 | `PushOpened` | Info | `PATCH /api/notifications/{id}/opened` |
+| `InAppCreated` | 5 | `InAppCreated` | Info | `NotificationDispatcher` sau khi giao record InApp |
+| `InAppRead` | 6 | `InAppRead` | Info | `PATCH /api/notifications/{id}/read` |
+| `InAppDismissed` | 7 | `InAppDismissed` | Info | *(khai báo, chưa có caller)* |
+| `TemplateTestSent` | 8 | `TemplateTestSent` | **Warning** | **Sprint 6.3 NOTI3-12** — `POST /api/admin/notification-templates/{id}/test-send` |
+
+> **Sprint 6.2 NOTI-13 (#684) — 7 action gốc nay MỚI THẬT SỰ ĐƯỢC GHI.** Trước đó hạ tầng audit đã
+> dựng đủ (bảng 14 cột + outbox + relay leader-election) nhưng **không dòng code nào tạo record**:
+> enum chưa từng được dùng và relay poll bảng rỗng 2 giây/lần vĩnh viễn.
+>
+> `TemplateTestSent` để Severity **Warning** chứ không Info là có chủ đích: gửi email thật từ domain
+> của hệ thống là hành động cần nổi lên trong bộ lọc audit, không nên lẫn vào nhiễu Info.
+>
+> Audit chỉ ghi cho kênh **Push** và **InApp** (7 action của `#AUDIT-34`); Email/Sms bỏ qua.
+> Lỗi ghi audit **không bao giờ** làm hỏng luồng gửi (writer nuốt exception).
+
+---
+
+## Routing qua ApiGateway
+
+Sprint 6.3 thêm **5 route mới** vào `services/ApiGateway/src/ApiGateway/appsettings.json`
+(cluster `notificationCluster`). Path **giữ nguyên** qua gateway — không rewrite.
+
+| RouteId | Match path | Dùng cho |
+|---|---|---|
+| `notifications-hub-route` | `/hubs/notifications/{**catch-all}` | WebSocket SignalR (negotiate + các sub-path) |
+| `notifications-hub-root-route` | `/hubs/notifications` | WebSocket SignalR (root) |
+| `notification-unsubscribe-route` | `/api/notification-unsubscribe` | Huỷ đăng ký một chạm (**public** — Gmail/Yahoo gọi từ ngoài) |
+| `admin-notification-templates-route` | `/api/admin/notification-templates/{**catch-all}` | `preview` / `test-send` / `activate` |
+| `admin-notification-templates-root-route` | `/api/admin/notification-templates` | Danh sách template |
+| `admin-notification-settings-route` | `/api/admin/notification-settings/{**catch-all}` | **ADR-0019** — `push-transport` (đọc/đổi đường vận chuyển push) |
+| `admin-notification-settings-root-route` | `/api/admin/notification-settings` | (dự phòng cho endpoint gốc) |
+
+> Route `/api/notifications`, `/api/device-tokens`, `/api/notification-preferences` đã có từ trước
+> (catch-all) nên **không cần thêm** cho 5 endpoint mới thuộc các nhóm đó.
+>
+> ⚠️ `notification-unsubscribe-route` phải **cho phép ẩn danh** ở gateway — đây là endpoint duy nhất
+> của service không yêu cầu JWT.
+
+---
+
+## Endpoints — Notifications
 
 Base route: `/api/notifications`
+
+| Method | Path | Auth | Sprint |
+|---|---|---|---|
+| `GET` | `/api/notifications` | `[Authorize]` | — (đổi hành vi ở 6.3) |
+| `POST` | `/api/notifications` | `[Authorize(Roles = "Admin")]` | — (sửa bug ở 6.3) |
+| `PATCH` | `/api/notifications/{id}/read` | `[Authorize]` | — (đổi hành vi ở 6.3) |
+| `PATCH` | `/api/notifications/{id}/opened` | `[Authorize]` | **MỚI — 6.3 NOTI3-14** |
+| `POST` | `/api/notifications/read-all` | `[Authorize]` | — |
+| `GET` | `/api/notifications/unread-count` | `[Authorize]` | — (đổi hành vi ở 6.3) |
 
 ---
 
 ### `GET /api/notifications`
 
-**Mục đích:** Lấy danh sách notification của **user hiện tại** (UserId trích xuất từ JWT claim). Hỗ trợ phân trang và filter theo `Type` / `Channel` / `Status` / `UnreadOnly`. Sắp xếp mặc định theo `CreatedAt` giảm dần.
+**Mục đích:** Lấy **feed** notification của user hiện tại (UserId trích từ JWT claim). Phân trang,
+filter theo `type`/`channel`/`status`/`unreadOnly`. Sắp xếp `CreatedAt` giảm dần.
 
-**Auth:** `[Authorize]` — yêu cầu access token hợp lệ. Mọi role đã đăng nhập đều gọi được; mỗi user chỉ thấy notification của chính mình.
+**Auth:** `[Authorize]` — mọi role đã đăng nhập; mỗi user chỉ thấy notification của chính mình.
+
+> ### ⚠️ BREAKING (Sprint 6.3 NOTI3-01 / #701) — mặc định chỉ trả `Channel = InApp`
+>
+> **Trước:** endpoint trả record của **mọi** channel → cùng một thông báo hiện lặp **2–4 lần**
+> (chat 2 dòng, Battery Critical 4 dòng, SLA P1 4 dòng).
+> **Sau:** không truyền `channel` ⇒ tự động lọc `Channel = InApp` ⇒ **mỗi sự kiện đúng 1 dòng**.
+>
+> **FE cần làm gì:** *không gì cả* nếu chỉ hiển thị feed — kết quả tự đúng. Nếu FE đang tự
+> de-duplicate ở client thì **gỡ đoạn đó đi**, nếu không sẽ lọc nhầm.
+> Muốn xem lại hành vi cũ: truyền `includeAllChannels=true`.
 
 **Query parameters:**
 
 | Param | Type | Bắt buộc | Default | Mô tả |
 |---|---|---|---|---|
-| `pageNumber` | `int` | Không | `1` | Số trang (1-based). Giá trị `≤ 0` tự về `1`. |
-| `pageSize` | `int` | Không | `10` | Số bản ghi mỗi trang. Giá trị `≤ 0` tự về `10`; **tối đa `100`** — gửi lớn hơn sẽ bị clamp xuống `100`. |
-| `type` | `NotificationTypeEnum?` (int) | Không | `null` | Lọc theo loại notification (1=TicketCreated, 2=TicketAssigned,…) |
-| `channel` | `NotificationChannelEnum?` (int) | Không | `null` | Lọc theo kênh (1=Push, 2=Email, 3=Sms, 4=InApp) |
-| `status` | `NotificationStatusEnum?` (int) | Không | `null` | Lọc theo trạng thái (1=Pending, 2=Sent, 3=Failed, 4=Read) |
-| `unreadOnly` | `bool?` | Không | `null` | `true` → chỉ lấy notification có `Status != Read` |
+| `pageNumber` | `int` | Không | `1` | Số trang (1-based). Giá trị `≤ 0` tự về `1` |
+| `pageSize` | `int` | Không | `10` | Số bản ghi mỗi trang. `≤ 0` tự về `10`; **tối đa `100`** — lớn hơn bị clamp xuống `100` |
+| `type` | `NotificationTypeEnum?` (int) | Không | `null` | Lọc theo loại (1=TicketCreated, 2=TicketAssigned, …) |
+| `channel` | `NotificationChannelEnum?` (int) | Không | `null` | Lọc theo kênh (1=Push, 2=Email, 3=Sms, 4=InApp). **Truyền tường minh ⇒ bộ lọc feed mặc định KHÔNG áp dụng** — dùng cho màn hình soi riêng 1 kênh giao nhận |
+| `status` | `NotificationStatusEnum?` (int) | Không | `null` | Lọc theo trạng thái (1=Pending, 2=Sent, 3=Failed, 4=Read, **5=Delivered, 6=Opened**) |
+| `unreadOnly` | `bool?` | Không | `null` | `true` → chỉ lấy record `Status != Read && Status != Opened`. **Sprint 6.3: `Opened` nay cũng bị loại** — trước đó noti đã mở vẫn hiện là chưa đọc |
+| `includeAllChannels` | `bool` | Không | `false` | **MỚI — Sprint 6.3.** `true` = bỏ bộ lọc feed, trả record của MỌI channel (màn hình chẩn đoán/admin). Người dùng cuối luôn chỉ nên thấy feed |
+
+> **Thứ tự ưu tiên lọc kênh:** `channel` (tường minh) → `includeAllChannels=true` (bỏ lọc) →
+> mặc định `InApp`. Truyền cả `channel=2` lẫn `includeAllChannels=true` thì `channel=2` thắng.
 
 **Ví dụ:**
 
 ```
-GET /api/notifications?pageNumber=1&pageSize=20&channel=4&unreadOnly=true
+GET /api/notifications?pageNumber=1&pageSize=20&unreadOnly=true
 Authorization: Bearer eyJ...
 ```
 
@@ -182,6 +533,7 @@ Authorization: Bearer eyJ...
 {
   "isSuccess": true,
   "statusCode": 200,
+  "message": null,
   "data": {
     "items": [
       {
@@ -192,87 +544,106 @@ Authorization: Bearer eyJ...
         "status": 2,
         "title": "Phát hiện bất thường ở pin B-007",
         "body": "Voltage giảm bất thường lúc 12:34. Hãy kiểm tra ticket #4521.",
-        "payloadJson": "{\"batteryId\":\"...\",\"ticketId\":\"...\"}",
-        "entityType": "Ticket",
+        "payloadJson": "{\"alertId\":\"...\",\"batteryAssetId\":\"...\",\"screen\":\"BatteryDetail\"}",
+        "entityType": "Battery",
         "entityId": "4521aaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-        "sentAt": "2026-06-13T05:34:10Z",
+        "sentAt": "2026-07-30T05:34:10Z",
         "readAt": null,
-        "createdAt": "2026-06-13T05:34:09Z"
+        "createdAt": "2026-07-30T05:34:09Z"
       }
     ],
     "totalItems": 42,
     "pageNumber": 1,
-    "pageSize": 20
+    "pageSize": 20,
+    "totalPages": 3,
+    "hasNextPage": true,
+    "hasPreviousPage": false
   },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `data.items[].id` | `Guid` | Không | ID của notification |
-| `data.items[].userId` | `Guid` | Không | ID của user nhận notification (luôn bằng user hiện tại) |
+| `data.items[].id` | `Guid` | Không | ID của notification record |
+| `data.items[].userId` | `Guid` | Không | ID user nhận (luôn bằng user hiện tại) |
 | `data.items[].type` | `NotificationTypeEnum` (int) | Không | Loại notification |
-| `data.items[].channel` | `NotificationChannelEnum` (int) | Không | Kênh phát |
-| `data.items[].status` | `NotificationStatusEnum` (int) | Không | Trạng thái lifecycle |
-| `data.items[].title` | `string` | Không | Tiêu đề (đã render template) |
-| `data.items[].body` | `string` | Không | Nội dung (đã render template) |
-| `data.items[].payloadJson` | `string?` | Có | JSON chứa metadata bổ sung (FE deep-link, parse client-side) |
-| `data.items[].entityType` | `string?` | Có | Loại entity liên quan (`Ticket`, `Battery`, `Account`,…) — dùng để deep-link |
-| `data.items[].entityId` | `Guid?` | Có | ID entity liên quan |
-| `data.items[].sentAt` | `DateTime?` | Có | Thời điểm gửi thành công (`null` khi `Status=Pending`/`Failed`) |
-| `data.items[].readAt` | `DateTime?` | Có | Thời điểm user đọc (`null` nếu chưa đọc) |
-| `data.items[].createdAt` | `DateTime` | Không | Thời điểm tạo record |
-| `data.totalItems` | `int` | Không | Tổng số notification match filter |
-| `data.pageNumber` | `int` | Không | Trang hiện tại |
-| `data.pageSize` | `int` | Không | Kích thước trang |
+| `data.items[].channel` | `NotificationChannelEnum` (int) | Không | Kênh. Mặc định luôn `4` (InApp) trừ khi truyền `channel`/`includeAllChannels` |
+| `data.items[].status` | `NotificationStatusEnum` (int) | Không | Trạng thái lifecycle (1–6) |
+| `data.items[].title` | `string` | Không | Tiêu đề. **Lưu ý:** đây là nội dung **inline** consumer ghi lúc tạo record — bản render từ DB template (nếu có) chỉ áp dụng ở tầng gửi, KHÔNG ghi ngược vào record |
+| `data.items[].body` | `string` | Không | Nội dung (xem lưu ý ở `title`) |
+| `data.items[].payloadJson` | `string?` | **Có** | Chuỗi JSON metadata (FE tự `JSON.parse`). Thường có `screen` để deep-link. Có thể chứa `bypassQuietHours`, `digest`, `fallbackFrom` — xem bảng khoá payload bên dưới |
+| `data.items[].entityType` | `string?` | **Có** | `"Ticket"` / `"Battery"` / `"Chat"` / `"Account"` / `"NotificationDigest"` |
+| `data.items[].entityId` | `Guid?` | **Có** | ID entity liên quan. `null` với record digest tổng hợp |
+| `data.items[].sentAt` | `DateTime?` | **Có** | Thời điểm giao xuống channel. `null` khi `Pending`/`Failed` |
+| `data.items[].readAt` | `DateTime?` | **Có** | Thời điểm đọc. `null` nếu chưa đọc |
+| `data.items[].createdAt` | `DateTime` | Không | Thời điểm tạo record (UTC) |
+
+**Khoá đặc biệt trong `payloadJson`** (FE nên biết để render đúng):
+
+| Khoá | Kiểu | Ý nghĩa |
+|---|---|---|
+| `screen` | `string` | Màn hình deep-link (`TicketDetail`, `TicketRate`, `BatteryDetail`, …) |
+| `bypassQuietHours` | `true` | Sprint IoT-2 — record được phép gửi kể cả trong quiet hours |
+| `digest` + `count` + `notificationIds` | `bool` / `int` / `string[]` | **Sprint 6.2 NOTI-12** — đây là bản tin **tổng hợp**; `notificationIds` là các record gốc đã được gộp |
+| `fallbackFrom` + `fallbackChannel` | `string` (Guid) / `"Push"` | **Sprint 6.3 NOTI3-05** — đây là bản **SMS bù** sinh ra vì push không có receipt. **Báo cáo/thống kê phải loại ra để không đếm trùng** |
 
 **Lưu ý:**
-- Mảng `items` có thể rỗng (`[]`) khi user chưa có notification nào hoặc filter quá hẹp — vẫn trả `200` chứ không phải `404`.
-- Query đã filter sẵn `IsDeleted = false` (soft delete) và `UserId = current user`. User KHÔNG thể đọc notification của user khác.
-- Enum được serialize ra **số nguyên** (giá trị int), không phải string. FE map ngược ra tên qua bảng [Enums](#enums).
-- Entity `Notification` còn có cột `FailureReason` (lý do khi `Status = Failed`) **chỉ lưu nội bộ DB — KHÔNG expose** qua DTO/API.
+- Mảng `items` có thể rỗng (`[]`) — vẫn trả `200`, không phải `404`.
+- Query đã filter sẵn `IsDeleted = false` và `UserId = current user`. Không thể đọc noti của người khác.
+- Cột `FailureReason` (lý do khi `Status = Failed`), `DispatchAttemptCount`, `NextAttemptAt` **chỉ lưu
+  nội bộ DB — KHÔNG expose** qua DTO.
 
 **Lỗi thường gặp:**
-- `400` — JWT đã pass `[Authorize]` nhưng claim `UserId` (hoặc `sub` / `NameIdentifier`) thiếu hoặc malformed → server không xác định được user. Đây là **client request error** (token shape sai), không phải auth fail. Body theo `CommonResponse<T>`:
+- `400` — JWT đã pass `[Authorize]` nhưng thiếu/sai claim định danh (`UserId` → `NameIdentifier` → `sub`):
   ```json
-  {
-    "isSuccess": false,
-    "statusCode": 400,
-    "message": "Không xác định được user."
-  }
+  { "isSuccess": false, "statusCode": 400, "message": "Không xác định được user." }
   ```
-- `401` — Token thiếu, hết hạn hoặc chữ ký không hợp lệ (trả bởi JWT middleware, không phải `CommonResponse<T>`).
+- `401` — Token thiếu, hết hạn hoặc chữ ký sai (JWT middleware trả, không theo `CommonResponse<T>`).
 
 ---
 
 ### `POST /api/notifications`
 
-**Mục đích:** Tạo 1 notification record mới một cách thủ công. **Endpoint này phục vụ admin / smoke test / backfill / các integration event chưa có consumer riêng** — flow production cho 3 event đã wire-up (`AlertTicketSagaFailedEvent`, `BatteryAlertEscalationRequestedEvent`, `IotDeviceWentOfflineEvent`) chạy qua RabbitMQ Consumer chứ không gọi REST.
+**Mục đích:** Tạo 1 notification record thủ công — **admin / smoke test / backfill**. Flow production
+chạy qua 31 RabbitMQ consumer, không gọi REST.
 
-Sau khi tạo, notification ở trạng thái `Pending` (`Status = 1`); Dispatcher sẽ pick lên và chuyển sang `Sent`/`Failed` tùy kết quả gửi.
+Record tạo ra ở `Status = Pending`; `NotificationDispatchBackgroundService` sẽ pick lên trong vòng
+`PollIntervalSeconds` (mặc định 5 giây) và giao xuống đúng channel của record.
 
-**Auth:** `[Authorize(Roles = "Admin")]` — chỉ role Admin.
+**Auth:** `[Authorize(Roles = "Admin")]`.
+
+> ### ⚠️ SỬA LỖI 30/07/2026 — `userId` nay là BẮT BUỘC và ĐƯỢC ĐỌC TỪ BODY
+>
+> **Bug cũ:** `CreateNotificationCommand.UserId` bị đánh `[JsonIgnore]` (sao chép nhầm từ
+> `MarkNotificationReadCommand`, nơi UserId lấy từ claim), trong khi controller **không** gán nó từ
+> token. Hệ quả: mọi lần gọi endpoint này đều tạo record với `UserId = Guid.Empty` → worker đánh
+> `Failed` với lý do `empty_user_id` → **endpoint vô dụng đúng cho mục đích mà chính doc của nó mô tả**.
+>
+> **Đã sửa:** gỡ `[JsonIgnore]` + validation từ chối `Guid.Empty` ngay tại pipeline (400) thay vì
+> tạo một dòng rác rồi để worker đánh Failed.
+> Không ảnh hưởng 9 consumer đang dùng command này — chúng gán `UserId` bằng code C#, mà thuộc tính
+> này chỉ chi phối việc deserialize JSON.
 
 **Request body:**
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `userId` | `Guid` | Bắt buộc | Khác `Guid.Empty` | ID của user sẽ nhận notification |
-| `type` | `NotificationTypeEnum` (int) | Bắt buộc | Phải là giá trị hợp lệ trong `NotificationTypeEnum` | Loại notification |
-| `channel` | `NotificationChannelEnum` (int) | Bắt buộc | Phải là giá trị hợp lệ trong `NotificationChannelEnum` | Kênh phát |
-| `title` | `string` | Bắt buộc | Không rỗng, tối đa **200 ký tự** | Tiêu đề |
-| `body` | `string` | Bắt buộc | Không rỗng, tối đa **2000 ký tự** | Nội dung |
-| `payloadJson` | `string?` | Tùy chọn | — | JSON metadata bổ sung (FE deep-link) |
-| `entityType` | `string?` | Tùy chọn | Tối đa **100 ký tự** nếu có | Loại entity liên quan (`Ticket`, `Battery`,…) |
-| `entityId` | `Guid?` | Tùy chọn | — | ID entity liên quan |
-| `bypassQuietHours` | `bool` | Tùy chọn | — | Sprint IoT-2 #IoT2-31 — bypass quiet hours khi gửi (chỉ dùng cho Critical channel, vd Environmental Incident). Khi `true`, handler merge key `bypassQuietHours: true` vào `payloadJson`; Dispatcher (Sprint 6+) đọc flag này để SKIP `NotificationPreference.QuietHoursStart/End`. Mặc định `false`. |
+| `userId` | `Guid` | **Bắt buộc** | Khác `Guid.Empty` | ID user nhận. Admin chỉ định qua body |
+| `type` | `NotificationTypeEnum` (int) | Bắt buộc | Phải là giá trị hợp lệ trong enum | Loại notification |
+| `channel` | `NotificationChannelEnum` (int) | Bắt buộc | Phải là giá trị hợp lệ trong enum | Kênh phát — record chỉ giao xuống **đúng kênh này** |
+| `title` | `string` | Bắt buộc | Không rỗng, tối đa **200 ký tự** | Tiêu đề (`.Trim()` trước khi lưu) |
+| `body` | `string` | Bắt buộc | Không rỗng, tối đa **2000 ký tự** | Nội dung (`.Trim()` trước khi lưu) |
+| `payloadJson` | `string?` | Tuỳ chọn | — | Chuỗi JSON metadata cho deep-link |
+| `entityType` | `string?` | Tuỳ chọn | Tối đa **100 ký tự** nếu có | `"Ticket"`, `"Battery"`, … (`.Trim()` nếu có giá trị) |
+| `entityId` | `Guid?` | Tuỳ chọn | — | ID entity liên quan |
+| `bypassQuietHours` | `bool` | Tuỳ chọn (default `false`) | — | Sprint IoT-2 #IoT2-31 — bỏ qua quiet hours khi gửi |
 
 **Ví dụ:**
 
 ```json
 POST /api/notifications
-Authorization: Bearer eyJ... (Admin)
+Authorization: Bearer eyJ...   (Admin)
 Content-Type: application/json
 
 {
@@ -283,7 +654,8 @@ Content-Type: application/json
   "body": "Hệ thống sẽ bảo trì lúc 22:00 hôm nay, dự kiến 30 phút.",
   "payloadJson": null,
   "entityType": null,
-  "entityId": null
+  "entityId": null,
+  "bypassQuietHours": false
 }
 ```
 
@@ -295,44 +667,226 @@ Content-Type: application/json
   "statusCode": 201,
   "message": "Tạo notification thành công.",
   "data": "9f8e7d6c-5b4a-3210-fedc-ba9876543210",
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `data` | `Guid` | Không | ID của notification vừa tạo. Notification ở `Status = Pending (1)` — Dispatcher sẽ xử lý sau |
+| `data` | `Guid` | Không | ID notification vừa tạo (`Status = Pending`) |
 | `message` | `string` | Không | `"Tạo notification thành công."` |
 
 **Lưu ý:**
-- Handler không validate `userId` có thực sự tồn tại trong UserService — caller chịu trách nhiệm. Notification với `userId` không tồn tại vẫn được tạo nhưng sẽ không ai nhận được (FE filter theo user khi GET).
-- `title` và `body` được `.Trim()` trước khi lưu; `entityType` cũng được `.Trim()` nếu có giá trị.
-- Endpoint **không** kiểm tra preference của user (Frequency / channel opt-out) — vì đây là endpoint admin/test bypass logic Dispatcher.
-- Khi `bypassQuietHours = true`: handler **merge** key `bypassQuietHours: true` vào `payloadJson`. Nếu `payloadJson` là JSON object hợp lệ → thêm key vào object đó; nếu rỗng → tạo `{"bypassQuietHours":true}`; nếu không parse được thành object → wrap thành `{"bypassQuietHours":true,"original":"<payload cũ>"}`. Flag **không** được lưu thành cột riêng — chỉ tồn tại trong `payloadJson`.
+- Handler **không** validate `userId` có tồn tại trong AuthService — caller chịu trách nhiệm. Nhưng
+  record với user không có trong `account_read_models` sẽ bị worker đánh `Failed` với lý do
+  `no_email` / `no_phone` khi giao Email/SMS.
+- Endpoint **không** bypass preference của user — record vẫn đi qua đầy đủ 6 cổng chặn của dispatcher
+  (preference kênh, preference nhóm, digest, hạn mức, quiet hours, địa chỉ nhận). Muốn chắc chắn tới
+  nơi thì chọn `type` thuộc danh sách critical hoặc bật `bypassQuietHours`.
+- Khi `bypassQuietHours = true`: handler **merge** khoá `bypassQuietHours: true` vào `payloadJson`.
+  Payload là JSON object hợp lệ → thêm khoá; rỗng → tạo `{"bypassQuietHours":true}`; không parse được
+  thành object → wrap `{"bypassQuietHours":true,"original":"<payload cũ>"}`. Flag **không** có cột riêng.
 
 **Lỗi thường gặp:**
-- `400` — Validation fail. Body theo `CommonResponse<T>` với `listErrors`. Các trường hợp:
-  - `UserId` rỗng (`Guid.Empty`) → `"UserId không được rỗng."`
-  - `Type` không nằm trong enum → `"Type không hợp lệ."`
-  - `Channel` không nằm trong enum → `"Channel không hợp lệ."`
-  - `Title` rỗng hoặc > 200 ký tự → `"Title không được trống."` / `"Title tối đa 200 ký tự."`
-  - `Body` rỗng hoặc > 2000 ký tự → `"Body không được trống."` / `"Body tối đa 2000 ký tự."`
-  - `EntityType` > 100 ký tự → `"EntityType tối đa 100 ký tự."`
+- `400` — Validation fail (`listErrors` liệt kê **tất cả** lỗi, không fail sớm):
 
-  Ví dụ body lỗi:
+  | Field | Detail |
+  |---|---|
+  | `UserId` | `"UserId là bắt buộc — notification không có người nhận sẽ không bao giờ gửi được."` |
+  | `Type` | `"Type không hợp lệ."` |
+  | `Channel` | `"Channel không hợp lệ."` |
+  | `Title` | `"Title không được trống."` / `"Title tối đa 200 ký tự."` |
+  | `Body` | `"Body không được trống."` / `"Body tối đa 2000 ký tự."` |
+  | `EntityType` | `"EntityType tối đa 100 ký tự."` |
+
   ```json
   {
     "isSuccess": false,
     "statusCode": 400,
     "message": "Dữ liệu đầu vào không hợp lệ.",
     "listErrors": [
-      { "field": "Title", "detail": "Title không được trống." },
-      { "field": "Body", "detail": "Body tối đa 2000 ký tự." }
+      { "field": "UserId", "detail": "UserId là bắt buộc — notification không có người nhận sẽ không bao giờ gửi được." },
+      { "field": "Title", "detail": "Title không được trống." }
     ]
   }
   ```
-- `401` — Chưa đăng nhập / token không hợp lệ (middleware).
+- `401` — Chưa đăng nhập / token không hợp lệ.
 - `403` — Token hợp lệ nhưng không phải role `Admin`.
+
+---
+
+### `PATCH /api/notifications/{id}/read`
+
+**Mục đích:** Đánh dấu 1 notification của user hiện tại là **đã đọc**.
+
+**Auth:** `[Authorize]` — chỉ thao tác được trên notification của chính mình.
+
+**Path param:** `id` — `Guid` của notification.
+
+**Request body:** không có.
+
+> ### Sprint 6.3 NOTI3-01 — lan trạng thái sang record ANH EM
+>
+> Một sự kiện sinh nhiều record (mỗi kênh một). Nếu chỉ đánh dấu record InApp, các record
+> Push/Email/Sms còn `Pending` sẽ bị worker gửi đi ở vòng sau ⇒ **user đã đọc trong app rồi vẫn
+> lãnh thêm một cú push cho đúng việc đó**.
+>
+> Nay handler tìm và đánh dấu luôn các record anh em thoả **tất cả**:
+> cùng `UserId` × cùng `Type` × cùng `EntityType` × cùng `EntityId` × `CreatedAt` nằm trong
+> **±1 phút** so với record được đọc × `Status ∈ {Pending, Sent, Delivered}`.
+>
+> Record đã `Failed` **giữ nguyên** — đó là dữ liệu chẩn đoán, ghi đè sẽ mất dấu vết lỗi.
+> Số record anh em bị lan ghi vào audit metadata `siblingsMarkedRead`.
+
+**Hành vi:**
+- Đánh dấu thành công → `Status = Read`, `ReadAt = UtcNow`, các record anh em cũng `Read` + `NextAttemptAt = null` → **200**.
+- Notification đã `Read` **hoặc `Opened`** trước đó → **idempotent**, trả **200**, không ghi lại
+  (không hạ `Opened` xuống `Read` — hạ cấp là mất thông tin).
+- Không tồn tại hoặc thuộc user khác → **404** (không leak existence, tránh IDOR).
+
+**Response `200`:** `CommonResponse<Guid>` — `data` = ID notification.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đánh dấu đã đọc thành công.",
+  "data": "8b9d0f1e-2a3b-4c5d-9e6f-7a8b9c0d1e2f",
+  "listErrors": null
+}
+```
+
+`message` khi idempotent: `"Notification đã được đánh dấu đã đọc."`
+
+**Lỗi thường gặp:**
+- `400` — Thiếu claim `UserId` → `"Không xác định được user."`; hoặc `id` = `Guid.Empty` → `"Id notification không hợp lệ."`
+- `401` — Chưa đăng nhập / token hết hạn.
+- `404` — `"Không tìm thấy notification."`
+- `500` — Lỗi server (GlobalExceptionMiddleware).
+
+**Tác dụng phụ:** ghi audit `InAppRead` (cùng transaction với việc đổi trạng thái).
+
+---
+
+### `PATCH /api/notifications/{id}/opened`  *(MỚI — Sprint 6.3 NOTI3-14 / #714)*
+
+**Mục đích:** Client báo user đã **mở** notification — bấm vào push, hoặc mở qua deep link.
+
+**Vì sao tách khỏi `/read`:** `Read` chỉ nghĩa là dòng đó đã hiện trên feed và user bấm "đã đọc";
+`Opened` là bằng chứng mạnh hơn — user **chủ động mở nội dung**. Tách ra để đo **open rate thật của
+kênh push**, thứ mà chỉ `Read` không nói được.
+
+**Auth:** `[Authorize]` — chỉ chủ sở hữu notification.
+
+**Path param:** `id` — `Guid` của notification.
+
+**Request body:** không có.
+
+**Hành vi:**
+- `Status = Opened`; `ReadAt ??= UtcNow` (mở tức là đã đọc — ghi mốc đọc nếu trước đó chưa có, để
+  badge và feed thống nhất).
+- Lan sang record anh em **giống hệt quy tắc của `/read`** (cùng cửa sổ ±1 phút, cùng tập trạng thái)
+  — nhưng record anh em được đặt `Read`, không phải `Opened` (user chỉ mở đúng một bản).
+- Idempotent: đã `Opened` rồi vẫn trả **200** (client mobile có thể gửi lại khi mạng chập chờn).
+- Không tồn tại hoặc thuộc user khác → **404**.
+
+**Response `200`:** `CommonResponse<Guid>`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đánh dấu đã mở thành công.",
+  "data": "8b9d0f1e-2a3b-4c5d-9e6f-7a8b9c0d1e2f",
+  "listErrors": null
+}
+```
+
+`message` khi idempotent: `"Notification đã được đánh dấu đã mở."`
+
+**Lỗi thường gặp:** `400` (thiếu claim / id rỗng) · `401` · `404` · `500`.
+
+**Tác dụng phụ:** ghi audit `PushOpened` với metadata `channel`, `type`, `siblingsMarkedRead`.
+
+> **Mobile nên gọi khi nào:** trong handler `notificationResponseReceived` của `expo-notifications`
+> (user bấm vào banner), và khi mở màn hình chi tiết từ deep link. **Không** gọi khi chỉ nhận được
+> push ở background — đó là `Delivered`, và `Delivered` do server tự suy ra từ receipt Expo.
+
+---
+
+### `POST /api/notifications/read-all`
+
+**Mục đích:** Đánh dấu **mọi** notification chưa đọc của user hiện tại thành đã đọc.
+
+**Auth:** `[Authorize]`.
+
+**Request body:** không có.
+
+**Hành vi:** cập nhật mọi record của chính user có `Status ∉ {Read, Opened}` → `Status = Read`,
+`ReadAt = UtcNow`. Trả về **số record đã được đánh dấu**.
+
+> ⚠️ **Khác `GET`/`unread-count`: endpoint này KHÔNG lọc `Channel = InApp`** — nó quét mọi channel.
+> Chủ ý: "đọc hết" cũng có nghĩa là **dừng luôn các record Push/Email/Sms còn `Pending`** (worker chỉ
+> lấy `Status = Pending`), để user bấm "đánh dấu tất cả đã đọc" xong không còn lãnh loạt push tồn đọng.
+> Vì vậy `data` trả về **có thể lớn hơn** số badge mà `unread-count` vừa hiển thị.
+>
+> **Sprint 6.3 NOTI3-14:** record `Opened` được bỏ qua — hạ `Opened` xuống `Read` là mất thông tin
+> (`Opened` = user thực sự bấm mở, `Read` = chỉ lướt qua feed).
+
+**Response `200`:** `CommonResponse<int>`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đánh dấu tất cả đã đọc thành công.",
+  "data": 12,
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data` | `int` | Không | Số notification vừa được mark |
+| `message` | `string` | Không | `"Đánh dấu tất cả đã đọc thành công."` — hoặc **`"Không có notification chưa đọc."`** khi `data = 0` (vẫn `isSuccess: true`, `statusCode: 200`) |
+
+**Lỗi thường gặp:** `400` (thiếu claim `UserId` → `"Không xác định được user."`) · `401` · `500`.
+
+---
+
+### `GET /api/notifications/unread-count`
+
+**Mục đích:** Đếm số notification chưa đọc — phục vụ **badge**.
+
+**Auth:** `[Authorize]`.
+
+> ### ⚠️ BREAKING (Sprint 6.3) — chỉ đếm record `InApp`, và loại cả `Opened`
+>
+> **Trước:** đếm cả record giao nhận Push/Email/Sms ⇒ badge **phồng 2–4 lần** so với số dòng user
+> thực sự nhìn thấy trong feed.
+> **Sau:** điều kiện đếm là
+> `UserId = me && !IsDeleted && Channel = InApp && Status ∉ {Read, Opened}`.
+>
+> Badge nay **luôn khớp** số dòng chưa đọc mà `GET /api/notifications?unreadOnly=true` trả về.
+> FE nếu đang chia số badge cho một hằng số để "bù trùng" thì **phải gỡ**.
+
+**Response `200`:** `CommonResponse<int>`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Lấy số notification chưa đọc thành công.",
+  "data": 3,
+  "listErrors": null
+}
+```
+
+**Lỗi thường gặp:** `400` (thiếu claim `UserId`) · `401` · `500`.
+
+> **Realtime:** không cần polling endpoint này nếu đã kết nối
+> [`/hubs/notifications`](#realtime--signalr-hub-hubsnotifications) — server chủ động đẩy event
+> `UnreadCountChanged` mỗi khi có notification InApp mới.
 
 ---
 
@@ -340,7 +894,76 @@ Content-Type: application/json
 
 Base route: `/api/device-tokens`
 
-Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoint đều `[Authorize]`** — `UserId` luôn lấy từ JWT claim, user chỉ thao tác trên token của chính mình (không nhận `userId` từ body).
+Quản lý push token thiết bị (Expo) cho Mobile/Web. **Mọi endpoint đều `[Authorize]`** — `UserId` luôn
+lấy từ JWT claim, user chỉ thao tác trên token của chính mình (không nhận `userId` từ body).
+
+> **ADR-0019 — token này chỉ có tác dụng khi `push.transport` là `Expo` hoặc `Both`.** Chạy thuần
+> `SignalR` thì đường push không đọc device token, nhưng client **vẫn nên đăng ký như thường**: đổi
+> transport là việc của Admin và có thể xảy ra bất cứ lúc nào; máy nào chưa có token đăng ký thì
+> ngay sau khi đổi sẽ không nhận được push nền cho tới lần đăng ký kế tiếp.
+
+> **Sprint 6.3 — token nay có thể bị hệ thống TỰ TẮT.** `ExpoReceiptReconcileBackgroundService` đặt
+> `IsActive = false` khi Expo trả `DeviceNotRegistered` (user gỡ app / đổi máy). `ExpoPushChannel`
+> cũng tắt token ngay khi ticket gửi trả lỗi này. FE nên **đăng ký lại token sau mỗi lần đăng nhập**
+> — endpoint `POST` là idempotent và tự reactivate.
+
+### Message push gửi lên Expo — thứ Mobile cần khớp
+
+Mỗi message có dạng:
+
+```json
+{
+  "to": "ExponentPushToken[xxx]",
+  "title": "…",
+  "body": "…",
+  "data": { /* payloadJson đã parse; null nếu payload không phải JSON hợp lệ */ },
+  "sound": "default",
+  "priority": "high",
+  "channelId": "alerts-critical"
+}
+```
+
+| Field | Giá trị | Ghi chú |
+|---|---|---|
+| `priority` | `"high"` nếu notification **critical**, ngược lại `"normal"` | Critical = type thuộc `CriticalTypes` **hoặc** payload có `bypassQuietHours: true`. ⚠️ Chat **không** phải critical dù được miễn quiet hours |
+| `channelId` | `"alerts-critical"` · `"chat-messages"` · `"alerts-default"` | ⚠️ **Android app PHẢI tạo sẵn cả 3 notification channel đúng 3 id này** (`expo-notifications` `setNotificationChannelAsync`). Channel chưa tồn tại → Android dùng channel mặc định, mất hẳn ưu tiên/âm báo đã thiết kế |
+| `data` | `payloadJson` đã deserialize **+ 5 khoá cố định** (bảng dưới) | Payload không parse được → vẫn gửi kèm 5 khoá cố định (log Warning), push vẫn đi |
+
+**Cách chọn `channelId`** (`ExpoPushChannel.ResolveChannelId`) — xét theo thứ tự:
+
+| Điều kiện | `channelId` |
+|---|---|
+| `isCritical == true` | `"alerts-critical"` |
+| Type ∈ `{ChatCreated, ChatMentioned, ChatReacted}` | `"chat-messages"` *(MỚI)* |
+| Còn lại | `"alerts-default"` |
+
+**5 khoá luôn có trong `data`** — client dựa vào đây để deep link và báo "đã mở":
+
+| Khoá | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `notificationId` | `Guid` | Không | Id của **record Push**. Client gọi `PATCH /api/notifications/{id}/opened` bằng giá trị này. Payload nghiệp vụ **không được ghi đè** khoá này |
+| `entityType` | `string?` | **Có** | `"Ticket"` / `"Chat"` / … — dựng deep link |
+| `entityId` | `Guid?` | **Có** | Id entity liên quan |
+| `createdAt` | `DateTime` | Không | UTC — client dùng để sắp xếp và khử trùng |
+| `notificationType` | `int` | Không | `NotificationTypeEnum` dạng **số** |
+
+**Giới hạn kích thước (Sprint 6.3 NOTI3-02):** message bị ép vừa **4096 byte** *trước* khi gửi.
+Thứ tự hy sinh: **bỏ `data` trước** (client vẫn mở được app, chỉ mất deep link), rồi mới **cắt `body`**
+theo **byte** (không phải ký tự — tiếng Việt có dấu là 2–3 byte/ký tự) và thêm `…` ở cuối.
+Vượt trần mà không chặn thì Expo trả `MessageTooBig` ở **receipt**, tức là *sau* khi đã báo 200 OK:
+người dùng không nhận được gì mà hệ thống vẫn tưởng đã gửi.
+
+**Batch (Sprint 6.2 NOTI-16):** tất cả token đang active của **một người nhận** được gộp vào **một**
+HTTP call (Expo cho tối đa **100 message/request**; nhiều hơn thì chia lô). Trước đó mỗi token là 1
+HTTP call — user có 3 thiết bị = 3 request cho cùng một notification.
+**Chỉ cần ≥ 1 thiết bị nhận được** thì notification tính là đã bàn giao (`Sent`).
+
+> **ADR-0019 — mục này CHỈ áp dụng khi `push.transport` là `Expo` hoặc `Both`.**
+> Chạy thuần `SignalR` thì không có HTTP call nào tới Expo, không có `push_receipts`, và trần 4096
+> byte cũng không áp dụng (SignalR không có giới hạn đó).
+>
+> Token bị Expo trả `DeviceNotRegistered` vẫn **tự động bị tắt** (`is_active = false`) như trước —
+> đã kiểm chứng E2E qua đường `CompositePushChannel`.
 
 ---
 
@@ -354,18 +977,21 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `token` | `string` | Bắt buộc | Không rỗng, tối đa **500 ký tự** | Push token (Expo/FCM) |
+| `token` | `string` | Bắt buộc | Không rỗng, tối đa **500 ký tự** | Expo push token (`ExponentPushToken[xxx]`) |
 | `platform` | `DevicePlatformEnum` (int) | Bắt buộc | Phải hợp lệ (1=Ios, 2=Android, 3=Web) | Platform thiết bị |
-| `deviceInfo` | `string?` | Tùy chọn | Tối đa **500 ký tự** nếu có | Mô tả thiết bị (model, OS,…) để user nhận diện |
+| `deviceInfo` | `string?` | Tuỳ chọn | Tối đa **500 ký tự** nếu có | Mô tả thiết bị (model, OS) để user nhận diện |
 
 > `userId` **không** nhận từ body — server set từ JWT claim.
 
-**Hành vi (theo token string — unique global ở DB):**
-- Token mới → tạo record, trả **`201`** `"Đăng ký thiết bị thành công."`
-- Token đã đăng ký và **đang active cho chính user hiện tại** → **`409`** `"Thiết bị đã được đăng ký."` (`data` = Id record đang tồn tại)
-- Token đã từng hủy (inactive) **hoặc** thuộc user khác trên cùng thiết bị → reactivate + gán lại cho user hiện tại, trả **`200`** `"Đăng ký lại thiết bị thành công."` (flow re-login / đổi tài khoản)
+**Hành vi (định danh theo chuỗi token — unique global ở DB):**
 
-**Response (`201` / `200` / `409`):** `CommonResponse<Guid>` — `data` = Id của device token.
+| Tình huống | HTTP | `message` |
+|---|---|---|
+| Token mới | **`201`** | `"Đăng ký thiết bị thành công."` |
+| Token đã đăng ký và **đang active cho chính user hiện tại** | **`409`** | `"Thiết bị đã được đăng ký."` (`data` = Id record đang tồn tại) |
+| Token đã từng huỷ (inactive) **hoặc** thuộc user khác trên cùng thiết bị | **`200`** | `"Đăng ký lại thiết bị thành công."` — reactivate + gán lại cho user hiện tại (flow re-login / đổi tài khoản) |
+
+**Response (`201` / `200` / `409`):** `CommonResponse<Guid>` — `data` = Id device token.
 
 ```json
 {
@@ -373,43 +999,46 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
   "statusCode": 201,
   "message": "Đăng ký thiết bị thành công.",
   "data": "3c2b1a09-8d7e-6f5a-4b3c-2d1e0f9a8b7c",
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
 **Lỗi thường gặp:**
-- `400` — Validation fail (`Token` rỗng/`> 500 ký tự` → `"Token không được trống."` / `"Token tối đa 500 ký tự."`; `Platform` không hợp lệ → `"Platform không hợp lệ."`; `DeviceInfo > 500 ký tự` → `"DeviceInfo tối đa 500 ký tự."`) **hoặc** thiếu claim `UserId` → `"Không xác định được user."`
+- `400` — `"Token không được trống."` / `"Token tối đa 500 ký tự."` / `"Platform không hợp lệ."` /
+  `"DeviceInfo tối đa 500 ký tự."` — hoặc thiếu claim `UserId` → `"Không xác định được user."`
 - `401` — Chưa đăng nhập / token hết hạn.
-- `409` — Thiết bị đã được đăng ký và đang active.
+- `409` — Thiết bị đã đăng ký và đang active.
 
 ---
 
 ### `DELETE /api/device-tokens`
 
-**Mục đích:** Hủy đăng ký push token của thiết bị (logout). Định danh theo `token` string; chỉ hủy được token đang active thuộc về chính mình (set `IsActive = false`, **giữ record** để re-login dễ).
+**Mục đích:** Huỷ đăng ký push token của thiết bị (logout). Định danh theo chuỗi `token`; chỉ huỷ
+được token đang active thuộc về chính mình (set `IsActive = false`, **giữ record** để re-login dễ).
 
-**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+**Auth:** `[Authorize]`.
 
 **Request body:**
 
 | Field | Type | Bắt buộc | Validation | Mô tả |
 |---|---|---|---|---|
-| `token` | `string` | Bắt buộc | Không rỗng, tối đa **500 ký tự** | Push token cần hủy |
+| `token` | `string` | Bắt buộc | Không rỗng, tối đa **500 ký tự** | Push token cần huỷ |
 
-**Response `200`:** `CommonResponse<Guid>` — `data` = Id của device token vừa hủy.
+**Response `200`:** `CommonResponse<Guid>` — `data` = Id device token vừa huỷ.
 
 **Lỗi thường gặp:**
 - `400` — Validation lỗi hoặc thiếu claim `UserId`.
 - `401` — Chưa đăng nhập / token hết hạn.
-- `404` — Không tìm thấy token đang đăng ký (active) của user hiện tại → `"Không tìm thấy thiết bị đang đăng ký."`
+- `404` — `"Không tìm thấy thiết bị đang đăng ký."`
 
 ---
 
 ### `GET /api/device-tokens`
 
-**Mục đích:** Liệt kê các thiết bị đã đăng ký của user hiện tại. **Không trả raw token string** — chỉ metadata để user nhận diện thiết bị. Sắp xếp theo lần dùng gần nhất.
+**Mục đích:** Liệt kê thiết bị đã đăng ký của user hiện tại. **Không trả raw token string** — chỉ
+metadata để user nhận diện. Sắp xếp theo lần dùng gần nhất.
 
-**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+**Auth:** `[Authorize]`.
 
 **Response `200`:** `CommonResponse<DeviceTokenDto[]>`.
 
@@ -417,32 +1046,31 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
 {
   "isSuccess": true,
   "statusCode": 200,
+  "message": null,
   "data": [
     {
       "id": "3c2b1a09-8d7e-6f5a-4b3c-2d1e0f9a8b7c",
       "platform": 2,
       "deviceInfo": "Pixel 8 — Android 15",
       "isActive": true,
-      "lastUsedAt": "2026-06-13T05:34:10Z",
-      "createdAt": "2026-06-01T08:00:00Z"
+      "lastUsedAt": "2026-07-30T05:34:10Z",
+      "createdAt": "2026-07-01T08:00:00Z"
     }
   ],
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `data[].id` | `Guid` | Không | ID của device token record |
+| `data[].id` | `Guid` | Không | ID device token record |
 | `data[].platform` | `DevicePlatformEnum` (int) | Không | Platform (1=Ios, 2=Android, 3=Web) |
-| `data[].deviceInfo` | `string?` | Có | Mô tả thiết bị |
-| `data[].isActive` | `bool` | Không | `true` nếu token còn active |
-| `data[].lastUsedAt` | `DateTime?` | Có | Lần dùng gần nhất |
+| `data[].deviceInfo` | `string?` | **Có** | Mô tả thiết bị |
+| `data[].isActive` | `bool` | Không | `false` = đã logout **hoặc bị hệ thống tắt** vì Expo báo `DeviceNotRegistered` |
+| `data[].lastUsedAt` | `DateTime?` | **Có** | Lần dùng gần nhất |
 | `data[].createdAt` | `DateTime` | Không | Thời điểm đăng ký lần đầu |
 
-**Lỗi thường gặp:**
-- `400` — Thiếu claim `UserId` → `"Không xác định được user."`
-- `401` — Chưa đăng nhập / token hết hạn.
+**Lỗi thường gặp:** `400` (thiếu claim `UserId`) · `401`.
 
 ---
 
@@ -450,17 +1078,39 @@ Quản lý push token thiết bị (Expo/FCM) cho Mobile/Web app. **Mọi endpoi
 
 Base route: `/api/notification-preferences`
 
-Quản lý cài đặt thông báo per-user: bật/tắt từng kênh (Push/Email/SMS/InApp) và quiet hours. **Mọi endpoint đều `[Authorize]`** — `UserId` luôn lấy từ JWT claim, user chỉ thao tác trên preference của chính mình (không nhận `userId` từ body). Mỗi user có **1 record duy nhất** (1-1 với Account).
+| Method | Path | Auth | Sprint |
+|---|---|---|---|
+| `GET` | `/api/notification-preferences` | `[Authorize]` | — |
+| `PUT` | `/api/notification-preferences` | `[Authorize]` | — |
+| `GET` | `/api/notification-preferences/matrix` | `[Authorize]` | **MỚI — 6.3 NOTI3-04** |
+| `PUT` | `/api/notification-preferences/matrix` | `[Authorize]` | **MỚI — 6.3 NOTI3-04** |
+| `GET` | `/api/notification-preferences/categories` | `[Authorize]` | **MỚI — 6.3 NOTI3-04** |
 
-> Dispatcher (Sprint 6+) đọc preference này để quyết định gửi qua kênh nào và có tôn trọng quiet hours không (trừ notification có flag `bypassQuietHours` — xem `POST /api/notifications`).
+**Mô hình hai cấp (Sprint 6.3):**
+
+```
+        công tắc lớn (kênh toàn cục)        tuỳ chọn theo nhóm × kênh
+   NotificationPreference (1 record/user)   NotificationCategoryPreference (0–6 record/user)
+                    │                                      │
+                    └──────────── VÀ LOGIC ────────────────┘
+                                    │
+                     kênh phải bật ở CẢ HAI thì mới gửi
+```
+
+- **Tắt kênh toàn cục thắng mọi tuỳ chọn nhóm** — đó là điều người dùng mong đợi khi gạt công tắc lớn.
+- **Không có record nhóm = chưa tuỳ chỉnh**, không phải "đã tắt hết" ⇒ dispatcher rơi về công tắc kênh
+  (hành vi trước Sprint 6.3). Nhờ vậy **dữ liệu cũ và FE cũ vẫn chạy đúng, không cần backfill**.
+- Dispatcher **cache cả hai cấp 5 phút** trong Redis (`notif_pref:{userId}`,
+  `notif_cat_pref:{userId}:{categoryInt}`). Mọi endpoint ghi đều tự xoá cache tương ứng.
 
 ---
 
 ### `GET /api/notification-preferences`
 
-**Mục đích:** Lấy cài đặt thông báo của **user hiện tại**. Nếu user **chưa từng cấu hình**, trả về **giá trị mặc định** (KHÔNG ghi DB — không tạo record).
+**Mục đích:** Lấy cài đặt kênh + quiet hours của user hiện tại. User **chưa từng cấu hình** → trả
+**giá trị mặc định** (KHÔNG ghi DB, không tạo record).
 
-**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+**Auth:** `[Authorize]`.
 
 **Response `200`:** `CommonResponse<NotificationPreferenceDto>`.
 
@@ -468,6 +1118,7 @@ Quản lý cài đặt thông báo per-user: bật/tắt từng kênh (Push/Emai
 {
   "isSuccess": true,
   "statusCode": 200,
+  "message": null,
   "data": {
     "pushEnabled": true,
     "emailEnabled": true,
@@ -475,23 +1126,31 @@ Quản lý cài đặt thông báo per-user: bật/tắt từng kênh (Push/Emai
     "inAppEnabled": true,
     "quietHoursStart": "22:00",
     "quietHoursEnd": "07:00",
-    "timeZone": "Asia/Ho_Chi_Minh"
+    "timeZone": "Asia/Ho_Chi_Minh",
+    "notifyOnChat": true,
+    "notifyOnMention": true,
+    "notifyOnReaction": false,
+    "digestWindowMinutes": null
   },
-  "listErrors": []
+  "listErrors": null
 }
 ```
 
 | Field | Type | Nullable | Mô tả |
 |---|---|---|---|
-| `data.pushEnabled` | `bool` | Không | Bật push notification |
-| `data.emailEnabled` | `bool` | Không | Bật email |
-| `data.smsEnabled` | `bool` | Không | Bật SMS |
-| `data.inAppEnabled` | `bool` | Không | Bật in-app |
-| `data.quietHoursStart` | `string?` | Có | Giờ bắt đầu quiet hours dạng `"HH:mm"`; `null` = không quiet hours |
-| `data.quietHoursEnd` | `string?` | Có | Giờ kết thúc quiet hours dạng `"HH:mm"`; `null` = không quiet hours |
-| `data.timeZone` | `string` | Không | Timezone IANA (vd `"Asia/Ho_Chi_Minh"`) |
+| `pushEnabled` | `bool` | Không | Bật push (mặc định `true`) |
+| `emailEnabled` | `bool` | Không | Bật email (mặc định `true`) |
+| `smsEnabled` | `bool` | Không | Bật SMS (mặc định **`false`** — SMS tốn tiền thật) |
+| `inAppEnabled` | `bool` | Không | Bật in-app (mặc định `true`). ⚠️ Tắt = **mất luôn feed**, dispatcher đánh record InApp là `Failed` với lý do `channel_disabled` |
+| `quietHoursStart` | `string?` | **Có** | `"HH:mm"`; `null` = không quiet hours |
+| `quietHoursEnd` | `string?` | **Có** | `"HH:mm"`; `null` = không quiet hours |
+| `timeZone` | `string` | Không | Timezone IANA (mặc định `"Asia/Ho_Chi_Minh"`) — dùng để tính quiet hours |
+| `notifyOnChat` | `bool` | Không | (#570) Nhận notification chat thường (mặc định `true`) |
+| `notifyOnMention` | `bool` | Không | (#570) Nhận notification khi bị @mention (mặc định `true`) |
+| `notifyOnReaction` | `bool` | Không | (#570) Nhận notification khi chat được reaction (mặc định **`false`**) |
+| `digestWindowMinutes` | `int?` | **Có** | `null` = gửi ngay; `5`/`15`/`30`/… = gom digest theo cửa sổ phút. **Sprint 6.2: field này nay CÓ TÁC DỤNG THẬT** |
 
-**Giá trị mặc định (user chưa cấu hình):**
+**Giá trị mặc định khi user chưa cấu hình:**
 
 ```json
 {
@@ -501,21 +1160,26 @@ Quản lý cài đặt thông báo per-user: bật/tắt từng kênh (Push/Emai
   "inAppEnabled": true,
   "quietHoursStart": null,
   "quietHoursEnd": null,
-  "timeZone": "Asia/Ho_Chi_Minh"
+  "timeZone": "Asia/Ho_Chi_Minh",
+  "notifyOnChat": true,
+  "notifyOnMention": true,
+  "notifyOnReaction": false,
+  "digestWindowMinutes": null
 }
 ```
 
 **Lỗi thường gặp:**
-- `400` — Thiếu claim `UserId` → `"Không xác định được UserId từ token."` (body theo `CommonResponse<object>`).
+- `400` — Thiếu claim `UserId` → `"Không xác định được UserId từ token."`
 - `401` — Chưa đăng nhập / token hết hạn.
 
 ---
 
 ### `PUT /api/notification-preferences`
 
-**Mục đích:** Cập nhật (upsert) cài đặt thông báo của user hiện tại. Nếu chưa có record → **tạo mới**; nếu đã có → **ghi đè**.
+**Mục đích:** Upsert cài đặt kênh của user hiện tại. Chưa có record → **tạo mới**; đã có → **ghi đè
+toàn bộ** (không phải patch — field không gửi sẽ nhận giá trị mặc định của command).
 
-**Auth:** `[Authorize]` — mọi user đã đăng nhập.
+**Auth:** `[Authorize]`.
 
 **Request body:**
 
@@ -525,12 +1189,15 @@ Quản lý cài đặt thông báo per-user: bật/tắt từng kênh (Push/Emai
 | `emailEnabled` | `bool` | Không | `true` | — | Bật email |
 | `smsEnabled` | `bool` | Không | `false` | — | Bật SMS |
 | `inAppEnabled` | `bool` | Không | `true` | — | Bật in-app |
-| `quietHoursStart` | `string?` | Tùy chọn | `null` | Phải đúng định dạng `"HH:mm"` nếu có | Giờ bắt đầu quiet hours; `null` = xóa quiet hours |
-| `quietHoursEnd` | `string?` | Tùy chọn | `null` | Phải đúng định dạng `"HH:mm"` nếu có | Giờ kết thúc quiet hours; `null` = xóa quiet hours |
+| `quietHoursStart` | `string?` | Tuỳ chọn | `null` | Đúng định dạng `"HH:mm"` nếu có | `null` = xoá quiet hours |
+| `quietHoursEnd` | `string?` | Tuỳ chọn | `null` | Đúng định dạng `"HH:mm"` nếu có | `null` = xoá quiet hours |
 | `timeZone` | `string` | Không | `"Asia/Ho_Chi_Minh"` | Không rỗng, tối đa **100 ký tự** | Timezone IANA |
+| `notifyOnChat` | `bool` | Không | `true` | — | (#570) |
+| `notifyOnMention` | `bool` | Không | `true` | — | (#570) |
+| `notifyOnReaction` | `bool` | Không | `false` | — | (#570) |
+| `digestWindowMinutes` | `int?` | Tuỳ chọn | `null` | — | `null`/`≤ 0` = gửi ngay. `> 0` = gom Email/Push vào digest theo cửa sổ này |
 
 > `userId` **không** nhận từ body — server set từ JWT claim.
-> Quiet hours qua đêm (vd `22:00`–`07:00`) được hỗ trợ. Critical notifications (EnvironmentalIncident, SlaBreached, IncidentDeclared,…) vẫn được gửi bất kể quiet hours.
 
 **Ví dụ:**
 
@@ -546,22 +1213,2221 @@ Content-Type: application/json
   "inAppEnabled": true,
   "quietHoursStart": "22:00",
   "quietHoursEnd": "07:00",
-  "timeZone": "Asia/Ho_Chi_Minh"
+  "timeZone": "Asia/Ho_Chi_Minh",
+  "notifyOnChat": true,
+  "notifyOnMention": true,
+  "notifyOnReaction": false,
+  "digestWindowMinutes": 15
 }
 ```
 
-**Response thành công `200`:** `CommonResponse<NotificationPreferenceDto>` — trả về preference sau khi cập nhật (shape giống `GET`).
+**Response `200`:** `CommonResponse<NotificationPreferenceDto>` — preference sau khi cập nhật (shape
+giống `GET`).
 
-**Lưu ý:**
-- Sau khi commit, handler **xóa cache Redis** key `notif_pref:{userId}` để Dispatcher đọc preference mới ở lần dispatch kế tiếp.
-- Entity `NotificationPreference` còn có field `Frequency` (`NotificationFrequencyEnum`, default `Immediate`) **không** nhận từ body và **không** trả ra DTO — hiện chưa expose.
+**Hành vi quan trọng:**
+- **Quiet hours qua đêm** (vd `22:00`–`07:00`) được hỗ trợ; tính theo `timeZone` của user.
+- Trong quiet hours: record **InApp vẫn được ghi và giao bình thường** (im lặng, không làm phiền);
+  Push/Email/SMS bị **hoãn tới khi hết quiet hours** (`NextAttemptAt` = mốc kết thúc + 1 phút đệm),
+  KHÔNG bị bỏ và KHÔNG tính là một lần thử.
+- Notification thuộc [critical types](#notificationtypeenum) hoặc có `bypassQuietHours` **luôn được
+  gửi** bất kể quiet hours.
+- `digestWindowMinutes` chỉ áp cho **Email/Push**. InApp và SMS luôn gửi ngay — nên lịch sử in-app của
+  user không bao giờ thiếu mục nào.
+- Sau khi commit, handler **xoá cache Redis** `notif_pref:{userId}` để dispatcher đọc bản mới ngay ở
+  lần dispatch kế tiếp.
+- Field `Frequency` (`NotificationFrequencyEnum`) **không nhận từ body và không trả ra DTO** — chỉ đổi
+  được ở tầng DB. Khi `digestWindowMinutes = null` mà `Frequency = Daily` thì cửa sổ digest = 24 giờ.
 
 **Lỗi thường gặp:**
-- `400` — Validation fail. Body theo `CommonResponse<NotificationPreferenceDto>` với `listErrors`. Các trường hợp:
-  - `QuietHoursStart` / `QuietHoursEnd` sai định dạng → `"Định dạng phải là HH:mm."`
-  - `TimeZone` rỗng → `"TimeZone không được trống."` / `> 100 ký tự` → `"TimeZone tối đa 100 ký tự."`
-  - Thiếu claim `UserId` → `"Không xác định được UserId từ token."`
+- `400` — `"Định dạng phải là HH:mm."` (`QuietHoursStart`/`QuietHoursEnd`) ·
+  `"TimeZone không được trống."` / `"TimeZone tối đa 100 ký tự."` ·
+  `"Không xác định được user."`
 - `401` — Chưa đăng nhập / token hết hạn.
+
+---
+
+### `GET /api/notification-preferences/matrix`  *(MỚI — Sprint 6.3 NOTI3-04 / #704)*
+
+**Mục đích:** Lấy **ma trận tuỳ chọn nhóm × kênh** của user hiện tại.
+
+**Auth:** `[Authorize]`.
+
+**Hành vi:** luôn trả **đủ 6 nhóm**, kể cả nhóm user chưa tuỳ chỉnh — khi đó giá trị được **kế thừa**
+từ công tắc kênh toàn cục và `isCustomized = false`. Nhờ vậy FE vẽ được trạng thái "kế thừa" mà
+không phải tự đoán nhóm nào thiếu.
+
+**Response `200`:** `CommonResponse<NotificationPreferenceMatrixDto>`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": null,
+  "data": {
+    "channels": {
+      "pushEnabled": true,
+      "emailEnabled": true,
+      "smsEnabled": false,
+      "inAppEnabled": true,
+      "quietHoursStart": "22:00",
+      "quietHoursEnd": "07:00",
+      "timeZone": "Asia/Ho_Chi_Minh",
+      "notifyOnChat": true,
+      "notifyOnMention": true,
+      "notifyOnReaction": false,
+      "digestWindowMinutes": null
+    },
+    "categories": [
+      {
+        "category": 1,
+        "categoryName": "Ticket",
+        "pushEnabled": true,
+        "emailEnabled": true,
+        "smsEnabled": false,
+        "inAppEnabled": true,
+        "isCustomized": false
+      },
+      {
+        "category": 2,
+        "categoryName": "Sla",
+        "pushEnabled": true,
+        "emailEnabled": true,
+        "smsEnabled": true,
+        "inAppEnabled": true,
+        "isCustomized": true
+      },
+      {
+        "category": 3, "categoryName": "Battery",
+        "pushEnabled": true, "emailEnabled": true, "smsEnabled": false, "inAppEnabled": true,
+        "isCustomized": false
+      },
+      {
+        "category": 4, "categoryName": "Environmental",
+        "pushEnabled": true, "emailEnabled": true, "smsEnabled": false, "inAppEnabled": true,
+        "isCustomized": false
+      },
+      {
+        "category": 5, "categoryName": "Chat",
+        "pushEnabled": true, "emailEnabled": false, "smsEnabled": false, "inAppEnabled": true,
+        "isCustomized": true
+      },
+      {
+        "category": 6, "categoryName": "Account",
+        "pushEnabled": true, "emailEnabled": true, "smsEnabled": false, "inAppEnabled": true,
+        "isCustomized": false
+      }
+    ]
+  },
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data.channels` | `NotificationPreferenceDto` | Không | Công tắc kênh toàn cục — **vẫn thắng mọi dòng nhóm**. Shape giống `GET /api/notification-preferences` |
+| `data.categories` | `NotificationCategoryPreferenceDto[]` | Không | **Luôn đúng 6 phần tử**, sắp theo thứ tự giá trị enum (1→6) |
+| `data.categories[].category` | `NotificationCategoryEnum` (int) | Không | Mã nhóm — ổn định để FE lưu |
+| `data.categories[].categoryName` | `string` | Không | Tên nhóm dạng chuỗi (`"Ticket"`, `"Sla"`, `"Battery"`, `"Environmental"`, `"Chat"`, `"Account"`) — FE hiển thị mà không cần bảng tra cứu riêng |
+| `data.categories[].pushEnabled` | `bool` | Không | Bật push cho nhóm này |
+| `data.categories[].emailEnabled` | `bool` | Không | Bật email cho nhóm này |
+| `data.categories[].smsEnabled` | `bool` | Không | Bật SMS cho nhóm này |
+| `data.categories[].inAppEnabled` | `bool` | Không | Bật in-app cho nhóm này |
+| `data.categories[].isCustomized` | `bool` | Không | `false` = **chưa tuỳ chỉnh**, 4 giá trị trên là kế thừa từ `channels`. `true` = user đã đặt tường minh (có record trong DB) |
+
+> `GET /api/notification-preferences` (bản cũ) **vẫn giữ nguyên** để FE hiện tại không vỡ.
+
+**Lỗi thường gặp:** `400` (thiếu claim `UserId` → `"Không xác định được UserId từ token."`) · `401`.
+
+---
+
+### `PUT /api/notification-preferences/matrix`  *(MỚI — Sprint 6.3 NOTI3-04 / #704)*
+
+**Mục đích:** Cập nhật ma trận nhóm × kênh.
+
+**Auth:** `[Authorize]`.
+
+**Ghi theo kiểu VÁ TỪNG DÒNG:** chỉ nhóm có trong `items` bị đổi, nhóm còn lại **giữ nguyên**.
+Ghi đè toàn bộ sẽ khiến hai tab mở song song xoá thiết lập của nhau.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Validation | Mô tả |
+|---|---|---|---|---|
+| `items` | `CategoryPreferenceItem[]` | **Bắt buộc** | Ít nhất 1 phần tử; không trùng `category` | Các dòng cần vá |
+| `items[].category` | `NotificationCategoryEnum` (int) | Bắt buộc | Phải là giá trị hợp lệ 1–6 | Nhóm cần đổi |
+| `items[].pushEnabled` | `bool` | Bắt buộc | — | Không gửi ⇒ nhận `false` (JSON default), **không** giữ giá trị cũ |
+| `items[].emailEnabled` | `bool` | Bắt buộc | — | (như trên) |
+| `items[].smsEnabled` | `bool` | Bắt buộc | — | (như trên) |
+| `items[].inAppEnabled` | `bool` | Bắt buộc | — | (như trên) |
+
+> ⚠️ **Trong một dòng thì phải gửi đủ 4 kênh.** "Vá từng dòng" nghĩa là vá theo **nhóm**, không phải
+> theo từng ô kênh — bỏ trống `emailEnabled` sẽ ghi thành `false` chứ không giữ nguyên.
+> `userId` **không** nhận từ body — server set từ JWT claim.
+
+**Ví dụ — tắt email cho nhóm Chat, bật SMS cho nhóm SLA:**
+
+```json
+PUT /api/notification-preferences/matrix
+Authorization: Bearer eyJ...
+Content-Type: application/json
+
+{
+  "items": [
+    { "category": 5, "pushEnabled": true, "emailEnabled": false, "smsEnabled": false, "inAppEnabled": true },
+    { "category": 2, "pushEnabled": true, "emailEnabled": true,  "smsEnabled": true,  "inAppEnabled": true }
+  ]
+}
+```
+
+**Response `200`:** `CommonResponse<NotificationPreferenceMatrixDto>` — **ma trận đầy đủ sau khi cập
+nhật** (shape giống `GET .../matrix`), `message = "Cập nhật tuỳ chọn theo nhóm thành công."`
+
+**Tác dụng phụ:** xoá cache Redis `notif_cat_pref:{userId}:{category}` của **đúng những nhóm vừa
+sửa** — không xoá thì dispatcher còn dùng bản cũ tới 5 phút và người dùng tưởng thiết lập không ăn.
+
+**Lỗi thường gặp:**
+- `400` — `listErrors` liệt kê:
+
+  | Field | Detail |
+  |---|---|
+  | `Items` | `"Cần ít nhất một nhóm để cập nhật."` |
+  | `Items.Category` | `"Nhóm '{số}' không hợp lệ."` — giá trị ngoài 1–6 |
+  | `Items.Category` | `"Nhóm '{tên}' xuất hiện nhiều lần trong cùng một request."` — gửi trùng thì không biết dòng nào thắng, từ chối thay vì đoán |
+  | `UserId` | `"Không xác định được user."` |
+- `401` — Chưa đăng nhập / token hết hạn.
+
+---
+
+### `GET /api/notification-preferences/categories`  *(MỚI — Sprint 6.3 NOTI3-04 / #704)*
+
+**Mục đích:** Bảng tra cứu `NotificationTypeEnum` → nhóm. FE dùng để giải thích *"tắt nhóm này thì
+mất những thông báo nào"* mà **không phải nhân bản bảng ánh xạ ở client** — nhân bản là chắc chắn sẽ
+lệch khi thêm type mới.
+
+**Auth:** `[Authorize]` (kế thừa từ controller — mọi user đã đăng nhập).
+
+**Response `200`:** `CommonResponse<object[]>` — sắp theo `categoryValue` rồi `typeValue`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": null,
+  "data": [
+    { "type": "TicketCreated",  "typeValue": 1,  "category": "Ticket", "categoryValue": 1 },
+    { "type": "TicketAssigned", "typeValue": 2,  "category": "Ticket", "categoryValue": 1 },
+    { "type": "TicketEscalated","typeValue": 6,  "category": "Sla",    "categoryValue": 2 },
+    { "type": "SlaWarning",     "typeValue": 7,  "category": "Sla",    "categoryValue": 2 },
+    { "type": "System",         "typeValue": 99, "category": "Account","categoryValue": 6 }
+  ],
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data[].type` | `string` | Không | Tên `NotificationTypeEnum` |
+| `data[].typeValue` | `int` | Không | Giá trị số của type |
+| `data[].category` | `string` | Không | Tên `NotificationCategoryEnum` |
+| `data[].categoryValue` | `int` | Không | Giá trị số của nhóm |
+
+**Số phần tử:** đúng bằng số type có trong `NotificationCategoryMap` (hiện **32**).
+
+---
+
+## Endpoints — Admin Notification Templates
+
+Base route: `/api/admin/notification-templates` · **`[Authorize(Roles = "Admin")]` cho toàn controller**
+*(MỚI — Sprint 6.3 NOTI3-12 / #712)*
+
+Ba việc trước sprint này không làm được:
+- **Xem trước** — sửa template xong chỉ biết đúng/sai khi có sự kiện thật xảy ra.
+- **Gửi thử** — kiểm chứng bản dựng thật trong hộp thư, không phải đoán qua HTML.
+- **Quay lui** — bản mới sai chính tả gửi cho hàng trăm khách thì phải sửa tay lại.
+
+> ⚠️ **Dùng `[Authorize(Roles = "Admin")]`, KHÔNG dùng `[Authorize(Policy = "AdminOnly")]`.**
+> Policy `AdminOnly` trong `SharedInfrastructure/DependencyInjection/Extensions/AddAuthorizationRole.cs`
+> **đã bị comment toàn bộ** (code chết), và định nghĩa cũ `RequireClaim("Role","1")` cũng không khớp
+> token hiện tại (JWT phát `role = "Admin"` dạng chuỗi). Dùng policy chưa đăng ký ⇒ ASP.NET ném
+> `InvalidOperationException` → **HTTP 500 ở mọi request, kể cả của Admin**. Phát hiện khi test E2E 30/07/2026.
+
+**Mô hình phiên bản:** sửa template là **tạo bản mới** với `version` tăng dần, KHÔNG ghi đè bản cũ.
+Trong cùng cặp `(Type × Channel)` chỉ được có **đúng một** bản `isActive = true`;
+dispatcher luôn lấy bản đó. Có 2 unique index ràng buộc ở DB — xem [Database schema](#database-schema).
+
+---
+
+#### ⚠️ Hợp đồng tên biến (2026-08-03)
+
+Template gọi biến bằng cú pháp Handlebars `{{tenBien}}`. **Tên biến phải khớp đúng khoá mà consumer
+ghi vào `payload_json`** — không phải một tên nghe hợp lý.
+
+Handlebars gặp biến không tồn tại thì **render ra chuỗi rỗng chứ không báo lỗi**. Không log, không
+metric, không test nào bắt. Đó là lý do bộ template của dự án từng chạy nhiều tháng với:
+
+| Template viết | Consumer thật sự ghi | Người nhận đọc được |
+|---|---|---|
+| `{{ticketCode}}` | `code` | `Ticket mới ` |
+| `{{serialNumber}}` | `assetSerialNumber` | `Bất thường pin ` |
+| `{{threshold}}` | `thresholdValue` | `vượt ngưỡng ` |
+| `{{customerName}}`, `{{slaDeadline}}`, `{{minutesRemaining}}`, `{{senderName}}`, `{{preview}}`, `{{displayName}}` | *(không tồn tại ở bất kỳ loại nào)* | chỗ trống |
+
+Ba lớp chặn hiện có:
+
+1. **`GET .../variables`** — trình soạn hiện sẵn danh sách biến hợp lệ, khỏi phải đoán.
+2. **`POST` / `PUT` trả 400** nếu template gọi biến ngoài danh mục, kèm gợi ý tên đúng.
+3. **`GET .../coverage`** — soi các template đã nằm sẵn trong DB xem có biến hỏng không.
+
+Nguồn sự thật là `NotificationTemplateVariables` (Application/Templates). Ba test bao giữ nó không
+trôi: template seed chỉ dùng biến có thật · mọi khoá khai báo đều xuất hiện ở một consumer · mọi
+khoá consumer ghi đều đã khai báo.
+
+---
+
+---
+
+### `POST /api/admin/notifications/broadcast/template-preview`
+
+**Mục đích:** Xem trước nội dung một lần gửi hàng loạt **khi bật "dùng mẫu"** — trả về **một dòng
+cho mỗi kênh**. Không gửi gì.
+
+**Vì sao phải tách theo kênh:** mẫu khoá theo cặp `(Loại × Kênh)` và bản SMS được nén ngắn lại (tính
+tiền theo đoạn), nên cùng một lần gửi 3 kênh cho ra **3 nội dung khác nhau**. Một ô xem trước duy
+nhất sẽ nói dối về 2 trong 3 kênh. Đây cũng chính là lý do phải render lúc gửi chứ không đổ sẵn chữ
+vào ô soạn.
+
+Model dựng theo **đúng khuôn** `NotificationDispatcher.BuildTemplateModel`, nên nội dung ở đây bằng
+đúng nội dung lúc gửi thật.
+
+**Request:**
+```json
+{
+  "type": 9,
+  "channels": [4, 1, 3],
+  "title": "Chữ dự phòng",
+  "body": "Thân dự phòng",
+  "payloadJson": "{\"assetSerialNumber\":\"BAT-2026-777\",\"anomalyTypeName\":\"Quá nhiệt\"}"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "isSuccess": true,
+  "data": [
+    { "channel": 4, "hasTemplate": true,
+      "title": "Bất thường pin BAT-2026-777",
+      "body": "Quá nhiệt — mức . Giá trị đo , ngưỡng .",
+      "missingVariables": ["actualValue", "severityName", "thresholdValue", "unit"],
+      "renderError": null },
+    { "channel": 3, "hasTemplate": true,
+      "title": "[Solar Battery]",
+      "body": "Bất thường pin BAT-2026-777. Quá nhiệt — mức ...",
+      "missingVariables": ["actualValue", "severityName", "thresholdValue", "unit"] }
+  ]
+}
+```
+
+| Trường | Ý nghĩa |
+|---|---|
+| `hasTemplate = false` | Cặp này không có mẫu ⇒ kênh đó dùng tiêu đề/nội dung admin gõ |
+| `missingVariables` | Mẫu gọi biến mà payload không có giá trị ⇒ chỗ đó render ra rỗng |
+| `renderError` | Mẫu hỏng cú pháp ⇒ lúc gửi thật rơi về nội dung dự phòng |
+
+> **`POST /broadcast` nhận thêm hai trường (03/08/2026):** `useTemplate` (mặc định `false`) và
+> `payloadJson`.
+>
+> - `useTemplate = false` ⇒ chữ admin gõ được gửi đi **y nguyên**. Dispatcher **bỏ qua** mẫu.
+> - `useTemplate = true` ⇒ dispatcher tra mẫu theo `(Loại × Kênh)` và render với `payloadJson`.
+>   `title`/`body` vẫn bắt buộc và trở thành **nội dung dự phòng** cho kênh không có mẫu khớp.
+>
+> Cột `notification_batches.use_template` ghi lại lựa chọn này. Là **cờ riêng** chứ không suy ra từ
+> `template_id`: một lần gửi nhắm 3 kênh dùng **3 mẫu khác nhau**, không có "một" template id để ghi.
+>
+> Khai biến không thuộc loại đó ⇒ **400** kèm danh sách biến hợp lệ — cùng cơ chế chặn với trình soạn
+> mẫu, vì Handlebars gặp biến lạ chỉ render ra rỗng chứ không báo lỗi.
+
+### `GET /api/admin/notification-templates/variables`
+
+**Mục đích:** Biến dùng được cho từng loại thông báo. Không chạm DB.
+
+**Response `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": [
+    {
+      "type": 1,
+      "typeName": "TicketCreated",
+      "builtin": ["Body", "CreatedAt", "EntityId", "EntityType", "Title", "UserId"],
+      "payload": ["ticketId", "code", "customerId", "priority", "screen"]
+    }
+  ]
+}
+```
+
+- `builtin` — sáu biến `NotificationDispatcher` luôn nạp, giống nhau ở mọi loại.
+- `payload` — khoá riêng của loại đó. **Rỗng** nghĩa là consumer không ghi payload
+  (`EnvironmentalIncidentResolved`, `AdminInvite`), template chỉ dùng được `builtin`.
+
+---
+
+### `GET /api/admin/notification-templates/coverage`
+
+**Mục đích:** Đối chiếu template đang có với **thông báo thật đã sinh**.
+
+Lấy theo dữ liệu thật chứ không theo ma trận cấu hình, vì hai thứ này từng lệch nhau: consumer pin
+gửi bằng `NotificationWriter.AllChannels` (có SMS) trong khi ma trận không khai SMS — 98 tin SMS đã
+gửi đi mà không template nào phủ. Chỉ dữ liệu thật mới lộ ra khoảng trống đó.
+
+**Response `200`:**
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": [
+    { "type": 9, "typeName": "BatteryAnomalyDetected", "channel": 3,
+      "notificationCount": 98, "hasActiveTemplate": false, "unknownVariables": [] },
+    { "type": 1, "typeName": "TicketCreated", "channel": 4,
+      "notificationCount": 20, "hasActiveTemplate": true, "unknownVariables": ["ticketCodeeeeeee"] }
+  ]
+}
+```
+
+| Trường | Ý nghĩa |
+|---|---|
+| `hasActiveTemplate = false` | Mọi thông báo của cặp này đang dùng chuỗi ghi cứng trong consumer — sửa câu chữ phải sửa code rồi deploy lại |
+| `unknownVariables` không rỗng | Template có tồn tại nhưng gọi biến không có trong dữ liệu ⇒ chỗ đó render ra rỗng |
+
+Sắp xếp sẵn: thiếu template lên đầu, rồi tới template có biến hỏng, rồi theo lượng thông báo.
+
+---
+
+### `GET /api/admin/notification-templates`
+
+**Mục đích:** Danh sách template **có phân trang**, lọc theo type/channel.
+**Bao gồm cả bản không active** để thấy lịch sử phiên bản.
+
+**Auth:** Admin.
+
+> ⚠️ **Breaking change (02/08/2026) — đợt 2, hai thay đổi:**
+> 1. **`type`/`channel` trả về dạng SỐ**, không còn là tên enum (`8` thay cho `"SlaBreached"`). Tên
+>    enum là tiếng Anh, dán thẳng lên màn hình tiếng Việt thì sai; việc dịch thuộc về client. Nay
+>    endpoint này giống mọi DTO notification khác, hết ngoại lệ.
+> 2. **Bỏ hẳn trường `locale`** khỏi response và bỏ query param `locale`. Hệ thống tiếng Việt only;
+>    cột `locale` đã bị drop khỏi bảng và các bản `en-US` đã bị xoá (121 → **82 dòng**). Khoá nghiệp
+>    vụ rút từ bộ ba (Type × Channel × Locale) xuống **cặp (Type × Channel)**.
+>
+> ⚠️ **Breaking change (02/08/2026) — đợt 1:** `data` từ mảng phẳng `object[]` đổi thành khối phân
+> trang `PaginationResponse<NotificationTemplateDto>` — client cũ đọc `data[0]` phải đổi sang
+> `data.items[0]`.
+
+**Query parameters:**
+
+| Param | Type | Bắt buộc | Mặc định | Mô tả |
+|---|---|---|---|---|
+| `type` | `NotificationTypeEnum?` | Không | — | Lọc theo loại notification. Nhận cả tên enum (`SlaBreached`) lẫn số (`8`) |
+| `channel` | `NotificationChannelEnum?` | Không | — | Lọc theo kênh. Nhận cả tên enum (`Email`) lẫn số (`3`) |
+| `pageNumber` | `int` | Không | `1` | Trang hiện tại. `<= 0` → tự về `1` |
+| `pageSize` | `int` | Không | `10` | Số dòng mỗi trang. `<= 0` → `10`; `> 100` → kẹp còn `100` |
+
+Quy tắc kẹp `pageNumber`/`pageSize` đến từ `SharedContracts.Common.Requests.PaginationRequest` —
+giống mọi endpoint phân trang khác của hệ thống, không có trần riêng.
+
+**Sắp xếp:** `type` → `channel` → `version` **giảm dần** → `id`.
+`id` là chốt chặn cuối cho **thứ tự toàn phần**: 3 khoá đầu đã unique nên trên lý thuyết không hoà,
+nhưng thứ tự không toàn phần thì Postgres được phép trả khác nhau giữa các lần chạy — khi đó một
+dòng có thể xuất hiện ở 2 trang hoặc biến mất hẳn.
+
+**Trang vượt quá dữ liệu** (`pageNumber` lớn hơn `totalPages`) trả **`200`** với `items: []`,
+không phải `404`. `pageNumber` trong response là **giá trị client gửi lên**, không bị kẹp về trang cuối.
+
+**Response `200`:** `CommonResponse<PaginationResponse<NotificationTemplateDto>>`.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": null,
+  "data": {
+    "items": [
+      {
+        "id": "b1f5c0aa-1111-2222-3333-444455556666",
+        "type": 8,
+        "channel": 2,
+        "version": 2,
+        "isActive": true,
+        "titleTemplate": "VỠ SLA: {{ticketCode}}",
+        "bodyTemplate": "Ticket {{ticketCode}} đã vượt hạn {{slaDeadline}}. Cần leo thang ngay.",
+        "createdAt": "2026-07-30T09:32:20Z",
+        "updatedAt": "2026-07-30T10:05:11Z"
+      }
+    ],
+    "totalItems": 82,
+    "pageNumber": 1,
+    "pageSize": 10,
+    "totalPages": 9,
+    "hasNextPage": true,
+    "hasPreviousPage": false
+  },
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data.items[].id` | `Guid` | Không | ID template |
+| `data.items[].type` | `int` | Không | Giá trị **số** của `NotificationTypeEnum` — client tự ánh xạ sang nhãn hiển thị |
+| `data.items[].channel` | `int` | Không | Giá trị **số** của `NotificationChannelEnum` |
+| `data.items[].version` | `int` | Không | Số phiên bản trong cùng cặp (bắt đầu từ `1`) |
+| `data.items[].isActive` | `bool` | Không | Bản đang được dispatcher dùng |
+| `data.items[].titleTemplate` | `string` | Không | Template tiêu đề (cú pháp Handlebars `{{var}}`) |
+| `data.items[].bodyTemplate` | `string` | Không | Template nội dung |
+| `data.items[].createdAt` | `DateTime` | Không | UTC |
+| `data.items[].updatedAt` | `DateTime?` | **Có** | `null` nếu chưa sửa lần nào |
+| `data.totalItems` | `int` | Không | Tổng số template **khớp bộ lọc** (không phải tổng toàn bảng) |
+| `data.pageNumber` | `int` | Không | Trang đang trả (đúng giá trị client gửi, sau khi kẹp `<= 0` → 1) |
+| `data.pageSize` | `int` | Không | Số dòng mỗi trang sau khi kẹp |
+| `data.totalPages` | `int` | Không | `ceil(totalItems / pageSize)` |
+| `data.hasNextPage` | `bool` | Không | `pageNumber < totalPages` |
+| `data.hasPreviousPage` | `bool` | Không | `pageNumber > 1` |
+
+**Seed:** `NotificationTemplateCatalog` seed **đủ 32 type × mọi kênh** trong `DefaultTypeChannelMatrix`
+(trước Sprint 6.3 chỉ 5/32 type có template). Các type **hướng Customer** có thêm bản `en-US`:
+`TicketCreated`, `TicketStatusChanged`, `TicketResolved`, `TicketClosed`, `TicketApproved`,
+`TicketRejected`, `TicketReopened`, `TicketRatingRequested`, `AccountActivated`,
+`BatteryAnomalyWarning`, `BatteryAnomalyInfo`, `EnvironmentalIncidentDetected`,
+`EnvironmentalIncidentResolved`. Type nội bộ chỉ có `vi-VN` — dịch thứ không ai đọc chỉ tạo thêm thứ
+phải bảo trì.
+
+Bản SMS được **biến tấu tự động**: gộp tiêu đề vào thân và cắt còn tối đa **300 ký tự**
+(`"[Solar Battery]"` làm tiêu đề) — SMS tính tiền theo đoạn 160 ký tự và không có tiêu đề riêng.
+
+Seeder **idempotent theo cặp** `(Type × Channel)`: đã có bản nào cho cặp đó thì KHÔNG thêm.
+Cố ý **không ghi đè** — người vận hành có thể đã sửa nội dung trong DB.
+
+---
+
+### `POST /api/admin/notification-templates/{id}/preview`
+
+**Mục đích:** Dựng thử template với dữ liệu mẫu — **KHÔNG gửi đi đâu cả**.
+
+**Auth:** Admin.
+
+**Path param:** `id` — `Guid` của template.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `sampleData` | `object?` | Tuỳ chọn | Cặp khoá–giá trị ứng với placeholder trong template. Không gửi (hoặc gửi `null`, hoặc gửi thứ không phải object) ⇒ render với model rỗng |
+
+Giá trị trong `sampleData` được quy về dictionary phẳng: `string` → chuỗi; `number` → `int64` nếu
+nguyên, ngược lại `double`; `true`/`false` → bool; `null` → null; **object/array lồng nhau → giữ
+nguyên dạng JSON thô** (chuỗi).
+
+**Ví dụ:**
+
+```json
+POST /api/admin/notification-templates/b1f5c0aa-1111-2222-3333-444455556666/preview
+Authorization: Bearer eyJ...   (Admin)
+Content-Type: application/json
+
+{
+  "sampleData": {
+    "ticketCode": "TK-001",
+    "priority": "P1Critical",
+    "slaDeadline": "30/07/2026 18:00"
+  }
+}
+```
+
+**Response `200`:**
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": null,
+  "data": {
+    "type": 8,
+    "channel": 2,
+    "version": 2,
+    "title": "VỠ SLA: TK-001",
+    "body": "Ticket TK-001 đã quá hạn SLA P1Critical. Cần leo thang ngay."
+  },
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data.type` / `data.channel` | `int` | Không | Giá trị **số** của enum (02/08/2026 — trước là tên enum) |
+| `data.version` | `int` | Không | Phiên bản |
+| `data.title` | `string` | Không | Tiêu đề **sau khi render** |
+| `data.body` | `string` | Không | Nội dung **sau khi render** |
+
+> **Placeholder không có trong `sampleData` sẽ rỗng** — đó chính là cách phát hiện template gọi tên
+> biến sai.
+
+**Lỗi thường gặp:**
+- `400` — Template hỏng cú pháp Handlebars → `"Template hỏng cú pháp: {chi tiết}"` (trả 400 thay vì
+  ném 500).
+- `401` / `403` — Không phải Admin.
+- `404` — `"Không tìm thấy template."`
+
+---
+
+### `POST /api/admin/notification-templates/{id}/test-send`
+
+**Mục đích:** Gửi thử template tới **chính admin đang đăng nhập**.
+
+**Auth:** Admin.
+
+> ### 🔒 KHÔNG NHẬN ĐỊA CHỈ TỰ DO (R-46)
+>
+> Endpoint nhận địa chỉ tuỳ ý sẽ biến hệ thống thành **cổng gửi thư rác có xác thực** — kẻ chiếm được
+> một tài khoản admin có thể bắn nội dung tự soạn từ domain có SPF/DKIM hợp lệ của chúng ta.
+> Địa chỉ nhận **LUÔN** lấy từ danh tính người gọi, không bao giờ từ body.
+>
+> **Hai nguồn, theo thứ tự:**
+> 1. `account_read_models.email` của chính admin — chuẩn nhất;
+> 2. claim `email` trong JWT — **dự phòng**.
+>
+> Vì sao cần nguồn thứ 2: read-model chỉ được điền từ `AccountActivatedEvent` /
+> `AccountProfileUpdatedEvent`. Tài khoản admin **seed thẳng vào `auth_db`** (không đi qua luồng kích
+> hoạt) sẽ KHÔNG BAO GIỜ có mặt ở đó — phát hiện khi test E2E 30/07/2026: mọi lần gọi test-send đều
+> trả 400 dù người gọi là Admin hợp lệ. Lấy từ claim vẫn an toàn: đó là danh tính đã được JWT xác thực.
+
+**Path param:** `id` — `Guid` của template.
+
+**Request body:** giống `preview` — `{ "sampleData": { ... } }` (tuỳ chọn).
+
+**Ràng buộc:**
+- **Chỉ template kênh `Email`.** Kênh khác → `400` (gửi thử SMS tốn tiền thật; push cần device token
+  của admin).
+- **Rate limit 5 lần/giờ mỗi admin.** Đếm bằng Redis key `tpl_test_send:{adminId:N}:{yyyyMMddHH}`
+  (TTL 2 giờ). Vượt → `429`.
+- **Ghi audit** `TemplateTestSent` (Severity **Warning**) mỗi lần gửi, metadata gồm `templateId`,
+  `type`, `version`, `quotaUsed`, `recipientSource` (`"read-model"` | `"jwt-claim"`).
+
+**Hành vi:** render title/body → publish `SendNotificationEmailEvent` với
+`Subject = "[GỬI THỬ] {title}"`, `SourceService = "notification-template-test"`,
+`UnsubscribeUrl = null`.
+
+> Email gửi thử **KHÔNG có link huỷ**: nó không phải thư gửi hàng loạt, và link huỷ trong bản thử sẽ
+> tắt nhầm thông báo thật của chính admin.
+
+**Response `200`:**
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã gửi thử tới admin@solarbattery.site.",
+  "data": { "remainingThisHour": 3 },
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `message` | `string` | Không | `"Đã gửi thử tới {email}."` |
+| `data.remainingThisHour` | `int` | Không | Số lượt còn lại trong giờ hiện tại (`max(0, 5 - đã dùng)`) |
+
+**Lỗi thường gặp:**
+
+| HTTP | `message` | Nguyên nhân |
+|---|---|---|
+| `400` | `"Không xác định được UserId từ token."` | Thiếu claim định danh |
+| `400` | `"Chỉ gửi thử được template kênh Email."` | Template là Push/Sms/InApp |
+| `400` | `"Không xác định được email của admin đang đăng nhập (thiếu cả read-model lẫn claim email)."` | Cả 2 nguồn địa chỉ đều rỗng |
+| `400` | `"Template hỏng cú pháp: {chi tiết}"` | Handlebars lỗi |
+| `401` / `403` | — | Không phải Admin |
+| `404` | `"Không tìm thấy template."` | — |
+| `429` | `"Đã dùng hết 5 lượt gửi thử trong giờ này."` | Vượt hạn mức |
+
+---
+
+---
+
+### `POST /api/admin/notification-templates` — tạo mẫu mới
+
+*(MỚI — 02/08/2026)*
+
+**Mục đích:** tạo template ĐẦU TIÊN cho một cặp `(Type × Channel)` chưa có template nào.
+
+> **Vì sao đến giờ mới có:** trước ngày này controller chỉ có 4 endpoint đọc-và-bật, không có đường
+> nào tạo hay sửa. Nội dung template CHỈ đến từ seeder, mà seeder lại idempotent theo cặp
+> `(Type × Channel)` nên sửa catalog rồi deploy lại cũng **không** ghi đè bản đã có — cách duy nhất
+> để đổi câu chữ là chạy SQL tay. Hệ quả kéo theo: cả cơ chế phiên bản (cột `version`, partial unique
+> index, endpoint `activate`, nút "Kích hoạt" trên giao diện) là **code chết**, vì không gì tạo ra
+> được phiên bản thứ hai để mà quay lui.
+
+**Auth:** Admin.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `type` | `NotificationTypeEnum` | Có | Nhận cả tên enum (`SlaBreached`) lẫn số (`8`) |
+| `channel` | `NotificationChannelEnum` | Có | Nhận cả tên enum (`Email`) lẫn số (`2`) |
+| `titleTemplate` | `string` | Có | 1–500 ký tự, cú pháp Handlebars `{{var}}` |
+| `bodyTemplate` | `string` | Có | 1–4000 ký tự |
+
+Giới hạn độ dài khớp đúng cột DB (`title_template` 500, `body_template` 4000).
+
+**Hành vi:** tạo bản `isActive = true`. Số `version` = `max(version) + 1` tính trên **cả bản đã xoá
+mềm** của cặp đó — index `ux_notification_templates_type_channel_version` không lọc `is_deleted`,
+dùng lại số version của một bản đã xoá sẽ vi phạm khoá.
+
+**Cú pháp Handlebars được kiểm ngay lúc lưu.** Không kiểm thì template hỏng vẫn lưu được, và lúc gửi
+thật dispatcher bắt exception rồi lặng lẽ rơi về chuỗi hardcode trong consumer — thông báo vẫn gửi
+nhưng mất nội dung tuỳ biến, không ai hay.
+
+| Mã | Khi nào |
+|---|---|
+| `201` | Đã tạo. `data` = Id bản mới |
+| `400` | Sai dữ liệu (thu thập **tất cả** lỗi vào `listErrors`, không dừng ở lỗi đầu) hoặc template hỏng cú pháp |
+| `409` | Cặp `(Type × Channel)` đã có template — dùng `PUT` để tạo phiên bản mới |
+
+---
+
+### `PUT /api/admin/notification-templates/{id}` — sửa nội dung
+
+*(MỚI — 02/08/2026)*
+
+**Mục đích:** sửa nội dung = **sinh phiên bản mới rồi bật lên**, KHÔNG ghi đè bản cũ.
+
+**Auth:** Admin. **Path param:** `id` — bản bất kỳ của cặp cần sửa.
+
+**Request body:** `titleTemplate`, `bodyTemplate` (cùng ràng buộc như khi tạo).
+
+> **Không nhận `type`/`channel`** — lấy từ bản gốc. Cho đổi cặp khi "sửa" nghĩa là biến bản ghi này
+> thành template của một cặp khác, phá vỡ chuỗi phiên bản của **cả hai** cặp.
+
+**Hành vi (một giao dịch):** tắt bản đang dùng → thêm bản mới `version = max + 1`, `isActive = true`.
+
+> **Thứ tự hai bước là bắt buộc.** `ux_notification_templates_active_per_key` là partial unique index
+> trên `(type, channel)` với filter `is_active AND NOT is_deleted`, và **không deferrable** — Postgres
+> kiểm ngay ở từng câu lệnh. Gộp INSERT bản mới và UPDATE tắt bản cũ vào một lần `SaveChanges` thì thứ
+> tự câu lệnh do EF quyết định: INSERT chạy trước là vi phạm khoá ngay. Vì vậy tắt bản cũ được lưu ở
+> một lần riêng, **trước**, trong cùng transaction.
+
+| Mã | Khi nào |
+|---|---|
+| `200` | Đã tạo phiên bản mới và bật lên. `data` = Id bản mới |
+| `400` | Sai dữ liệu hoặc hỏng cú pháp |
+| `404` | Không tìm thấy template |
+
+---
+
+### `DELETE /api/admin/notification-templates/{id}` — xoá mềm một phiên bản
+
+*(MỚI — 02/08/2026)*
+
+**Mục đích:** dọn lịch sử — xoá mềm một phiên bản không còn dùng.
+
+**Auth:** Admin.
+
+> **KHÔNG xoá được bản đang dùng (409).** Cặp mất bản active thì dispatcher lặng lẽ rơi về chuỗi
+> hardcode trong consumer. Muốn bỏ bản đang dùng thì `activate` một bản khác trước. Nhờ luật này, mỗi
+> cặp **luôn** có đúng một bản active — giao diện cũng ẩn luôn nút Xoá ở dòng đang dùng thay vì để
+> bấm rồi báo lỗi.
+
+Xoá **mềm** (`AuditableEntityInterceptor` đặt `is_deleted`/`deleted_at`), giữ lại dấu vết nội dung cũ.
+
+| Mã | Khi nào |
+|---|---|
+| `200` | Đã xoá |
+| `404` | Không tìm thấy (hoặc đã xoá trước đó) |
+| `409` | Đang là bản active |
+
+---
+
+### `GET /api/admin/notification-templates/{id}` — chi tiết một phiên bản
+
+*(MỚI — 02/08/2026)* Trả `NotificationTemplateDto` của đúng bản đó, kể cả bản không active (xem lại
+phiên bản cũ). `404` nếu không tìm thấy hoặc đã xoá mềm.
+
+---
+
+### Audit của vòng đời template
+
+Bốn action code mới, ghi qua `INotificationAuditWriter` **trong cùng transaction** với thay đổi nghiệp
+vụ (audit và dữ liệu cùng sống cùng chết):
+
+| Action | Severity | Metadata |
+|---|---|---|
+| `TemplateCreated` | Info | `type`, `channel`, `version` |
+| `TemplateRevised` | Warning | `type`, `channel`, `fromVersion`, `toVersion` |
+| `TemplateActivated` | Warning | `type`, `channel`, `fromVersion`, `toVersion` |
+| `TemplateDeleted` | Warning | `type`, `channel`, `version` |
+
+`TemplateCreated` là Info vì tạo mẫu cho cặp chưa có là tốt lên (trước đó đang rơi về hardcode); ba
+action còn lại đổi câu chữ đang gửi cho khách nên là Warning.
+
+---
+
+### `POST /api/admin/notification-templates/{id}/activate`
+
+**Mục đích:** **Quay lui** — kích hoạt lại một phiên bản template cũ.
+
+**Auth:** Admin.
+
+**Path param:** `id` — `Guid` của phiên bản muốn kích hoạt.
+
+**Request body:** không có.
+
+**Hành vi:** trong cùng cặp `(Type × Channel)` chỉ được có đúng một bản active, nên thao tác này
+**tắt bản đang dùng rồi bật bản được chọn trong MỘT lần lưu** — để không có khoảnh khắc nào cặp đó
+không có bản active (khoảnh khắc ấy dispatcher sẽ rơi về chuỗi hardcode trong consumer).
+Bản đã đúng trạng thái mong muốn thì bỏ qua (không ghi thừa).
+
+**Response `200`:**
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã kích hoạt phiên bản 1.",
+  "data": null,
+  "listErrors": null
+}
+```
+
+**Lỗi thường gặp:** `401` / `403` · `404` `"Không tìm thấy template."`
+
+> **Chưa có endpoint tạo/sửa template qua REST.** Tạo bản mới hiện làm bằng SQL/seed; endpoint
+> `activate` chỉ chuyển giữa các bản đã tồn tại. Ghi nhận là giới hạn có chủ đích của Sprint 6.3.
+
+---
+
+## Endpoints — Admin Notification Settings
+
+Base route: `/api/admin/notification-settings` · **`[Authorize(Roles = "Admin")]`** *(MỚI — ADR-0019)*
+
+Cấu hình cấp **hệ thống**, đổi được lúc chạy. Khác hẳn `/api/notification-preferences` là tuỳ chọn
+của từng người dùng: người dùng tắt kênh Push thì không nhận push bằng đường nào cả, còn đổi
+transport ở đây chỉ đổi *cách* gói tin đi.
+
+> Dùng `[Authorize(Roles = "Admin")]` chứ **không** dùng policy `AdminOnly` — policy đó có trong cấu
+> hình nhưng không service nào đăng ký, gắn vào sẽ chặn cả Admin thật.
+
+### `GET /api/admin/notification-settings/push-transport`
+
+Đọc đường vận chuyển đang áp dụng, **kèm toàn bộ lựa chọn hợp lệ** để màn hình Admin dựng ô chọn mà
+không phải hard-code danh sách — thêm transport mới ở backend là giao diện tự có thêm lựa chọn.
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "data": {
+    "transport": 1,
+    "transportName": "SignalR",
+    "options": [
+      {
+        "value": 1,
+        "name": "SignalR",
+        "description": "Chỉ đẩy qua hub SignalR của hệ thống. Không cần khoá EAS/FCM và không cần device token; …",
+        "requiresDeviceToken": false
+      },
+      {
+        "value": 2,
+        "name": "Expo",
+        "description": "Chỉ đẩy qua Expo Push API. Cần device token còn hoạt động; đổi lại có đối soát biên nhận …",
+        "requiresDeviceToken": true
+      },
+      {
+        "value": 3,
+        "name": "Both",
+        "description": "Đẩy cả hai đường cho cùng một thông báo, thành công khi ít nhất một đường thành công. …",
+        "requiresDeviceToken": false
+      }
+    ]
+  }
+}
+```
+
+**Response `data` — `PushTransportDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `transport` | `int` | Không | Giá trị `PushTransportEnum` đang áp dụng: `1` SignalR · `2` Expo · `3` Both |
+| `transportName` | `string` | Không | Tên hằng số tương ứng (`"SignalR"` / `"Expo"` / `"Both"`) — tiện hiển thị, không phải parse từ số |
+| `options` | `PushTransportOptionDto[]` | Không | **Luôn đủ 3 phần tử**, theo đúng thứ tự khai báo enum. Không bao giờ rỗng |
+
+**`PushTransportOptionDto`:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `value` | `int` | Không | Giá trị để gửi lên ở `PUT` |
+| `name` | `string` | Không | Tên hằng số |
+| `description` | `string` | Không | Mô tả tiếng Việt, dựng sẵn để hiện thẳng lên giao diện |
+| `requiresDeviceToken` | `bool` | Không | `true` ⇒ chọn đường này mà người nhận chưa đăng ký device token thì push **thất bại**. Giao diện nên cảnh báo trước khi lưu |
+
+> `data` **không bao giờ `null`** ở mã 200: bảng cấu hình trống thì service trả về giá trị mặc định
+> (`SignalR`) chứ không trả rỗng. `message` là chuỗi rỗng `""` khi đọc thành công.
+
+| Mã | Khi nào | `data` |
+|----|---------|--------|
+| 200 | Luôn luôn, kể cả khi chưa ai cấu hình | Có |
+| 401 | Chưa đăng nhập / token hết hạn | — |
+| 403 | Đã đăng nhập nhưng **không phải Admin** (Manager/Staff/Customer đều 403) | — |
+
+---
+
+### `PUT /api/admin/notification-settings/push-transport`
+
+Đổi đường vận chuyển push cho **toàn hệ thống**.
+
+**Request body:**
+
+| Field | Type | Bắt buộc | Ràng buộc |
+|---|---|---|---|
+| `transport` | `int` | **Có** | Phải là `1`, `2` hoặc `3`. Thiếu trường ⇒ nhận giá trị `0` ⇒ **400** |
+
+```json
+{ "transport": 3 }
+```
+
+**Response 200** — giống hệt cấu trúc của `GET` (cùng `PushTransportDto`), `data` phản ánh giá trị
+**mới**:
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã đổi đường vận chuyển push từ SignalR sang Both.",
+  "data": {
+    "transport": 3,
+    "transportName": "Both",
+    "options": [ /* … 3 phần tử như GET … */ ]
+  },
+  "listErrors": null
+}
+```
+
+Gửi lại đúng giá trị đang dùng → vẫn **200**, nhưng **không ghi database** và `message` đổi thành:
+
+```json
+{ "isSuccess": true, "statusCode": 200, "message": "Đường vận chuyển push đang là Both — không có gì thay đổi." }
+```
+
+**Response 400** — validate ở pipeline, trả `listErrors` theo chuẩn chung:
+
+```json
+{
+  "isSuccess": false,
+  "statusCode": 400,
+  "message": "Dữ liệu đầu vào không hợp lệ.",
+  "data": null,
+  "listErrors": [
+    { "field": "Transport", "detail": "Transport không hợp lệ. Chỉ nhận 1 (SignalR), 2 (Expo) hoặc 3 (Both)." }
+  ]
+}
+```
+
+| Mã | Khi nào |
+|----|---------|
+| 200 | Đổi thành công, **hoặc** giá trị mới trùng giá trị cũ (khi đó không ghi lại, không xoá cache) |
+| 400 | `transport` không thuộc `{1,2,3}` — gồm cả `0` (thiếu trường trong body), `99`, số âm |
+| 401 | Chưa đăng nhập / token hết hạn |
+| 403 | Không phải Admin |
+
+**Có hiệu lực khi nào**
+
+| Nơi | Độ trễ |
+|---|---|
+| Tiến trình xử lý chính request này | **Ngay lập tức** (cache bị xoá ngay sau khi ghi DB) |
+| Worker nền, các bản sao khác | Chậm nhất `Notification:Push:CacheSeconds` giây (mặc định **30**) |
+| Hai worker phụ thuộc Expo (đối soát biên nhận, bù SMS) | Tự bật/tắt ở vòng lặp kế tiếp — **không cần khởi động lại service** |
+
+**Ba điều dễ hiểu nhầm**
+
+1. **Database thắng biến môi trường.** Sau lần `PUT` đầu tiên, `Notification__Push__DefaultTransport`
+   vô hiệu vĩnh viễn — kể cả khi restart service với giá trị ngược lại. Cố ý: deploy lại không được
+   ghi đè lựa chọn của người vận hành. Muốn quay về "chưa cấu hình" thì xoá dòng `push.transport`
+   trong bảng `notification_settings`.
+2. **Không ảnh hưởng tuỳ chọn của người dùng.** Người dùng tắt kênh Push (hoặc tắt nhóm "Trao đổi")
+   thì không nhận push bằng **bất kỳ** đường nào — endpoint này không ghi đè được điều đó.
+3. **Chọn `Both` ⇒ một dòng notification, hai lần gửi.** Máy vừa mở app vừa nhận push nền có thể
+   thấy hai lần — client phải khử trùng: `data.notificationId` của Expo **bằng** `id` của sự kiện
+   `NotificationReceived`.
+
+---
+
+## Endpoints — Unsubscribe một chạm
+
+Base route: `/api/notification-unsubscribe` · **`[AllowAnonymous]`** *(MỚI — Sprint 6.3 NOTI3-15 / #715)*
+
+**Vì sao public:** Gmail/Yahoo gửi `POST` **tự động** khi người dùng bấm nút "Huỷ đăng ký" ngay trong
+giao diện hộp thư — không kèm cookie hay JWT. Vì vậy endpoint xác thực bằng **token ký HMAC-SHA256**
+trong URL thay vì bằng đăng nhập.
+
+**Vì sao phải có:** từ 2024 Gmail và Yahoo **bắt buộc** người gửi số lượng lớn hỗ trợ huỷ một chạm
+(RFC 8058). Không có nút huỷ, người nhận sẽ bấm "báo cáo spam" — tỷ lệ spam vượt **0.3%** là mất
+reputation của domain `solarbattery.site` đang trong giai đoạn warm-up.
+
+**Cấu trúc token:** `base64url(userId.categoryInt.expiresAtUnix) + "." + base64url(HMAC-SHA256)`.
+- Khoá ký: `Notification:Unsubscribe:Secret`. **Không cấu hình ⇒ không phát hành được token**
+  (trả `null`, email vẫn gửi nhưng không có header huỷ) — thay vì rơi về khoá mặc định, vì khoá mặc
+  định nghĩa là ai đọc mã nguồn cũng ký được link hợp lệ.
+- Hạn dùng: `Notification:Unsubscribe:TokenLifetimeDays` (mặc định **180 ngày**). Email cũ nằm trong
+  hộp thư nhiều năm; token vô hạn là một cánh cửa mở mãi.
+- So sánh chữ ký **constant-time** (`CryptographicOperations.FixedTimeEquals`).
+
+**Link được gắn ở đâu:** `EmailBusChannel` dựng URL
+`{Notification:Unsubscribe:PublicBaseUrl}/api/notification-unsubscribe?token=...` cho **đúng NHÓM**
+của notification, rồi truyền qua `SendNotificationEmailEvent.UnsubscribeUrl`. EmailService gắn cặp
+header `List-Unsubscribe: <url>` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
+**Email giao dịch (OTP, đặt lại mật khẩu, mời admin) đi consumer khác và cố ý KHÔNG có header này** —
+người dùng không thể "huỷ đăng ký" khỏi mã xác thực do chính họ yêu cầu.
+
+---
+
+### `POST /api/notification-unsubscribe`
+
+**Mục đích:** Huỷ đăng ký một chạm — điểm mà Gmail/Yahoo gọi tự động.
+
+**Auth:** công khai; xác thực bằng token trong query.
+
+**Query parameters:**
+
+| Param | Type | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `token` | `string` | **Bắt buộc** | Token ký HMAC lấy từ link trong email |
+
+**Request body:** không có (Gmail gửi `List-Unsubscribe=One-Click` dạng form, server không đọc body).
+
+**Hành vi:** tắt kênh **Email** cho **đúng nhóm ghi trong token**, KHÔNG tắt toàn bộ email — người
+dùng huỷ vì bị chat làm phiền vẫn phải nhận được cảnh báo SLA.
+- Chưa có dòng tuỳ chọn cho nhóm đó → **tạo mới** với `emailEnabled = false`, `pushEnabled = true`,
+  `smsEnabled = false`, `inAppEnabled = true` (các kênh khác giữ mặc định).
+- Đã có → chỉ đặt `emailEnabled = false`, `updatedAt = now`.
+- **Idempotent** — email client có thể gửi lại.
+- Xoá cache `notif_cat_pref:{userId}:{category}` ngay; không xoá thì người dùng còn nhận email tới 5
+  phút sau khi bấm huỷ, và họ sẽ báo cáo spam.
+
+**Response `200`:**
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Đã ngừng gửi email nhóm 'Chat'. Các kênh khác không thay đổi.",
+  "data": null,
+  "listErrors": null
+}
+```
+
+**Lỗi thường gặp:**
+- `400` — Token thiếu, sai chữ ký, hoặc hết hạn:
+  ```json
+  { "isSuccess": false, "statusCode": 400, "message": "Liên kết hủy đăng ký không hợp lệ hoặc đã hết hạn." }
+  ```
+  > **Không nói rõ sai chữ ký hay hết hạn** — tránh giúp người dò thu hẹp phạm vi. IP được ghi log Warning.
+
+---
+
+### `GET /api/notification-unsubscribe`
+
+**Mục đích:** Trang xác nhận khi người dùng bấm thẳng vào liên kết trong nội dung email.
+
+**Auth:** công khai; cùng token với `POST`.
+
+**Query parameters:** `token` (bắt buộc) — giống `POST`.
+
+> ### ⚠️ CHỈ HIỂN THỊ — KHÔNG thay đổi gì
+>
+> `GET` phải an toàn (RFC 9110): **trình quét link của hộp thư tự mở mọi URL trong email**; nếu `GET`
+> cũng huỷ thì người dùng bị huỷ oan mà không hề bấm.
+
+**Response `200`:**
+
+```json
+{
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Xác nhận để ngừng nhận email nhóm này.",
+  "data": { "category": "Chat", "confirmMethod": "POST" },
+  "listErrors": null
+}
+```
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `data.category` | `string` | Không | Tên nhóm sẽ bị huỷ |
+| `data.confirmMethod` | `string` | Không | Luôn `"POST"` — FE/trang tĩnh phải gọi `POST` cùng token để thực sự huỷ |
+
+**Lỗi thường gặp:** `400` — token thiếu/sai/hết hạn (cùng message với `POST`).
+
+---
+
+## Realtime — SignalR Hub `/hubs/notifications`
+
+*(MỚI — Sprint 6.3 NOTI3-13 / #713)*
+
+**Vấn đề:** feed in-app chỉ cập nhật khi client tự gọi lại API. Người dùng đang mở màn hình thông báo
+phải kéo xuống làm mới mới thấy cảnh báo vừa xảy ra — trong khi đây chính là hệ thống giám sát pin,
+nơi độ trễ vài chục giây là có ý nghĩa.
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Endpoint | `/hubs/notifications` (qua ApiGateway: cùng path, route `notifications-hub-route`) |
+| Auth | **`[Authorize]` + `.RequireAuthorization()`** — bắt buộc đăng nhập |
+| Nhóm | `user:{userId:N}` — **tự ghép ở `OnConnectedAsync`**, client KHÔNG gọi thêm method nào |
+| Rời nhóm | Tự động ở `OnDisconnectedAsync` |
+
+> ### 🔒 Nhóm lấy từ CLAIM, không nhận tham số từ client
+>
+> Id nhóm lấy từ claim trong JWT (`UserId` → `AccountId` → `NameIdentifier`) chứ **không** từ đối số
+> client truyền lên. Nếu để client tự khai "tôi muốn nghe nhóm của user X" thì bất kỳ ai cũng đọc
+> được thông báo của người khác — kể cả khi đã `[Authorize]`.
+>
+> Token thiếu claim định danh → kết nối vẫn thành công nhưng **không được ghép nhóm** (log Warning) ⇒
+> không nhận được event nào.
+
+**Server → Client events:**
+
+| Event | Payload | Khi nào |
+|---|---|---|
+| `NotificationCreated` | object | `InAppChannel` giao xong một record **InApp** — tức là **sau khi đã lưu DB**, để client không bao giờ thấy thông báo mà REST chưa trả về. Dùng để **dựng feed + badge**. |
+| `UnreadCountChanged` | `int` | Ngay sau `NotificationCreated`, mang số chưa đọc mới (đếm theo đúng công thức badge: `InApp && Status ∉ {Read, Opened}`) |
+| `NotificationReceived` *(MỚI — ADR-0019)* | object | `SignalRPushChannel` giao xong một record **Push**. Dùng để **dựng thông báo hệ điều hành / bong bóng chat tại máy**, KHÔNG phải để thêm vào feed. |
+
+### ⚠️ Hai điểm client BẮT BUỘC xử lý
+
+**1. Enum trả về dạng SỐ, không phải chuỗi.**
+Hub **cố ý không** đăng ký `JsonStringEnumConverter`, để payload realtime khớp đúng với số mà REST API
+trả về — client chỉ cần một bộ ánh xạ enum duy nhất cho cả hai đường. Trước ADR-0019 hub trả chuỗi
+(`"SlaBreached"`); nay trả số (`19`). **Client cũ so sánh bằng chuỗi sẽ im lặng không khớp nhánh nào.**
+
+**2. Một thông báo sinh ra HAI sự kiện, phải khử trùng.**
+Một sự kiện nghiệp vụ tạo hai record (`InApp` + `Push`), nên client nhận cả `NotificationCreated`
+lẫn `NotificationReceived`. Chúng có **`id` khác nhau** (hai record khác nhau trong DB) nhưng
+**`entityType` + `entityId` giống nhau**. Hiện cả hai lên màn hình mà không khử trùng thì người dùng
+thấy hai lần.
+
+Cách phân vai đúng:
+
+| Sự kiện | Client làm gì | Client KHÔNG làm gì |
+|---|---|---|
+| `NotificationCreated` | Thêm vào danh sách thông báo trong app, cập nhật badge | Không dựng thông báo hệ điều hành |
+| `NotificationReceived` | Dựng thông báo hệ điều hành / bong bóng chat | Không thêm vào feed (record Push không nằm trong `GET /api/notifications`) |
+
+> Chế độ `push.transport = Both` còn gửi thêm **một bản qua Expo** cho cùng thông báo đó. Khi app
+> đang mở, máy có thể vừa nhận `NotificationReceived` vừa nhận push nền của Expo — khử trùng theo
+> `data.notificationId` của Expo so với `id` của `NotificationReceived` (hai giá trị này **bằng nhau**,
+> cùng là id của record Push).
+
+### Payload `NotificationCreated`
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | Không | ID của **record InApp** |
+| `type` | `int` | Không | `NotificationTypeEnum` — **số** (vd `19` = `ChatCreated`) |
+| `channel` | `int` | Không | `NotificationChannelEnum` — luôn `4` (`InApp`) |
+| `status` | `int` | Không | `NotificationStatusEnum` — luôn `2` (`Sent`) tại thời điểm đẩy |
+| `title` | `string` | Không | Tiêu đề đã render |
+| `body` | `string` | Không | Nội dung đã render |
+| `payloadJson` | `string?` | **Có** | Chuỗi JSON metadata nghiệp vụ (`chatId`, `ticketId`, …). `null` khi consumer không kèm |
+| `entityType` | `string?` | **Có** | `"Ticket"` / `"Chat"` / `"Battery"` / … |
+| `entityId` | `Guid?` | **Có** | ID entity liên quan — dùng cho deep link |
+| `createdAt` | `DateTime` | Không | UTC |
+
+### Payload `NotificationReceived` *(MỚI — ADR-0019)*
+
+Giống hệt `NotificationCreated`, **thêm `isCritical`** và khác ở hai field:
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `id` | `Guid` | Không | ID của **record Push** — khác `id` của `NotificationCreated` cùng sự kiện |
+| `type` | `int` | Không | `NotificationTypeEnum` — số |
+| `channel` | `int` | Không | Luôn `1` (`Push`) |
+| `status` | `int` | Không | Luôn `2` (`Sent`) |
+| `title` | `string` | Không | Tiêu đề đã render |
+| `body` | `string` | Không | Nội dung đã render |
+| `payloadJson` | `string?` | **Có** | Như trên |
+| `entityType` | `string?` | **Có** | Như trên |
+| `entityId` | `Guid?` | **Có** | Như trên |
+| `createdAt` | `DateTime` | Không | UTC |
+| **`isCritical`** | `bool` | Không | `true` ⇒ thuộc `CriticalTypes` hoặc payload có cờ `bypassQuietHours`. Client nên dựng thông báo ở mức ưu tiên cao (Android: channel `alerts-critical`, bỏ qua chế độ im lặng nếu OS cho phép) |
+
+**Ví dụ `NotificationReceived` thật** (bắt được bằng client SignalR trong lần kiểm thử E2E):
+
+```json
+{
+  "id": "1ece1d62-2298-4a2f-9f31-0d7c3a5b1e40",
+  "type": 19,
+  "channel": 1,
+  "status": 2,
+  "title": "Tin nhắn mới trên ticket",
+  "body": "Demo Customer: xin chào, pin của tôi có vấn đề",
+  "payloadJson": "{\"chatId\":\"80821822-...\",\"ticketId\":\"7edccf64-...\",\"senderName\":\"Demo Customer\",\"isInternal\":false}",
+  "entityType": "Chat",
+  "entityId": "80821822-d53c-485a-a86a-6e52a1b9a639",
+  "createdAt": "2026-08-05T09:36:58.4271Z",
+  "isCritical": false
+}
+```
+
+**Snippet FE:**
+
+```js
+import * as signalR from "@microsoft/signalr";
+
+const conn = new signalR.HubConnectionBuilder()
+  .withUrl("/hubs/notifications", { accessTokenFactory: () => accessToken })
+  .withAutomaticReconnect()
+  .build();
+
+// Feed trong app + badge
+conn.on("NotificationCreated", (n) => prependToFeed(n));
+conn.on("UnreadCountChanged", (count) => setBadge(count));
+
+// Thông báo hệ điều hành / bong bóng chat — KHÔNG thêm vào feed
+conn.on("NotificationReceived", (n) => {
+  if (shownEntities.has(`${n.entityType}:${n.entityId}`)) return;  // khử trùng với Expo
+  showOsNotification({
+    title: n.title,
+    body: n.body,
+    priority: n.isCritical ? "high" : "default",
+    deepLink: buildDeepLink(n.entityType, n.entityId),
+  });
+});
+
+await conn.start();   // không cần gọi thêm method nào — server tự ghép nhóm
+```
+
+> **Polling REST vẫn giữ nguyên làm đường dự phòng.** Realtime là lớp tăng tốc, không phải nguồn dữ
+> liệu duy nhất — WebSocket rớt thì client vẫn phải lấy được đủ thông báo bằng
+> `GET /api/notifications`. Notifier **nuốt mọi lỗi**: mất realtime không được làm hỏng bản ghi thật.
+>
+> ⚠️ Nhưng lưu ý: record **Push không nằm trong** `GET /api/notifications` (endpoint đó mặc định lọc
+> `Channel = InApp`). Nghĩa là `NotificationReceived` **không có đường dự phòng REST** — mất kết nối
+> lúc nào thì mất thông báo hệ điều hành lúc đó. Muốn chắc chắn tới máy kể cả khi app đóng thì bật
+> `push.transport = Both` để có thêm đường Expo.
+
+### Backplane Redis khi chạy nhiều bản sao
+
+Hub tự bật backplane Redis khi `ConnectionStrings:Redis` có giá trị (prefix kênh: `Notification`).
+Không có Redis thì vẫn chạy bình thường với **một** bản sao — nhưng chạy nhiều bản sao mà thiếu
+backplane thì người dùng nối vào bản sao A sẽ không nhận được sự kiện do bản sao B phát.
+
+---
+
+## Tầng dispatch — thứ tự cổng chặn
+
+`NotificationDispatcher.DispatchPendingAsync` xử lý **một record `Pending`** qua các cổng dưới đây,
+**theo đúng thứ tự này**. Hiểu thứ tự rất quan trọng khi debug "vì sao noti không tới".
+
+| # | Cổng | Không qua được thì sao | `FailureReason` / lý do metric |
+|---|---|---|---|
+| 0 | Record không còn `Pending` | Bỏ qua (đã xử lý ở vòng trước) | — |
+| 0 | Không có channel handler cho `Channel` | → `Failed` | `no_channel_handler` |
+| 0 | `UserId == Guid.Empty` | → `Failed` | `empty_user_id` |
+| 1 | **Preference kênh toàn cục** + **preference nhóm × kênh** (và logic) | → `Failed` (không bao giờ gửi được, dừng luôn để tránh retry vô hạn) | `channel_disabled` |
+| 2 | **Digest** — không-critical, **không phải hội thoại**, kênh Email/Push, user có `digestWindowMinutes > 0` hoặc `Frequency = Daily`, và record **không phải** bản digest | → **Deferred**: `NextAttemptAt = now + window`, KHÔNG tăng attempt | `digest` |
+| 2b | **Hạn mức người dùng** — không-critical, **không phải hội thoại**, kênh ≠ InApp, record không phải digest | → **Deferred** `now + DeferMinutes` (mặc định 60') để gom vào digest. **Không vứt bỏ** — vứt là mất dữ liệu nghiệp vụ | `rate_limited` (+ label `per_hour` / `per_type`) |
+| 3 | **Quiet hours** — không-critical, **không phải hội thoại**, kênh ≠ InApp | → **Deferred** tới khi hết quiet hours (+1 phút đệm) | `quiet_hours` |
+| 4 | **Địa chỉ nhận** — Email cần `account_read_models.email`, SMS cần `phoneNumber` | → `Failed` | `no_email` / `no_phone` |
+| 5 | **Render nội dung** — ưu tiên DB template `(Type × Channel)` active, `OrderByDescending(Version)`; không có → dùng Title/Body inline. **Template hỏng KHÔNG chặn gửi** | (không chặn) | — |
+| 6 | **`channel.SendAsync`** | Lỗi → tăng `DispatchAttemptCount`, đặt `NextAttemptAt` theo backoff, vẫn `Pending`. Chạm `MaxAttempts` → `Failed` | `max_attempts_exceeded` |
+
+> ### ⚠️ Cổng "Device token" đã BỎ khỏi dispatcher (ADR-0019)
+>
+> Trước đây có cổng `4b`: kênh Push cần ≥ 1 device token `IsActive`, thiếu là `Failed` với lý do
+> `no_device_token`. Nay dispatcher **không còn biết** tới device token — việc đó chuyển vào
+> `CompositePushChannel`, vì chỉ đường Expo mới cần token.
+>
+> Hệ quả theo từng transport:
+>
+> | `push.transport` | Người nhận không có device token |
+> |---|---|
+> | `SignalR` | Không liên quan — vẫn gửi bình thường |
+> | `Expo` | Thất bại ở bước `SendAsync` (cổng 6), `failureReason` = `"Expo: Người nhận chưa đăng ký device token nào đang hoạt động."`, có **retry theo backoff** rồi mới `Failed` |
+> | `Both` | **Thành công** nhờ SignalR — thiếu token không còn là lỗi |
+
+### Ngoại lệ hội thoại — `ChatCreated` và `ChatMentioned` *(ADR-0019)*
+
+Hai loại này **bỏ qua cả ba cơ chế làm chậm** ở cổng 2, 2b và 3 (digest, hạn mức, quiet hours).
+
+**Vì sao:** từ khi kênh Push thành đường realtime của chat, hoãn một tin nhắn tới sáng hôm sau nghĩa
+là buổi tối nhắn tin không ai nhận được gì; người đặt `Frequency = Daily` thì mỗi ngày mới nhận chat
+một lần. Ba cơ chế đó sinh ra để chặn **thông báo hệ thống** làm phiền, không phải để chặn người
+thật đang nói chuyện với nhau.
+
+**Vẫn KHÔNG phải `critical`.** Đây là hai khái niệm tách biệt:
+
+| | Hội thoại (`ChatCreated`, `ChatMentioned`) | Critical (`SlaBreached`, `IncidentDeclared`, …) |
+|---|---|---|
+| Bỏ qua quiet hours | ✅ | ✅ |
+| Bỏ qua digest | ✅ | ✅ |
+| Bỏ qua hạn mức | ✅ | ✅ |
+| `isCritical` trong payload realtime | `false` | `true` |
+| Độ ưu tiên gói push Expo | `normal`, channel `chat-messages` | `high`, channel `alerts-critical` |
+| Được bù SMS khi push không tới | ❌ | ✅ |
+
+**Cách tắt thông báo chat** (quiet hours không còn tác dụng với chúng):
+- Tắt kênh Push trong `PUT /api/notification-preferences`, **hoặc**
+- Tắt nhóm `Chat` trong `PUT /api/notification-preferences/matrix` — cách này giữ nguyên các nhóm khác.
+
+**Kết quả (`DispatchOutcome`):**
+
+| Giá trị | Int | Ý nghĩa |
+|---|---|---|
+| `Sent` | 1 | Đã giao thành công (`Status = Sent`, `SentAt = now`, `FailureReason = null`, `NextAttemptAt = null`) |
+| `Retrying` | 2 | Lỗi tạm thời — đã tăng attempt + hẹn `NextAttemptAt`, vẫn `Pending` |
+| `Failed` | 3 | Lỗi vĩnh viễn hoặc hết lượt thử |
+| `Deferred` | 4 | Hoãn có chủ đích (quiet hours / digest / rate limit) — vẫn `Pending`, **KHÔNG tính là 1 lần thử** |
+
+**Backoff:** lần thử thứ *n* hoãn `BaseBackoffSeconds × 2^(n−1)`, chặn trần `MaxBackoffSeconds`.
+Mặc định: 30s → 60s → 120s → 240s → 480s (trần 900s), tối đa `MaxAttempts = 5` lần.
+
+**Hạn mức (NOTI3-06) — cửa sổ trượt xấp xỉ trên Redis:**
+
+```
+count ≈ đếm(cửa sổ trước) × (1 − phần thời gian đã trôi) + đếm(cửa sổ hiện tại)
+```
+
+Cách này chỉ cần một `INCR` atomic mỗi lần gửi mà vẫn tránh lỗ hổng kinh điển của cửa sổ cố định
+(gửi hết hạn mức cuối giờ rồi lại hết hạn mức đầu giờ sau = 2× trong vài phút). Key:
+`noti_rl:{userId:N}:h:{bucket}` và `noti_rl:{userId:N}:t:{typeInt}:{bucket}`, TTL 2 giờ.
+**Fail-open có chủ đích:** Redis lỗi ⇒ **cho gửi** — Redis chết mà chặn hết notification thì một sự
+cố hạ tầng phụ trợ sẽ làm câm luôn cả cảnh báo an toàn.
+
+**Ma trận Type → Channel** (`DefaultTypeChannelMatrix`, override qua `Notification:Dispatch:TypeChannelMatrix`):
+
+| Type | Kênh mặc định |
+|---|---|
+| `TicketCreated`, `TicketStatusChanged`, `TicketClosed`, `TicketEscalated`, `SlaWarning`, `EnvironmentalIncidentResolved`, `BatteryAlertEscalationPending`, `AlertTicketSagaFailed`, `IotDeviceWentOffline`, `ChatCreated`, `ChatReacted`, `ParticipantAdded`, `ParticipantRemoved`, `ParticipantRoleChanged`, `TicketReopened`, `TicketRatingRequested`, `BatteryAnomalyWarning` | InApp + Push |
+| `TicketAssigned`, `TicketResolved`, `BatteryAnomalyDetected`, `CascadeRiskHigh`, `ChatMentioned`, `ChatEscalatedToAdmin`, `TicketApproved`, `TicketRejected` | InApp + Push + Email |
+| `SlaBreached`, `EnvironmentalIncidentDetected`, `IncidentDeclared` | InApp + Push + Email + **SMS** |
+| `AccountActivated` | InApp + Email |
+| `AdminInvite` | **chỉ Email** |
+| `BatteryAnomalyInfo`, `System` | **chỉ InApp** |
+| `TicketMerged` | **chỉ InApp** (không khai báo trong ma trận ⇒ rơi vào fallback) |
+| Type không khai báo | fallback **chỉ InApp** |
+
+> **Sprint 6.2 NOTI-14 (#685) bổ sung 14 type còn thiếu** vào ma trận — trước đó chúng rơi vào
+> fallback InApp-only, nghĩa là `DispatchAsync` (đường fan-out) không bao giờ gửi push/email cho
+> chat, cascade risk, và toàn bộ type mới của Sprint 6.2.
+
+**`SlaBreached` — phân nhánh theo priority (Sprint 6.2 NOTI-06 / #677):**
+
+| Priority | Người nhận | Kênh | Nội dung |
+|---|---|---|---|
+| **P1** (`Priority` bắt đầu bằng `"P1"`) | Manager **+ Admin** | InApp + Push + Email + **SMS** | `"🔴 SLA P1 bị vi phạm — cần xử lý ngay"` — reassign Senior (Tier 3) + báo Admin |
+| **P2** (`"P2"…`) | Manager | InApp + Push + Email (**không SMS**) | `"🟠 SLA P2 bị vi phạm"` — cân nhắc reassign Tier 2/3 |
+| **P3** / không đọc được | Manager | **chỉ InApp** | `"🟡 SLA P3 bị vi phạm"` — Manager review khi có thể |
+
+Nhận diện theo **tiền tố chuỗi** để không phụ thuộc `TicketService.Domain`; giá trị lạ → coi như P3
+(mức ồn ào thấp nhất, tránh bắn SMS vì dữ liệu lạ). Payload trả thêm `priorityTier` (`"P1"`/`"P2"`/`"P3"`).
+**Priority KHÔNG bị đổi khi breach** (Priority Policy) — breach chỉ thêm nhân lực/kênh báo.
+
+---
+
+## Background services
+
+**7 worker thường trú** — nhiều nhất hệ thống. Vì vậy `mem_limit` của container nâng **384m → 512m**
+ngày 30/07/2026 (đo thật lúc rảnh: 329 MiB = 86% của 384m, chỉ còn ~55 MiB đệm).
+
+| Worker | Sprint | Chu kỳ | Leader-election | Tắt bằng |
+|---|---|---|---|---|
+| `NotificationAuditOutboxRelayBackgroundService` | #AUDIT-34 | 2s | ✅ | — |
+| `NotificationDispatchBackgroundService` | **6.2 NOTI-01** | `PollIntervalSeconds` (5s) | ✅ | `Notification:Dispatch:Enabled=false` |
+| `NotificationDigestBackgroundService` | **6.2 NOTI-12** | `PollIntervalMinutes` (5') | ✅ | `Notification:Digest:Enabled=false` |
+| `NotificationDlqMonitorBackgroundService` | **6.3 NOTI3-08** | `IntervalSeconds` (60s, sàn 10s) | ❌ (chỉ đọc) | `MessageBus:DlqMonitor:Enabled=false` |
+| `ExpoReceiptReconcileBackgroundService` | **6.3 NOTI3-02** | `PollIntervalSeconds` (300s, sàn 10s) | ❌ | `Notification:ExpoReceipt:Enabled=false` **hoặc** `push.transport = SignalR` |
+| `NotificationFallbackBackgroundService` | **6.3 NOTI3-05** | `PollIntervalSeconds` (120s) | ✅ | `Notification:Fallback:Enabled=false` **hoặc** `push.transport = SignalR` |
+| `NotificationRetentionBackgroundService` | **6.3 NOTI3-11** | tick 15', chạy 1 lần/ngày lúc `RunAtUtcHour` | ✅ | `Notification:Retention:Enabled=false` |
+
+**Leader-election** dùng Redis key riêng cho từng worker (`notification_dispatch_leader`,
+`notification_digest_leader`, `notification_fallback_leader`, `notification_retention_leader`) với
+lease TTL 30s–10'. **Redis lỗi thì xử lý khác nhau theo worker:**
+- Dispatch / Fallback: **vẫn chạy** (thà gửi trùng còn hơn không ai gửi — cảnh báo critical đến hai
+  lần vẫn hơn là không đến).
+- Retention: **bỏ qua lượt dọn** (ở đây "làm trùng" nghĩa là hai instance cùng xoá — thà hoãn tới đêm
+  sau còn hơn dọn nhầm khi không chắc).
+
+### Hai worker phụ thuộc Expo tự bật/tắt theo transport *(ADR-0019)*
+
+`ExpoReceiptReconcile` và `NotificationFallback` đọc dữ liệu biên nhận của Expo, nên chỉ có nghĩa khi
+`push.transport` là `Expo` hoặc `Both`. Cả hai **hỏi lại transport ở MỖI vòng lặp** (không chốt một
+lần lúc khởi động), nên đổi cấu hình trên màn hình Admin là chúng tự sống lại hoặc tự nghỉ —
+**không cần khởi động lại service**.
+
+Chúng chọn hướng an toàn **ngược nhau** khi không đọc được cấu hình, và đây không phải lỗi sao chép:
+
+| Worker | Đọc cấu hình lỗi thì | Vì sao |
+|---|---|---|
+| `ExpoReceiptReconcile` | **vẫn chạy** | Quét thừa một vòng là vô hại — không có biên nhận nào để xử lý. Bỏ sót thì mất dữ liệu giao hàng thật |
+| `NotificationFallback` | **nghỉ** | Chạy thừa **bắn SMS thật** cho người dùng thật. Bỏ lỡ một vòng thì vòng sau vẫn bắt được, vì điều kiện lọc dựa trên mốc thời gian chứ không dựa trên lần quét |
+
+> Chạy thuần `SignalR` ⇒ không có biên nhận ⇒ **`Delivered` không bao giờ đạt tới**, và chuỗi bù SMS
+> cho push critical (NOTI3-05) cũng không có dữ liệu để làm việc. Đây là cái giá đã biết của việc bỏ
+> phụ thuộc EAS/FCM — đừng báo cáo "push critical luôn có đường bù" khi hệ thống đang chạy `SignalR`.
+
+---
+
+### `NotificationDispatchBackgroundService` — mắt xích còn thiếu (6.2 NOTI-01 / #672)
+
+Trước Sprint 6.2, `NotificationDispatcher` đã viết xong và đăng ký DI nhưng **không có caller nào**;
+22 consumer chỉ ghi record `Pending` rồi thôi → **Push/Email/SMS không bao giờ được gửi ở runtime**,
+user chỉ thấy notification khi tự poll REST.
+
+**Điều kiện lấy batch:**
+```
+Status = Pending  AND  !IsDeleted
+AND DispatchAttemptCount < MaxAttempts
+AND (NextAttemptAt IS NULL OR NextAttemptAt <= now)
+ORDER BY CreatedAt  LIMIT BatchSize
+```
+Gauge `notification_pending_total` được đo **trước** khi lấy batch (phản ánh tồn đọng thật) và **luôn
+ghi kể cả khi = 0** — chỉ ghi khi > 0 thì gauge sẽ kẹt ở giá trị cũ.
+Một record hỏng **không chặn cả batch** (bắt exception per-record).
+
+---
+
+### `NotificationDigestBackgroundService` (6.2 NOTI-12 / #683)
+
+Quét record đã bị dispatcher hoãn và **nay tới hạn**, gom theo `(user × channel)` thành **1 record
+tổng hợp mới**, rồi đánh dấu record gốc là `Sent` (chúng đã được giao — dưới dạng một mục trong digest).
+
+- Record tổng hợp: `Type = System`, `EntityType = "NotificationDigest"`, `EntityId = null`,
+  `Title = "Bạn có N thông báo mới"` (hoặc chính title nếu chỉ có 1 mục),
+  `Body` liệt kê tối đa `MaxItemsInBody` (mặc định 10) dòng dạng `• {Title}: {Body}` rồi
+  `"… và N thông báo khác."`
+- `PayloadJson`: `{ digest: true, count, from, to, notificationIds: [...] }`
+- Chỉ gom cho user **thực sự bật digest** — record hoãn vì lý do khác (backoff lỗi, quiet hours) phải
+  để nguyên cho dispatch worker thử lại.
+- Bản digest mang `EntityType = "NotificationDigest"` để dispatcher **không gom nó vào digest lần nữa**
+  (nếu không sẽ tự hoãn chính nó mãi mãi).
+- **Chỉ áp cho Email/Push.** InApp và SMS gửi ngay.
+
+---
+
+### `ExpoReceiptReconcileBackgroundService` (6.3 NOTI3-02 / #702)
+
+Lấy receipt `Pending` đã đủ "chín" (`CreatedAt <= now - MinAgeMinutes`, mặc định 15' — hỏi sớm hơn
+thì Expo hầu như trả rỗng), hỏi `POST https://exp.host/--/api/v2/push/getReceipts` theo lô
+`BatchSize` (Expo cho tối đa **1000** id/request; worker tự clamp), rồi:
+
+| Kết quả | Xử lý |
+|---|---|
+| `ok` | Receipt → `Ok`; Notification → `Delivered` + audit `PushDelivered`; metric `expo_push_receipt_total{status="ok"}` |
+| lỗi | Receipt → `Error` + `ErrorCode`/`ErrorMessage`; xử lý riêng theo mã (xem [PushReceiptStatusEnum](#pushreceiptstatusenum-mới--sprint-63-noti3-02--702)) |
+| Expo không trả ticket đó | Chỉ **tăng `CheckAttemptCount`**, KHÔNG đánh lỗi (đánh lỗi ở đây sẽ biến "chưa biết" thành "thất bại" — sai lệch số liệu) |
+| Chạm `MaxCheckAttempts` | Receipt → `Expired` (cửa sổ 24h của Expo đã đóng, hỏi thêm cũng vô nghĩa) |
+
+**Notification chỉ chuyển `Failed` khi KHÔNG còn thiết bị nào nhận được** — user có 3 máy, 1 máy gỡ
+app thì đó không phải thất bại giao hàng.
+
+---
+
+### `NotificationFallbackBackgroundService` (6.3 NOTI3-05 / #705)
+
+Push **critical** đã `Sent` quá `PushReceiptTimeoutMinutes` mà **không** có receipt `Ok` nào ⇒ sinh
+thêm **một bản SMS bù** cho cùng người nhận.
+
+- Có receipt `Ok` → nâng luôn notification lên `Delivered`, bỏ qua.
+- Đã bù rồi (tồn tại record SMS cùng `UserId × Type × EntityId` có `PayloadJson` chứa id push gốc) →
+  bỏ qua, chống gửi SMS lặp mỗi vòng quét.
+- Bản bù mang `PayloadJson.fallbackFrom = {id push gốc}` + `fallbackChannel = "Push"` để **báo cáo
+  không đếm trùng**; payload gốc giữ nguyên nên deep link vẫn dùng được.
+- Metric `notification_fallback_total{from_channel="push", to_channel="sms"}`.
+
+> ⚠️ **`PushReceiptTimeoutMinutes` KHÔNG độc lập.** Nó phải lớn hơn thời điểm sớm nhất mà worker đối
+> soát có thể biết kết quả:
+> ```
+> ngưỡng an toàn tối thiểu = ExpoReceipt:MinAgeMinutes        (15')
+>                          + ExpoReceipt:PollIntervalSeconds/60 (5')
+>                          + biên dự phòng độ trễ HTTP         (~5')
+>                          = 25 phút
+> ```
+> Mặc định **30**. Worker tự kiểm tra lúc khởi động và **ghi cảnh báo** nếu cấu hình vi phạm ràng buộc
+> này — đặt thấp hơn thì fallback bắn SMS trước khi đối soát kịp chạy, tức gửi thừa cho **mọi** push critical.
+
+> 📌 **Giới hạn có chủ đích (R-44):** nhánh B chốt 30/07/2026 — **KHÔNG mua provider thứ hai**.
+> Chuỗi này chỉ cứu ca *push hỏng*, **KHÔNG cứu được ca SMS hỏng** (gateway là một chiếc điện thoại
+> Android — hết pin hoặc mất mạng là cả tầng SMS chết). Bù bằng: alert Grafana khi gateway mất
+> heartbeat, và tách sẵn interface `IEmailProvider` / `ISmsProvider` để cắm provider thứ hai sau này
+> không phải sửa business logic.
+
+---
+
+### `NotificationRetentionBackgroundService` (6.3 NOTI3-11 / #711)
+
+Chạy hằng đêm lúc `RunAtUtcHour` (mặc định **18h UTC = 01h sáng giờ Việt Nam**).
+
+**Quy tắc dọn:**
+- Chỉ động vào notification `CreatedAt < now - Days` (mặc định **90 ngày**) và **không** ở `Pending`
+  — bản `Pending` tuyệt đối giữ lại, xoá là mất thông báo chưa từng được gửi.
+- Notification thuộc `CriticalTypes` **giữ VĨNH VIỄN** khi `KeepCriticalForever = true` — đó là bằng
+  chứng "đã cảnh báo", cần cho điều tra sự cố và đối chiếu SLA.
+- **Xoá mềm** (`IsDeleted = true`, `DeletedAt = now`) chứ không `DELETE` thật — dữ liệu vẫn phục hồi
+  được nếu ngưỡng cấu hình sai, và tránh khoá bảng lâu.
+- Batch `BatchSize` (mặc định 500, clamp 1–5000), tối đa `MaxBatchesPerRun` vòng (mặc định 20, clamp
+  1–1000). Chạm trần → log Warning "còn tồn đọng, sẽ dọn tiếp đêm sau".
+
+---
+
+### `NotificationDlqMonitorBackgroundService` (6.3 NOTI3-08 / #708)
+
+MassTransit tự chuyển message vào queue `<tên-queue>_error` khi consumer thất bại hết lượt retry.
+Trước sprint này **không ai theo dõi** các queue đó: message chết nằm im, không log, không cảnh báo.
+
+Không có API nào của MassTransit đọc được độ sâu queue, nên worker hỏi **RabbitMQ Management API**
+(`GET /api/queues`, cổng 15672, Basic auth từ `RabbitMQ:Username`/`Password`), lọc queue có hậu tố
+`_error`, đẩy vào gauge `notification_dlq_size{queue}`.
+**Ghi cả queue rỗng** — chỉ ghi khi > 0 thì gauge kẹt ở giá trị cũ sau khi đã dọn xong DLQ.
+**Chỉ giám sát, KHÔNG tự xử lý message** — quyết định replay hay bỏ là việc của con người.
+Management API không sẵn sàng **không** làm chết service, chỉ mất khả năng đo.
+
+---
+
+## Integration events
+
+### Events CONSUMED — 31 consumer class / 32 loại event
+
+**Sprint 6.2 thêm 9 consumer class** (đánh dấu 🆕).
+`AccountActivatedEvent` có **2** consumer (một tạo notification, một đồng bộ read-model);
+`ParticipantChangeConsumer` là **1 class** xử lý **3** loại event.
+
+| Consumer | Event | Người nhận | Kênh |
+|---|---|---|---|
+| `TicketCreatedConsumer` | `TicketCreatedEvent` | Manager | InApp + Push |
+| `TicketAssignedConsumer` | `TicketAssignedEvent` | Staff **+ Customer** | InApp + Push + Email (mỗi bên 1 bộ, nội dung khác nhau) |
+| `TicketResolvedConsumer` | `TicketResolvedEvent` | Manager **+ Customer** | InApp + Push + Email |
+| `TicketEscalatedConsumer` | `TicketEscalatedEvent` | Manager/Admin | InApp + Push |
+| `SlaWarningConsumer` | `SlaWarningEvent` | Manager **+ Staff phụ trách** | InApp + Push |
+| `SlaBreachedConsumer` | `SlaBreachedEvent` | theo priority (bảng trên) | theo priority |
+| `IncidentDeclaredConsumer` | `IncidentDeclaredEvent` | Manager/Admin | InApp + Push |
+| `NotificationBatteryAnomalyDetectedConsumer` | `BatteryAnomalyDetectedEvent` | Customer sở hữu pin | **đủ 4 kênh** (trước 6.2 chỉ InApp+Push) |
+| 🆕 `BatteryAnomalyWarningConsumer` | `BatteryAnomalyWarningDetectedEvent` | Customer sở hữu pin | Warning → InApp+Push · Info → **chỉ InApp** |
+| `BatteryAlertEscalationRequestedConsumer` | `BatteryAlertEscalationRequestedEvent` | Manager/Admin | InApp + Push + **Email** (bản Email dùng HTML đã render sẵn từ template) |
+| `NotificationBatteryCascadeRiskHighConsumer` | `BatteryCascadeRiskHighEvent` | Manager/Admin | InApp + Push + Email |
+| `AlertTicketSagaFailedConsumer` | `AlertTicketSagaFailedEvent` | Admin | InApp + Push + **Email** (bản Email dùng HTML đã render sẵn) |
+| `IotDeviceWentOfflineConsumer` | `IotDeviceWentOfflineEvent` | Manager/Admin | InApp + Push |
+| `NotificationEnvironmentalIncidentDetectedConsumer` | `EnvironmentalIncidentDetectedEvent` | theo site | InApp + Push + Email + SMS, `BypassQuietHours = true` |
+| `NotificationEnvironmentalIncidentResolvedConsumer` | `EnvironmentalIncidentResolvedEvent` | theo site | chỉ InApp (clear banner) |
+| `ChatCreatedConsumer` | `ChatCreatedEvent` | Customer ↔ Staff | **InApp + Push** (Sprint 6.2 NOTI-10 thêm InApp) |
+| `ChatMentionConsumer` | `ChatMentionedEvent` | người được mention | InApp + Push + Email |
+| `ChatReactionConsumer` | `ChatReactedEvent` | tác giả chat | InApp + Push |
+| 🆕 `ChatEscalatedToAdminConsumer` | `ChatEscalatedToAdminEvent` | **toàn bộ Admin** | InApp + Push + Email |
+| `ParticipantChangeConsumer` | `ParticipantAddedEvent`, `ParticipantRemovedEvent`, `ParticipantRoleChangedEvent` | participant liên quan | InApp + Push |
+| 🆕 `TicketStatusChangedConsumer` | `TicketStatusChangedEvent` | Customer | InApp + Push |
+| 🆕 `TicketApprovedConsumer` | `TicketApprovedEvent` | Customer | InApp + Push + Email |
+| 🆕 `TicketRejectedConsumer` | `TicketRejectedEvent` | Staff **hoặc** Customer (theo `IsClosedRejected`) | InApp + Push + Email |
+| 🆕 `TicketClosedConsumer` | `TicketClosedEvent` | Customer + Manager | InApp + Push |
+| 🆕 `TicketReopenedConsumer` | `TicketReopenedEvent` | Manager + Staff đang assign | InApp + Push |
+| 🆕 `TicketRatingRequestedConsumer` | `TicketRatingRequestedEvent` | Customer | InApp + Push |
+| 🆕 `SmsFailedConsumer` | `SmsFailedEvent` | *(không tạo noti)* | cập nhật record SMS → `Failed` |
+| `NotificationAccountActivatedConsumer` | `AccountActivatedEvent` | user mới | **chỉ InApp** (email chào mừng đi đường AuthService → EmailService riêng) |
+| `AccountActivatedSyncConsumer` | `AccountActivatedEvent` | *(read-model)* | ghi `account_read_models` |
+| `AccountProfileUpdatedSyncConsumer` | `AccountProfileUpdatedEvent` | *(read-model)* | cập nhật read-model |
+| `AccountDeletedSyncConsumer` | `AccountDeletedEvent` | *(read-model)* | xoá read-model |
+
+**`SmsFailedConsumer` (6.2 NOTI-11 / #682) — vòng phản hồi cho SMS:**
+`SmsBusChannel` publish `SendSmsCommand` với `CorrelationId = Notification.Id` rồi đánh dấu record là
+`Sent` ngay khi đẩy được lên bus. Nếu SmsService gửi thất bại thật (đã hết retry) nó publish
+`SmsFailedEvent` nhưng trước đây **không ai consume** → record kẹt ở `Sent` dù SMS không bao giờ tới.
+Consumer chỉ xử lý event có `SourceService == "notification"` (SMS của service khác không có record
+tương ứng), đối chiếu `CorrelationId` về đúng record kênh `Sms`, rồi đặt
+`Status = Failed`, `SentAt = null`, `FailureReason = "SMS gateway thất bại ({phone}): {lỗi}"`,
+`NextAttemptAt = null`. **Không hạ cấp** nếu record đã `Read`/`Opened`.
+
+**Idempotency (Sprint 6.3 NOTI3-09 / #709):** `NotificationDebounce` nay dùng **`SET key val NX EX ttl`
+atomic** (`ICacheService.TrySetIfNotExistsAsync`) thay cho cặp `Get` rồi `Set` — hai lời gọi tách rời
+tạo cửa sổ tranh chấp, 2 event trùng đến gần như đồng thời cùng đọc thấy "chưa có" nên cùng được xử lý.
+- `notif_debounce:{alertId}` — TTL **5 phút** (debounce nghiệp vụ theo AlertId)
+- `notif_msg:{messageId}` — TTL **30 phút** (idempotency khi MassTransit retry)
+
+> ⚠️ **Phải sửa TRƯỚC NOTI3-08:** bật retry ở tầng bus trên consumer chưa idempotent thật sự sẽ
+> **nhân bản** notification thay vì chỉ gửi lại (rủi ro R-41).
+
+---
+
+### Events PUBLISHED
+
+| Event | Publish bởi | Consumer | Ghi chú |
+|---|---|---|---|
+| `SendNotificationEmailEvent` | `EmailBusChannel`, `AdminNotificationTemplatesController.TestSend` | **`SendNotificationEmailConsumer` (EmailService)** — 🆕 Sprint 6.2 NOTI-02 | Trước 6.2 event này **0 consumer**: RabbitMQ drop message không có binding, không lỗi, không log, **email biến mất**. Kể cả sau khi bật dispatcher thì thiếu bước này email vẫn không tới hộp thư |
+| `SendSmsCommand` | `SmsBusChannel` | `SendSmsCommandConsumer` (SmsService) | `CorrelationId = Notification.Id` để đối chiếu ngược qua `SmsFailedEvent` |
+| `AuditCreatedEventV1` | `NotificationAuditWriter` → outbox → relay | AuditAggregatorService | Option C |
+
+**`SendNotificationEmailEvent` — payload:**
+
+| Field | Type | Nullable | Mô tả |
+|---|---|---|---|
+| `notificationId` | `Guid` | Không | ID record notification (hoặc Guid mới cho test-send) |
+| `toEmail` | `string` | Không | Địa chỉ nhận |
+| `subject` | `string` | Không | Tiêu đề đã render |
+| `body` | `string` | Không | Nội dung. HTML dựng sẵn → gửi nguyên; text thuần → EmailService bọc vào `NotificationGeneric.html` (placeholder được HTML-encode) |
+| `sourceService` | `string` | Không | `"notification"` \| `"notification-template-test"` |
+| `unsubscribeUrl` | `string?` | **Có** | **Sprint 6.3 NOTI3-15.** Có giá trị ⇒ EmailService gắn `List-Unsubscribe` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. `null` ⇒ email giao dịch, **không** được gắn |
+
+---
+
+### Cảnh báo bảo mật KHÔNG đi qua NotificationService
+
+**Sprint 6.2 NOTI-04 (#675)** thêm 2 consumer ở **EmailService**, không phải ở đây:
+
+| Event | Consumer (EmailService) | Template | Vì sao đi thẳng |
+|---|---|---|---|
+| `SuspiciousLoginDetectedEvent` | `SuspiciousLoginDetectedConsumer` | `SuspiciousLogin.html` | Email bảo mật **phải tới ngay**, không phụ thuộc preference / quiet hours / digest của user |
+| `RefreshTokenReuseDetectedEvent` | `RefreshTokenReuseDetectedConsumer` | `RefreshTokenReuse.html` | (như trên) |
+
+Logic detect ở AuthService đã chạy từ trước nhưng **không service nào consume** → công detect bỏ đi,
+nạn nhân chỉ thấy mình "bị logout" không rõ lý do và mất cơ hội đổi mật khẩu kịp thời.
+`RefreshTokenReuseDetectedEvent` được **thêm field `Email`** ở Sprint 6.2 vì EmailService không có DB
+account nên không tra ngược được từ `AccountId`.
+
+Đây cũng là lý do **cố ý không thêm `NotificationTypeEnum` cho 2 loại này** — tránh đẻ thêm enum không
+producer, đúng lỗi mà review đã nêu.
+
+---
+
+### Retry / DLQ ở tầng bus (Sprint 6.3 NOTI3-08 / #708)
+
+Sửa ở `SharedInfrastructure/Bus/MassTransitExtensions.cs` ⇒ **ảnh hưởng ĐỦ 8 service**
+(Auth · Battery · Ticket · Notification · Email · Sms · FileStorage · AuditAggregator).
+
+| Tầng | Mặc định | Cấu hình | Ghi chú |
+|---|---|---|---|
+| `UseMessageRetry` (retry **trong tiến trình**, lỗi thoáng qua ms→giây) | ✅ **BẬT** — Exponential, 3 lần, 200ms → 5000ms | `MessageBus:Retry:Limit` / `:InitialIntervalMs` / `:MaxIntervalMs` | Không phụ thuộc hạ tầng nên bật mặc định. `Limit = 0` để tắt |
+| `UseDelayedRedelivery` (trả về broker, giao lại sau nhiều phút — lỗi kéo dài) | ❌ **TẮT** | `MessageBus:Redelivery:Enabled` + `:IntervalsMinutes` (mặc định `[5,15,60]`) | ⚠️ Trên RabbitMQ cần plugin `rabbitmq_delayed_message_exchange`. Image `rabbitmq:3-management-alpine` **KHÔNG có** plugin này — bật lên mà thiếu plugin thì khai báo exchange **thất bại ngay lúc bus khởi động** ⇒ **chết TẤT CẢ service dùng bus** |
+
+Thứ tự khai báo: redelivery bọc **ngoài** retry — chuỗi retry ngắn chạy hết rồi mới tính tới lần giao
+lại có độ trễ.
+
+**Sửa kèm 30/07/2026 — `cfg.UsePublishMessageScheduler()`:** saga TicketService (`AlertTicketSaga`,
+`ChatEscalationReview`) dùng `.Schedule(...)` để hẹn timeout; MassTransit lấy scheduler từ **payload**
+của pipe context, mà payload đó chỉ tồn tại khi bus factory gọi `UsePublishMessageScheduler()`.
+Trước bản sửa chỉ có nửa đầu (`AddPublishMessageScheduler()` phía DI), nên mọi lần saga cần hẹn giờ
+đều ném `MassTransit.PayloadNotFoundException: MassTransit.MessageSchedulerContext` → retry → rơi
+`_error`. Đo được lúc test E2E 30/07/2026: **1662 message** kẹt ở `AlertTicketSagaState_error`,
+`qrtz_triggers` = 0 dòng, 2 saga treo vĩnh viễn.
+
+---
+
+## Cấu hình (appsettings / biến môi trường)
+
+Định dạng biến môi trường: thay `:` bằng `__` (vd `Notification__Dispatch__Enabled`).
+Nguồn: `env.prod.example`, `deploy/helm/solar-battery/values.yaml`,
+`deploy/helm/solar-battery/templates/shared/configmap.yaml` (PublicBaseUrl), `.../secret.yaml` (Secret).
+
+### `Notification:Dispatch` — worker giao nhận (6.2 NOTI-01 + NOTI-14)
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Enabled` | `bool` | `true` | `false` = quay lại hành vi cũ: chỉ ghi DB, **KHÔNG gửi gì** (log Warning lúc khởi động) |
+| `PollIntervalSeconds` | `int` | `5` | Chu kỳ quét (sàn 1s) |
+| `BatchSize` | `int` | `100` | Số record mỗi vòng |
+| `MaxAttempts` | `int` | `5` | Số lần thử tối đa trước khi `Failed` vĩnh viễn |
+| `BaseBackoffSeconds` | `int` | `30` | Backoff cơ sở; lần thứ *n* hoãn `Base × 2^(n−1)` |
+| `MaxBackoffSeconds` | `int` | `900` | Trần backoff |
+| `UseDbTemplates` | `bool` | `true` | Ưu tiên render từ bảng `notification_templates`; không có template thì dùng Title/Body inline |
+
+> **Template có hiệu lực tới đâu — sửa 2026-08-03.**
+>
+> Dispatcher render `(Type × Channel)` một lần cho mỗi dòng rồi giao xuống kênh. Với **Email / Push /
+> SMS**, nội dung đã render đi vào gói tin gửi ra ngoài; dòng trong `notifications` chỉ là biên bản
+> nên giữ nguyên chữ inline mà consumer ghi.
+>
+> Với **InApp thì ngược lại — dòng trong DB CHÍNH LÀ thứ người dùng đọc**, vì cả feed REST lẫn
+> SignalR đều lấy từ đó. Trước 2026-08-03 `InAppChannel` **không hề đọc** `request.Title`/`Body`: nó
+> chỉ đặt `Status = Sent` rồi đẩy realtime. Hệ quả: dispatcher vẫn tra template và render cho
+> **548/1285 dòng (43%)** rồi vứt kết quả đi, còn 33 template InApp thì sửa được, xem trước được,
+> gửi thử được — nhưng sửa xong không đổi được chữ nào trên màn hình.
+>
+> Nay `InAppChannel` **ghi ngược** nội dung đã render vào chính dòng đó trước khi lưu, nên realtime
+> cũng mang nội dung cuối cùng. Ba chốt an toàn:
+>
+> - **Chỉ ghi một lần** — dispatcher chỉ nhặt dòng `Pending`, cộng chốt idempotent "đã `Sent` thì
+>   thôi". Không có chuyện thông báo cũ đổi chữ dưới tay người đọc.
+> - **Rỗng thì không ghi** — render ra rỗng thì giữ nguyên nội dung gốc, không xoá trắng.
+> - **Cắt theo cột** — `title_template` tối đa 500 và `body_template` tối đa 4000, trong khi cột
+>   `title` chỉ 200 và `body` chỉ 2000. Không cắt thì Postgres ném lỗi và dòng đó kẹt retry vĩnh viễn.
+>
+> Bản tin gom (digest) **không** đi đường này: nó tự đánh `Sent` cho các mục con nên chúng giữ
+> nguyên nội dung gốc, còn bản tổng hợp thì đi qua dispatch như mọi dòng khác.
+| `TypeChannelMatrix` | `object` | `{}` | Override ma trận Type → Channel. Key/value là **tên enum**, không phân biệt hoa-thường. **Merge lên default theo từng key** |
+| `CriticalTypes` | `string[]` | `[]` | Override danh sách critical. Khai báo ⇒ **thay thế hoàn toàn** default (không cộng dồn); khai báo toàn giá trị không parse được ⇒ rơi về default |
+
+```jsonc
+"Notification": {
+  "Dispatch": {
+    "PollIntervalSeconds": 5,
+    "BatchSize": 100,
+    "MaxAttempts": 5,
+    "TypeChannelMatrix": { "SlaBreached": [ "InApp", "Push", "Email", "Sms" ] },
+    "CriticalTypes": [ "SlaBreached", "IncidentDeclared" ]
+  }
+}
+```
+
+### `Notification:Push` — đường vận chuyển push *(MỚI — ADR-0019)*
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `DefaultTransport` | `PushTransportEnum` | `SignalR` | Nhận **tên** (`SignalR`/`Expo`/`Both`, không phân biệt hoa-thường) hoặc **số** (`1`/`2`/`3`). ⚠️ **Chỉ được đọc khi bảng `notification_settings` còn trống** — sau lần Admin bấm đầu tiên thì database thắng vĩnh viễn, kể cả khi restart với giá trị ngược lại |
+| `CacheSeconds` | `int` | `30` | Thời gian nhớ transport trong cache (sàn 1s). Quyết định bao lâu thì lựa chọn của Admin lan tới worker nền và các bản sao khác. Bản thân request đổi luôn xoá cache ngay nên không phải chờ |
+
+```jsonc
+"Notification": {
+  "Push": {
+    "DefaultTransport": "SignalR",   // SignalR | Expo | Both
+    "CacheSeconds": 30
+  }
+}
+```
+
+> **Bẫy khi đặt bằng biến môi trường.** Trong docker-compose, `environment:` **đè** `env_file:`.
+> Cả `docker-compose.yml` lẫn `docker-compose.prod.yml` đều khai khoá này trong `environment:` dưới
+> dạng `${NOTIFICATION_PUSH_DEFAULT_TRANSPORT:-SignalR}`, nên phải dùng **tên viết hoa** ở `.env` /
+> `/opt/solar/.env.prod`. Đặt `Notification__Push__DefaultTransport` vào `.env.Docker` sẽ **bị bỏ qua
+> im lặng** — không lỗi, không log.
+
+### `Notification:Digest` (6.2 NOTI-12)
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Enabled` | `bool` | `true` | Bật worker gom digest |
+| `PollIntervalMinutes` | `int` | `5` | Chu kỳ quét (sàn 1') |
+| `BatchSize` | `int` | `50` | Số **nhóm (user × channel)** xử lý mỗi vòng |
+| `MaxItemsInBody` | `int` | `10` | Số dòng tối đa liệt kê trong thân digest |
+
+### `Notification:ExpoReceipt` (6.3 NOTI3-02)
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Enabled` | `bool` | `true` | Tắt = **mất khả năng biết push có tới nơi hay không** |
+| `PollIntervalSeconds` | `int` | `300` | Chu kỳ quét (sàn 10s) |
+| `MinAgeMinutes` | `int` | `15` | Chỉ hỏi receipt của message đã gửi tối thiểu bấy nhiêu phút — Expo khuyến nghị ~15' |
+| `BatchSize` | `int` | `300` | Số ticket id/request (Expo tối đa 1000, worker clamp) |
+| `MaxCheckAttempts` | `int` | `5` | Hỏi quá số lần này mà vẫn rỗng ⇒ `Expired` |
+
+### `Notification:Fallback` (6.3 NOTI3-05)
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Enabled` | `bool` | `true` | Bật chuỗi dự phòng push → SMS |
+| `PushReceiptTimeoutMinutes` | `int` | `30` | ⚠️ **Phải ≥ 25** (xem ràng buộc ở trên) |
+| `PollIntervalSeconds` | `int` | `120` | Chu kỳ quét |
+| `BatchSize` | `int` | `100` | Số notification xử lý mỗi vòng |
+
+### `Notification:RateLimit` (6.3 NOTI3-06)
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Enabled` | `bool` | `true` | Bật hạn mức |
+| `MaxPerUserPerHour` | `int` | `20` | Trần tổng notification **chủ động** (Push/Email/SMS) mỗi người mỗi giờ. `≤ 0` = không giới hạn |
+| `MaxPerUserPerType` | `int` | `8` | Trần riêng cho từng type — chặn một loại sự kiện lặp lại chiếm hết hạn mức chung |
+| `DeferMinutes` | `int` | `60` | Thời gian hoãn khi chạm trần (record chờ rồi được gộp vào digest) |
+
+### `Notification:Retention` (6.3 NOTI3-11)
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Enabled` | `bool` | `true` | Bật worker dọn |
+| `Days` | `int` | `90` | Giữ notification bấy nhiêu ngày kể từ `CreatedAt` |
+| `BatchSize` | `int` | `500` | Số dòng xoá mềm mỗi vòng (clamp 1–5000) |
+| `MaxBatchesPerRun` | `int` | `20` | Số vòng tối đa mỗi lượt (clamp 1–1000) |
+| `RunAtUtcHour` | `int` | `18` | Giờ UTC chạy hằng đêm (18h UTC = 01h VN) |
+| `KeepCriticalForever` | `bool` | `true` | Giữ vĩnh viễn notification thuộc `CriticalTypes` |
+
+### `Notification:Unsubscribe` (6.3 NOTI3-15)
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Secret` | `string` | *(không có)* | Khoá ký HMAC. **Không cấu hình ⇒ không phát hành token** ⇒ email gửi **không có** `List-Unsubscribe` (log Warning). Sinh bằng `openssl rand -base64 48` |
+| `PublicBaseUrl` | `string` | *(không có)* | Địa chỉ gốc API công khai để dựng URL tuyệt đối (vd `https://api.solarbattery.site`). Fallback đọc khoá `PublicBaseUrl` |
+| `TokenLifetimeDays` | `int` | `180` | Hạn dùng token (giá trị `≤ 0` hoặc không parse được → 180) |
+
+### `MessageBus` (6.3 NOTI3-08 — áp cho cả 8 service)
+
+| Khoá | Kiểu | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `Retry:Limit` | `int` | `3` | Số lần retry trong tiến trình. `0` = tắt |
+| `Retry:InitialIntervalMs` | `int` | `200` | Khoảng chờ đầu |
+| `Retry:MaxIntervalMs` | `int` | `5000` | Trần khoảng chờ |
+| `Redelivery:Enabled` | `bool` | **`false`** | ⚠️ Bật cần plugin RabbitMQ `rabbitmq_delayed_message_exchange` |
+| `Redelivery:IntervalsMinutes` | `int[]` | `[5,15,60]` | Các mốc giao lại |
+| `DlqMonitor:Enabled` | `bool` | `true` | Bật worker đo DLQ |
+| `DlqMonitor:IntervalSeconds` | `int` | `60` | Chu kỳ (sàn 10s) |
+| `DlqMonitor:ManagementUrl` | `string?` | suy từ `RabbitMQ:Host` + cổng `15672` | Base URL RabbitMQ Management API |
+
+---
+
+## Database schema
+
+DB: `notification_db`. **4 migration** ở Sprint 6.2/6.3, **+2 migration** ở ADR-0019
+(`RepairLegacyNotificationRetryColumns`, `AddNotificationSettings`).
+
+### `notifications` — cột thêm (migration `20260729161154_AddNotificationDispatchRetryColumns`)
+
+| Cột | Kiểu | Null | Default | Ý nghĩa |
+|---|---|---|---|---|
+| `dispatch_attempt_count` | `integer` | Không | `0` | **Sprint 6.2 NOTI-01** — số lần worker đã thử gửi. Chạm `MaxAttempts` → `Failed` (dừng retry vô hạn) |
+| `next_attempt_at` | `timestamptz` | **Có** | `null` | **Sprint 6.2 NOTI-01** — thời điểm sớm nhất được thử lại (UTC). `null` = gửi ngay được. Dùng cho backoff **và** hoãn quiet hours / digest / rate limit |
+
+> **Vì sao `next_attempt_at` cần cho cả trường hợp hoãn:** nếu để record hoãn ở `Pending` không mốc
+> thời gian thì batch (order by `created_at`) sẽ bị chúng chiếm chỗ, **chặn record mới phía sau**.
+
+**Index mới:** `ix_notifications_dispatch_queue` trên `(status, next_attempt_at, created_at)` — đúng
+hình dạng câu truy vấn của dispatch worker.
+
+**Không expose qua API:** cả 2 cột + `failure_reason` chỉ dùng nội bộ.
+
+> **Migration vá kèm theo — `20260805083909_RepairLegacyNotificationRetryColumns`.**
+> Một nhánh phát triển cũ từng đặt tên cột là `attempt_count` trước khi chốt `dispatch_attempt_count`.
+> Database nào đã chạy nhánh đó sẽ thừa cột cũ và thừa index `IX_notifications_status_next_attempt_at`.
+> Migration vá gộp dữ liệu retry về cột đúng (`GREATEST`, không đặt ngược về 0) rồi dọn phần thừa.
+>
+> Toàn bộ `Up()` có điều kiện tồn tại nên trên database khoẻ mạnh là **no-op**. `Down()` cố ý để
+> trống — đây là migration dọn dẹp, rollback nó nghĩa là dựng lại một cột rác.
+>
+> Không sửa thẳng `20260729161154` vì migration đó **đã merge và đã chạy** trên các database hiện có
+> ⇒ tên nó nằm trong `__EFMigrationsHistory` ⇒ sửa nội dung không bao giờ chạy lại.
+
+---
+
+### `notification_settings` — bảng MỚI *(ADR-0019, migration `20260805085310_AddNotificationSettings`)*
+
+Cấu hình cấp hệ thống sửa được lúc chạy, dạng khoá–giá trị. Hiện có **đúng một khoá**:
+`push.transport`.
+
+| Cột | Kiểu | Null | Default | Ý nghĩa |
+|---|---|---|---|---|
+| `id` | `uuid` | Không | — | PK |
+| `key` | `varchar(100)` | Không | — | Khoá cấu hình, dạng chấm phân cấp. Hiện dùng: `push.transport` |
+| `value` | `varchar(500)` | Không | — | Giá trị dạng chuỗi. Với `push.transport`: `"SignalR"` / `"Expo"` / `"Both"`. Đọc được cả dạng số (`"3"`) để dữ liệu nhập tay vẫn hiểu |
+| `description` | `varchar(500)` | **Có** | `null` | Mô tả cho người vận hành đọc |
+| `created_at` / `created_by` / `updated_at` / `is_deleted` / `deleted_at` | — | — | — | Cột chuẩn của `AuditableEntity` |
+
+**Index:** `IX_notification_settings_key` — UNIQUE **có lọc** `WHERE is_deleted = false`.
+Lọc theo `is_deleted` vì bảng dùng xoá mềm: tính cả dòng đã xoá thì một lần xoá mềm sẽ khoá vĩnh viễn
+khoá đó, không bao giờ tạo lại được.
+
+**Vì sao khoá–giá trị chứ không mỗi cấu hình một cột:** loại cấu hình này rất ít và không có quan hệ
+với nhau; mỗi lần thêm một công tắc mà phải sinh một migration là chi phí không đáng.
+
+**Giá trị đọc thế nào:** cache Redis `notif:setting:push_transport` (TTL `Notification:Push:CacheSeconds`,
+mặc định 30s) → không có thì đọc DB → không có dòng nào thì rơi về `Notification:Push:DefaultTransport`.
+Mọi lỗi khi **đọc** đều rơi về mặc định thay vì ném, vì hàm này nằm trên đường đi của từng lần gửi
+thông báo. Lỗi khi **ghi** thì ném bình thường — người vận hành cần biết là chưa đổi được.
+
+---
+
+### `push_receipts` — bảng MỚI (migration `20260730084126_AddPushReceiptAndDeliveryStatus`)
+
+Một `Notification` push tới người dùng có N thiết bị sẽ sinh **N bản ghi receipt**.
+
+| Cột | Kiểu | Null | Ý nghĩa |
+|---|---|---|---|
+| `id` | `uuid` | Không | PK |
+| `notification_id` | `uuid` | Không | Notification đã sinh ra message push này |
+| `user_id` | `uuid` | Không | Nhân bản để đối soát không phải join sang `notifications` |
+| `ticket_id` | `varchar(200)` | Không | Ticket id Expo trả về (`data[i].id`) — **UNIQUE**, cùng một ticket id không được đối soát hai lần |
+| `device_token` | `varchar(500)` | Không | Token đã gửi tới — cần để tắt đúng thiết bị khi `DeviceNotRegistered` |
+| `status` | `integer` | Không | `PushReceiptStatusEnum` (1=Pending, 2=Ok, 3=Error, 4=Expired) |
+| `error_code` | `varchar(100)` | **Có** | Mã lỗi Expo |
+| `error_message` | `varchar(1000)` | **Có** | Thông điệp lỗi đầy đủ |
+| `checked_at` | `timestamptz` | **Có** | Lần đối soát gần nhất. `null` = chưa hỏi Expo lần nào |
+| `check_attempt_count` | `integer` | Không (default `0`) | Số lần đã hỏi mà chưa có kết quả |
+| + 5 cột `AuditableEntity` | | | `created_at`, `created_by`, `updated_at`, `is_deleted`, `deleted_at` |
+
+**Index:** `ix_push_receipts_notification_id` · `ix_push_receipts_status_created (status, created_at)` ·
+`ux_push_receipts_ticket_id` (**unique**).
+
+---
+
+### `notification_category_preferences` — bảng MỚI (migration `20260730091039_AddNotificationCategoryPreference`)
+
+| Cột | Kiểu | Null | Default | Ý nghĩa |
+|---|---|---|---|---|
+| `id` | `uuid` | Không | — | PK |
+| `user_id` | `uuid` | Không | — | Chủ sở hữu |
+| `category` | `integer` | Không | — | `NotificationCategoryEnum` (1–6) |
+| `push_enabled` | `boolean` | Không | `true` | |
+| `email_enabled` | `boolean` | Không | `true` | |
+| `sms_enabled` | `boolean` | Không | `false` | |
+| `in_app_enabled` | `boolean` | Không | `true` | |
+| + 5 cột `AuditableEntity` | | | | |
+
+**Index:** `ux_notification_category_preferences_user_category` trên `(user_id, category)` — **unique**
+⇒ mỗi user tối đa **6 record**.
+
+---
+
+### `notification_templates` + `account_read_models`
+
+**Migration `20260730093220_AddTemplateVersioningAndAccountLocale`** — thêm `version` cho template
+và `preferred_locale` cho account read-model.
+
+**Migration `20260802113005_RemoveTemplateLocale` (02/08/2026) — gỡ toàn bộ locale:**
+
+| Bảng | Thao tác | Ghi chú |
+|---|---|---|
+| `notification_templates` | **DELETE** dòng `locale <> 'vi-VN'` | 39/121 dòng. **Phải chạy TRƯỚC khi drop cột** — nếu không, unique index mới `(type, channel, version)` sẽ vi phạm ở 39 cặp |
+| `notification_templates` | **DROP COLUMN** `locale` | |
+| `account_read_models` | **DROP COLUMN** `preferred_locale` | Cột chưa bao giờ có giá trị: không consumer nào ghi vào, 100% dòng đang `null` |
+| index | **DROP** `ux_notification_templates_type_channel_locale_version` → **ADD** `ux_notification_templates_type_channel_version` | |
+| index | `ux_notification_templates_active_per_key` dựng lại trên `(type, channel)` | vẫn giữ filter `is_active = true AND is_deleted = false` ⇒ DB tự bảo đảm mỗi cặp đúng 1 bản active |
+
+> **Rollback dựng lại được schema nhưng KHÔNG dựng lại dữ liệu** — 39 bản `en-US` đã bị xoá cứng
+> (soft-delete không đủ: index `(type, channel, version)` không lọc `is_deleted` nên vẫn trùng khoá).
+> Sau khi rollback phải chạy lại seeder của bản code cũ để sinh lại chúng.
+
+---
+
+### Sprint 6.4 — nhóm người nhận & lần gửi (migration `AddNotificationGroups` + `AddNotificationBatches`)
+
+**4 bảng mới + 1 cột thêm.** Đây là lần đầu tiên NotificationService có **khoá ngoại** — trước đó
+toàn service không có FK nào, cũng không có navigation property nào.
+
+| Bảng | Vai trò | Ràng buộc đáng chú ý |
+|---|---|---|
+| `notification_groups` | Nhóm người nhận | `ux_notification_groups_normalized_name` UNIQUE trên `normalized_name` `WHERE is_deleted = false` · `ux_notification_groups_role_filter` UNIQUE `WHERE kind = 2 AND is_deleted = false` · CHECK `ck_notification_groups_role_filter` |
+| `notification_group_members` | **Nhiều-nhiều người ↔ nhóm** | FK `group_id` → `notification_groups` **CASCADE** · `ux_notification_group_members_pair` UNIQUE `(group_id, user_id) WHERE is_deleted = false` · `ix_notification_group_members_user` |
+| `notification_batches` | Nội dung **một lần gửi**, lưu một lần | `channels integer[]` · `ix_notification_batches_created_at` DESC |
+| `notification_batch_targets` | **Nhiều-nhiều lần gửi ↔ nhóm** | FK `batch_id` → `notification_batches` **CASCADE** · FK `group_id` → `notification_groups` **RESTRICT** · CHECK `ck_notification_batch_targets_shape` |
+| `notifications` | +1 cột `batch_id uuid NULL` | FK → `notification_batches` **SET NULL** · `ux_notifications_batch_user_channel` UNIQUE `(batch_id, user_id, channel) WHERE batch_id IS NOT NULL` |
+
+**Ba quyết định về khoá ngoại, đều có chủ đích:**
+
+- `group_id` **có** FK — cùng `notification_db`, cùng transaction, không có gì bất định.
+- `user_id` **không** FK — trỏ sang read-model đồng bộ qua message bus. Message tới *sau* thao tác
+  dùng `user_id` (thứ tự không bảo đảm) sẽ làm insert vỡ vì vi phạm khoá rồi retry, có khi hết lượt
+  vẫn hỏng; mà nguồn sự thật ở `auth_db` service khác nên FK nội bộ không bảo vệ được gì trước sai
+  lệch xuyên service. Lọc người không hoạt động làm bằng **JOIN lúc gửi**, không bằng ràng buộc DB.
+- `notification_batch_targets.group_id` dùng **RESTRICT chứ không CASCADE** — xoá nhóm KHÔNG được
+  xoá lịch sử đã gửi cho nhóm đó. Nhóm chỉ xoá mềm nên ràng buộc này không chặn thao tác thật.
+
+> **Nhóm đã xoá vẫn hiện KÈM TÊN trong lịch sử gửi.** `GET /batches/{id}` cố ý LEFT JOIN sang
+> `notification_groups` mà **không lọc `is_deleted`** — lọc bỏ thì tên thành rỗng và người xem chỉ
+> còn thấy "một nhóm nào đó", mất luôn thông tin đáng giá nhất. `groupName` chỉ `null` nếu dòng nhóm
+> bị xoá **cứng** khỏi DB, điều không xảy ra qua API.
+
+> `ux_notifications_batch_user_channel` là **lớp chống nhận trùng thứ hai**. Lớp thứ nhất là
+> `DISTINCT` ở tầng ứng dụng; hai lớp vì tầng ứng dụng sai thì DB vẫn chặn.
+
+> `batch_id` **nullable có chủ đích**: 1.282 dòng có trước sprint này không thuộc lần gửi nào (dữ
+> liệu cũ không mang thông tin để gom, gom theo thời gian là suy đoán đã chứng minh sai), và
+> `NotificationDigestBackgroundService` / `NotificationDispatcher` cũng sinh dòng ngoài mô hình batch.
+
+---
+
+## Prometheus metrics
+
+Trước Sprint 6.3, **toàn service chỉ có đúng 1 metric** (`AuditOutboxPending`) — Sprint 6.2 vừa bật
+tầng gửi mà không có cách nào biết nó đang hỏng.
+
+| Metric | Kiểu | Labels | Ý nghĩa |
+|---|---|---|---|
+| `notification_sent_total` | Counter | `channel`, `type` | Đã giao thành công xuống channel. **Delivery-rate tách theo channel là metric số 1** — mỗi kênh có kiểu hỏng khác nhau nên KHÔNG được gộp |
+| `notification_failed_total` | Counter | `channel`, `reason` | Thất bại **vĩnh viễn**. `reason` là nhóm ngắn: `channel_disabled`, `no_device_token`, `no_email`, `no_phone`, `no_channel_handler`, `empty_user_id`, `max_attempts_exceeded` |
+| `notification_retry_total` | Counter | `channel` | Lỗi tạm thời, sẽ retry |
+| `notification_deferred_total` | Counter | `channel`, `reason` | Hoãn có chủ đích: `quiet_hours` \| `digest` \| `rate_limited` |
+| `notification_delivery_latency_seconds` | Histogram | `channel` | Độ trễ end-to-end `CreatedAt → SentAt`. Bucket `1, 5, 15, 30, 60, 300, 900, 3600` (kéo dài tới 1 giờ vì record có thể bị hoãn) |
+| `notification_pending_total` | Gauge | — | Số record đang chờ giao (tới hạn). **Tín hiệu queue lag — đây là metric quyết định khi nào phải bỏ leader-election** |
+| `notification_dlq_size` | Gauge | `queue` | Số message trong queue `*_error`. **Khoẻ mạnh = 0** |
+| `notification_rate_limited_total` | Counter | `channel`, `reason` | Bị chặn bởi hạn mức. `reason` = `per_hour` \| `per_type` |
+| `notification_fallback_total` | Counter | `from_channel`, `to_channel` | Bản bù sinh ra khi kênh chính không có receipt |
+| `expo_push_receipt_total` | Counter | `status`, `error_code` | Receipt đã đối soát. `status` = `ok` \| `error` \| `expired` |
+| `expo_push_token_deactivated_total` | Counter | — | Token bị tắt sau khi Expo báo không dùng được |
+
+> ⚠️ **Cardinality:** tuyệt đối không nhét message lỗi thô vào label `reason` — mỗi giá trị khác nhau
+> tạo một time-series mới.
+
+**Dashboard:** `monitoring/grafana/dashboards/notification-ops.json` (bản Helm:
+`deploy/helm/solar-battery/dashboards/notification-ops.json`).
+
+**Alert rules** — nhóm `notification-delivery` trong `monitoring/prometheus/alert-rules.yml`
+(label `domain: notification`):
+
+| Alert | Điều kiện | Ý nghĩa |
+|---|---|---|
+| `NotificationFailureRateHigh` | tỷ lệ `failed / (sent + failed)` theo channel > 5% trong 5' | Kiểm tra provider của channel đó (Expo / Mailjet / SMS gateway) và cột `failure_reason` |
+| `NotificationDlqNotEmpty` | `sum(notification_dlq_size) > 0` | Có message chết — trạng thái khoẻ mạnh là 0 |
+| `NotificationQueueBacklog` | `notification_pending_total > 1000` | Tín hiệu chạm trần thông lượng ⇒ cân nhắc bỏ leader-election (xem [Giới hạn §1](#1-trần-thông-lượng--20-notificationgiây-r-45--chốt-nhánh-b-30072026)) |
+| `NotificationDispatchStalled` | `rate(notification_sent_total[15m]) == 0` **và** `notification_pending_total > 0` | Worker chết / Redis leader key bị instance chết giữ / `Notification:Dispatch:Enabled=false` |
+| `ExpoTokenDeactivationSpike` | tăng đột biến `expo_push_token_deactivated_total` | Nhiều token chết bất thường — nghi cấu hình FCM/APNs hỏng |
+
+---
+
+## Giới hạn đã biết
+
+### 1. Trần thông lượng ≈ 20 notification/giây (R-45 — chốt nhánh B, 30/07/2026)
+
+`NotificationDispatchBackgroundService` dùng **leader-election** ⇒ **chỉ MỘT instance xử lý** tại mỗi
+thời điểm, dù chạy bao nhiêu replica.
+
+```
+tối đa ≈ BatchSize / PollIntervalSeconds = 100 / 5 = 20 notification/giây
+```
+
+Con số này thừa sức cho quy mô đồ án. Nó chỉ thành vấn đề khi một sự kiện fan-out ra hàng nghìn người
+nhận cùng lúc — ví dụ sự cố toàn site khiến mọi khách hàng đều phải được báo.
+
+**Dấu hiệu phải nâng cấp:** gauge `notification_pending_total` tăng đều mà không tự tiêu (alert
+`NotificationQueueBacklog`).
+**Cách nâng cấp:** bỏ leader-election, chia việc theo phân vùng (`Channel` hoặc `hash(UserId) % N`)
+kết hợp `SELECT … FOR UPDATE SKIP LOCKED`. Ước tính ~1.5 ngày công — **hoãn tới khi metric cho thấy
+queue lag tăng thật**, vì tối ưu trước khi có số liệu là đoán mò.
+
+### 2. Mô hình dữ liệu feed vẫn là bản vá (NOTI3-01 nhánh A)
+
+Lọc `Channel = InApp` chữa được triệu chứng (feed nhân bản), nhưng mô hình đúng chuẩn Knock/Courier là
+**tách bảng** `Notification` (1 dòng feed) khỏi `NotificationDelivery` (1 bản ghi/channel). Thêm kênh
+mới về sau vẫn đẻ row thừa. Nhánh B (~4 ngày) **hoãn sang sprint sau, không huỷ**.
+
+⚠️ Hệ quả bắt buộc phải giữ (R-40): **mọi notification hướng user phải có ít nhất 1 row `InApp`** —
+type nào chỉ ghi `Push` sẽ **biến mất hoàn toàn** khỏi feed sau khi bật lọc. Có test chặn
+(`EveryConsumerWritesInAppTests`) bao mọi `NotificationTypeEnum` hướng user.
+
+### 2b. Đường `SignalR` không có bằng chứng giao hàng *(ADR-0019)*
+
+`Clients.Group(...).SendAsync(...)` trả về **không** đồng nghĩa máy nhận được: SignalR không có cơ
+chế biên nhận. Hệ quả khi chạy `push.transport = SignalR`:
+
+- `Delivered` **không bao giờ đạt tới** — `Sent` là trạng thái cuối của kênh Push.
+- Chuỗi bù SMS cho push critical (NOTI3-05) không có dữ liệu để làm việc và **tự nghỉ**.
+- Record Push **không nằm trong** `GET /api/notifications` (endpoint lọc `Channel = InApp`), nên sự
+  kiện `NotificationReceived` **không có đường dự phòng REST**: WebSocket rớt lúc nào thì mất thông
+  báo hệ điều hành lúc đó.
+
+**Cách bù:** bật `push.transport = Both` — máy đang tắt app vẫn nhận qua Expo, và có lại `Delivered`
+lẫn chuỗi bù SMS. Đổi lại phải có khoá EAS/FCM và device token còn hạn.
+
+### 2c. Chế độ `Both` gửi hai lần cho một dòng notification *(ADR-0019)*
+
+Một record Push nhưng **hai lần gửi** (SignalR + Expo). Máy vừa mở app vừa nhận push nền sẽ thấy
+thông báo hai lần nếu client không khử trùng. Server **không** khử hộ được: nó không biết máy nào
+đang mở app.
+
+Khoá khử trùng: `data.notificationId` của gói Expo **bằng** `id` của sự kiện `NotificationReceived`.
+
+### 3. Một provider mỗi kênh (R-44)
+
+Mailjet · Expo · gateway SMS Android tự dựng — **đều là single point of failure**, chấp nhận có chủ
+đích vì provider thứ hai ngoài ngân sách đồ án. Đã tách sẵn `IEmailProvider` / `ISmsProvider` để cắm
+provider thứ hai sau này không phải sửa business logic.
+
+### 4. Không có suppression list email (NOTI3-03 đã huỷ 30/07/2026)
+
+Task đã code hoàn chỉnh (entity + `EmailDbContext` + webhook Mailjet + guard + 2 endpoint + migration
++ 23 unit test, tất cả pass) rồi **gỡ bỏ toàn bộ**. Lý do: cái giá là biến EmailService từ **service
+thuần tiêu thụ message** thành **service có database** (thêm `email_db`, migration,
+`depends_on: postgres`, và 2 cơ chế token tự dựng vì EmailService không có tầng JWT), trong khi ở quy
+mô đồ án (vài chục email test tới địa chỉ thật của nhóm) bảng suppression sẽ **rỗng vĩnh viễn**.
+
+**Rủi ro chấp nhận:** gửi lặp vào địa chỉ chết không bị chặn ⇒ về lâu dài có thể ảnh hưởng reputation
+domain. **Bù đắp:** NOTI3-15 (`List-Unsubscribe` một chạm) vẫn giữ — đó mới là thứ Gmail/Yahoo **bắt
+buộc** từ 2024.
+
+### 5. Chưa có endpoint tạo/sửa template qua REST
+
+`/api/admin/notification-templates` chỉ có `list` / `preview` / `test-send` / `activate`. Tạo bản mới
+vẫn phải qua SQL hoặc seeder.
+
+---
+
+## Changelog
+
+### 2026-08-05 — ADR-0019: hai đường vận chuyển push, Admin chọn lúc chạy
+
+**Vấn đề gốc:** kênh Push chỉ có một đường — Expo Push API — nên phụ thuộc khoá EAS/FCM và device
+token; người dùng web không có token thì không nhận được gì. Khi module Chat lấy kênh Push làm đường
+realtime, một vòng gọi HTTP ra ngoài cộng đối soát biên nhận là quá chậm để nhắn tin. Một nhánh trước
+đó đã gỡ hẳn Expo, nhưng kéo theo mất `Delivered` và mất chuỗi bù SMS cho cảnh báo P1 mà không nói ra.
+
+**Endpoint mới (2):**
+- `GET /api/admin/notification-settings/push-transport` — đọc transport hiện tại **kèm cả 3 lựa chọn
+  hợp lệ** để giao diện không phải hard-code danh sách.
+- `PUT /api/admin/notification-settings/push-transport` — đổi transport. Chỉ `Admin`.
+
+**Enum mới:** [`PushTransportEnum`](#pushtransportenum-mới--adr-0019) — `SignalR` 1 · `Expo` 2 · `Both` 3.
+
+**Sự kiện SignalR mới:** `NotificationReceived` — dùng để dựng thông báo hệ điều hành, tách vai với
+`NotificationCreated` (feed + badge).
+
+**⚠️ Hai thay đổi phá vỡ tương thích của client realtime:**
+
+| | Trước | Sau |
+|---|---|---|
+| Enum trong payload hub | **chuỗi** (`"SlaBreached"`, `"InApp"`) | **số** (`19`, `4`) — khớp với REST API |
+| Số sự kiện cho một thông báo | 1 (`NotificationCreated`) | 2 (`NotificationCreated` + `NotificationReceived`), client phải khử trùng |
+
+**Thay đổi hành vi:**
+- `ChatCreated` / `ChatMentioned` **bỏ qua quiet hours, digest và hạn mức**. Muốn tắt thông báo chat
+  thì tắt kênh Push hoặc tắt nhóm `Chat` trong tuỳ chọn.
+- Bỏ cổng `no_device_token` khỏi dispatcher — chuyển vào `CompositePushChannel`, vì chỉ Expo mới cần.
+- `Delivered` chỉ đạt được khi transport là `Expo`/`Both`.
+- `ExpoReceiptReconcile` và `NotificationFallback` **tự bật/tắt theo transport**, hỏi lại mỗi vòng lặp.
+
+**Bảng mới:** `notification_settings` (khoá–giá trị, unique index có lọc `is_deleted = false`).
+
+**Migration:** `20260805083909_RepairLegacyNotificationRetryColumns` (vá database lệch cột
+`attempt_count`, idempotent) · `20260805085310_AddNotificationSettings`.
+
+**Cấu hình mới:** `Notification:Push:DefaultTransport`, `Notification:Push:CacheSeconds` — **không
+bắt buộc**, và chỉ có tác dụng khi bảng cấu hình còn trống.
+
+Chi tiết quyết định và các đánh đổi: [ADR-0019](adr/0019-push-transport-signalr-expo.md).
+
+---
+
+### 2026-08-03 — Sprint 6.4: Nhóm người nhận & gửi hàng loạt (`#1006..#1020`, 15 task)
+
+**Vấn đề gốc:** hệ thống chỉ gửi được cho **đúng một người mỗi lệnh** (`CreateNotificationCommand`
+có duy nhất một `Guid UserId`); "nhóm" chỉ là 4 chuỗi role viết cứng tại 15 chỗ trong code; toàn
+service **0 khoá ngoại / 0 navigation property**; `notifications` chép lại `title`/`body` từng dòng
+và không có khoá nào gom một lần gửi lại (đo được: 1.282 dòng / 9 người / 242 lần gửi chỉ gom được
+bằng cách đoán theo `(type, entity_id, giây)` — cách đoán đó sai, cùng một `entity_id` có tới 50
+dòng trong một giây).
+
+**Endpoint mới (11):**
+- `GET|POST /api/admin/notification-groups`, `GET|PUT|DELETE .../{id}`
+- `GET|POST .../{id}/members`, `DELETE .../{id}/members/{userId}`
+- `POST /api/admin/notifications/broadcast/preview` — **không gửi gì**, chỉ trả số người nhận sau khi gom trùng
+- `POST /api/admin/notifications/broadcast`
+- `GET /api/admin/notifications/batches`, `GET .../batches/{id}`
+
+**Ba luật ở bước nở người nhận** — thiếu cái nào cũng hỏng theo kiểu *im lặng*:
+1. **Gom trùng** — người ở hai nhóm cùng được nhắm chỉ nhận **một** lần.
+2. **Lọc người còn hoạt động** — JOIN read-model tài khoản; chỉ đúng được nhờ bản vá 02/08/2026.
+3. **Tập rỗng trả 400 tường minh**, không tạo lần gửi mồ côi và không "ghi log rồi lặng lẽ trả về".
+
+**Đi chệch kế hoạch có chủ đích:** `IRecipientResolver.GetActiveByRoleAsync` **giữ nguyên** cách đọc
+thẳng read-model, KHÔNG định tuyến qua nhóm `Role` như dự kiến ban đầu. Lý do: đi qua nhóm không làm
+việc định tuyến trở thành dữ liệu (nhóm gắn cứng đúng một role) nên lợi ích là ảo, trong khi cái giá
+có thật — toàn bộ thông báo tự động sẽ phụ thuộc vào 4 dòng seed, thiếu một dòng là im lặng mất
+người nhận. Nhóm `Role` vẫn dùng để admin **chọn** "toàn bộ Quản lý" trên màn hình gửi.
+
+**Đã hoãn có chủ đích:** bỏ `title`/`body`/`payload_json` khỏi `notifications` để đọc qua batch —
+nó bắt `GET /api/notifications` (truy vấn nóng nhất) phải JOIN thêm. Nghĩa là sprint này giải quyết
+bài toán **truy vết và gom nhóm**, chưa giải quyết **trùng lặp dung lượng**.
+
+**Permission mới (4):** `notification.group_view` · `notification.group_manage` ·
+`notification.broadcast` · `notification.batch_view`. Manager chỉ có 2 quyền đọc.
+
+### 2026-08-02 — Đối chiếu doc với codebase (audit)
+
+Rà `NotificationTypeEnum` / `NotificationCategoryMap` / `DefaultTypeChannelMatrix` / routes so với code.
+**Routes, 5 enum còn lại và toàn bộ DTO khớp 100%.** Một sai lệch:
+
+- 🔴 **Thiếu `TicketMerged = 34`** trong bảng enum. Type này **đã wired đầy đủ** (`TicketMergedConsumer` +
+  unit test, producer là `POST /api/admin/tickets/{id}/merge` bên TicketService) nhưng chưa có trong doc.
+  Category `Ticket`; **không** khai báo trong `TypeChannelMatrix` ⇒ rơi vào mặc định **chỉ InApp**.
+- ⚠️ **GH-83:** `TicketMerged` trước đây **trùng giá trị `27`** với `ChatEscalatedToAdmin` ⇒ trùng khoá
+  dictionary nên không khai báo được trong `NotificationCategoryMap` và **biến mất khỏi**
+  `GET /api/notification-preferences/categories`. Đã tách sang `34`. **FE/Mobile mirror `TicketMerged = 27` phải sửa.**
+- Cùng đợt GH-83: `BlogGenerationCompleted (25)` / `BlogGenerationFailed (26)` trước thiếu khai báo trong
+  `NotificationCategoryMap` — runtime không đổi (vẫn fallback `Account`) nhưng không hiện ở `GET /categories`.
+
+### 2026-07-30 — Sprint 6.3: Notification production-hardening (`#701..#717`, 16/17 task)
+
+**Endpoint mới (9):**
+- `PATCH /api/notifications/{id}/opened` — NOTI3-14
+- `GET` / `PUT /api/notification-preferences/matrix`, `GET /api/notification-preferences/categories` — NOTI3-04
+- `GET` / `POST /api/admin/notification-templates`, `.../{id}/preview`, `.../{id}/test-send`, `.../{id}/activate` — NOTI3-12
+- `GET` / `POST /api/notification-unsubscribe` (public, token HMAC) — NOTI3-15
+- SignalR Hub `/hubs/notifications` — NOTI3-13
+
+**Breaking cho FE:**
+- `GET /api/notifications` **mặc định chỉ trả `Channel = InApp`** ⇒ mỗi sự kiện đúng 1 dòng (trước
+  lặp 2–4 lần). Tham số mới `includeAllChannels`. **Gỡ mọi logic de-dup ở client.**
+- `GET /api/notifications/unread-count` **chỉ đếm `InApp`** và loại cả `Opened` ⇒ badge giảm 2–4 lần,
+  nay khớp đúng số dòng feed chưa đọc.
+- `unreadOnly=true` nay loại cả `Status = Opened`.
+- `NotificationStatusEnum` thêm **`Delivered = 5`**, **`Opened = 6`** — FE/Mobile phải mirror.
+- Enum mới `NotificationCategoryEnum` (6 giá trị) + `PushReceiptStatusEnum` (4 giá trị).
+- `NotificationAuditActionEnum` thêm `TemplateTestSent = 8`.
+
+**Hành vi mới:**
+- `PATCH .../read` và `.../opened` **lan trạng thái sang record anh em** cùng sự kiện (±1 phút) ⇒ đọc
+  trong app xong không còn lãnh thêm push cho đúng việc đó.
+- Đối soát receipt Expo (`push_receipts`) ⇒ `Sent` → `Delivered` thật; token chết tự tắt.
+- Fallback push → SMS cho notification critical sau 30' không có receipt.
+- Rate limit 20/giờ/user + 8/giờ/type (critical bypass); vượt trần **hoãn vào digest, không vứt**.
+- Retention 90 ngày (xoá mềm, giữ critical vĩnh viễn, `Pending` không bao giờ bị dọn).
+- Retry 3 lần + DLQ monitor ở tầng bus — **ảnh hưởng cả 8 service**.
+- Dedup chuyển sang `SET NX EX` atomic.
+- Template: seed đủ **32 type × mọi kênh** (trước 5/32), có `version` + rollback.
+  (Bản `en-US` cho 13 type hướng Customer đã bị gỡ ngày 02/08/2026 — hệ thống tiếng Việt only.)
+- **XSS:** bỏ `NoEscape = true` ở `HandlebarsTemplateRenderer`, thay bằng `HtmlOnlyTextEncoder` —
+  escape đúng 5 ký tự HTML, **giữ nguyên tiếng Việt** ở mọi kênh (encoder mặc định của Handlebars.NET
+  mã hoá cả ký tự ngoài ASCII: "Nguyễn" → `Nguy&#7877;n`, đúng cho email HTML nhưng ra chuỗi rác ở
+  push/SMS). Cần HTML thật thì dùng `{{{ba-ngoặc}}}` có kiểm soát.
+- Template file đổi đuôi `.hbs` → `.html` (mở bằng trình duyệt/IDE xem trước được; nội dung vẫn là cú
+  pháp Handlebars).
+- 11 metric Prometheus + dashboard "Notification Ops" + 3 alert rule.
+- `mem_limit` container 384m → **512m** (7 worker thường trú).
+
+**Huỷ:** NOTI3-03 (suppression list email) — đã implement xong rồi gỡ bỏ hoàn toàn, xem
+[Giới hạn đã biết §4](#4-không-có-suppression-list-email-noti3-03-đã-huỷ-30072026).
+
+**Sửa lỗi phát hiện khi test E2E 30/07/2026:**
+- `POST /api/notifications`: gỡ `[JsonIgnore]` khỏi `userId` — trước đó endpoint **luôn** tạo record
+  `UserId = Guid.Empty` rồi bị worker đánh `Failed`, tức vô dụng đúng cho mục đích của chính nó.
+  Kèm validation từ chối `Guid.Empty` ngay ở pipeline.
+- `AdminNotificationTemplatesController` dùng `[Authorize(Roles = "Admin")]` chứ **không** phải
+  `[Authorize(Policy = "AdminOnly")]` — policy đó là code chết, dùng sẽ **500 ở mọi request**.
+- `test-send` lấy email từ claim JWT khi read-model không có (tài khoản admin seed thẳng vào `auth_db`
+  không bao giờ xuất hiện trong `account_read_models`).
+- `MassTransitExtensions`: thêm `cfg.UsePublishMessageScheduler()` — thiếu nó saga TicketService ném
+  `PayloadNotFoundException` mỗi lần hẹn giờ (1662 message kẹt ở `AlertTicketSagaState_error`).
+
+---
+
+### 2026-07-29 — Sprint 6.2: Notification pipeline completion (`#672..#688`, 17 task)
+
+**Vấn đề gốc:** `NotificationDispatcher` là **dead code (0 caller)** → toàn bộ tầng giao nhận
+Push/Email/SMS **không bao giờ gửi** ở runtime; notification chỉ ghi DB `Status = Pending` rồi nằm im,
+user chỉ thấy khi tự poll REST. Cộng nhiều **orphan event** (publish nhưng 0 consumer).
+
+**THÊM:**
+- `NotificationDispatchBackgroundService` (NOTI-01) — **mắt xích còn thiếu**; leader-election, batch,
+  retry backoff, 2 cột DB mới `dispatch_attempt_count` / `next_attempt_at`.
+- `SendNotificationEmailConsumer` ở **EmailService** (NOTI-02) + template `NotificationGeneric.html` —
+  trước đó `SendNotificationEmailEvent` có 0 consumer, RabbitMQ **drop message không log**, email biến mất.
+- `ChatEscalatedToAdminConsumer` (NOTI-03) — saga escalation chat chạy đúng, chỉ thiếu đầu nhận.
+- 2 consumer cảnh báo bảo mật ở **EmailService** (NOTI-04): `SuspiciousLoginDetectedConsumer`,
+  `RefreshTokenReuseDetectedConsumer` + 2 template. `RefreshTokenReuseDetectedEvent` thêm field `Email`.
+- 6 event vòng đời ticket + 6 consumer (NOTI-07): `TicketStatusChangedEvent`, `TicketApprovedEvent`,
+  `TicketRejectedEvent`, `TicketClosedEvent`, `TicketReopenedEvent`, `TicketRatingRequestedEvent`.
+  ⇒ 2 enum chết `TicketStatusChanged(3)` / `TicketClosed(5)` **nay có producer thật**.
+- `BatteryAnomalyWarningDetectedEvent` + `BatteryAnomalyWarningConsumer` (NOTI-08) — event **riêng**,
+  chỉ NotificationService consume nên **không đẻ ticket**; dedup 60' ở publisher.
+- `SmsFailedConsumer` (NOTI-11) — vòng phản hồi, record SMS hết kẹt ở `Sent`.
+- Digest thật sự hoạt động (NOTI-12) + `NotificationDigestBackgroundService`.
+- `INotificationAuditWriter` (NOTI-13) — 7 action audit **nay mới thật sự được ghi**; relay hết poll
+  bảng rỗng vô ích.
+- 2 template email thiếu (NOTI-09): `OtpPasswordReset.html`, `OtpEmailChange.html` — trước đó fallback
+  về `OtpRegister.html` khiến user reset mật khẩu nhận email nội dung "đăng ký tài khoản".
+
+**Enum mới (7)** — *số hiệu đã sửa 2026-07-31, xem cảnh báo ở bảng enum trên:*
+`ChatEscalatedToAdmin = 27`, `TicketApproved = 28`, `TicketRejected = 29`,
+`TicketReopened = 30`, `TicketRatingRequested = 31`, `BatteryAnomalyWarning = 32`,
+`BatteryAnomalyInfo = 33`. (25 và 26 thuộc module Blog `GH-671`, không phải Sprint 6.2.)
+
+**SỬA:**
+- `TicketAssignedEvent` / `TicketResolvedEvent` thêm `CustomerId`; `TicketCreatedEvent` thêm
+  `CustomerId` + `Priority`; `SlaWarningEvent` thêm `StaffId` (NOTI-05) ⇒ **Customer và Staff nay
+  được notify** (trước bị bỏ với comment "deferred").
+- `SlaBreachedConsumer` phân nhánh P1/P2/P3 (NOTI-06).
+- `NotificationBatteryAnomalyDetectedConsumer` mở đủ 4 kênh (NOTI-08).
+- `ChatCreatedConsumer` ghi thêm row `InApp` song song `Push` (NOTI-10).
+- `TypeChannelMatrix` + `CriticalTypes` đưa ra config, bổ sung **14 type còn thiếu**; chốt 1 pattern
+  template: **DB thắng, inline là fallback** (NOTI-14).
+- `ExpoPushChannel` gửi **batch 100 message/request** thay vì 1 HTTP call mỗi token (NOTI-16).
+
+**XOÁ (NOTI-15):** `SendPhoneOtpConsumer` stub ở EmailService + consumer legacy ở SmsService.
 
 ---
 
@@ -569,24 +3435,37 @@ Content-Type: application/json
 
 **Notifications:**
 - Controller: `services/NotificationService/src/NotificationService.Api/Controllers/NotificationsController.cs`
-- Query handler: `services/NotificationService/src/NotificationService.Application/CQRS/Handler/Notification/GetNotificationsQueryHandler.cs`
-- Command handler: `services/NotificationService/src/NotificationService.Application/CQRS/Handler/Notification/CreateNotificationCommandHandler.cs`
-- DTO: `services/NotificationService/src/NotificationService.Application/DTOs/Response/Notification/NotificationDto.cs`
+- Query handlers: `.../Application/CQRS/Handler/Notification/GetNotificationsQueryHandler.cs`, `GetUnreadCountQueryHandler.cs`
+- Command handlers: `.../Handler/Notification/{Create,MarkNotificationRead,MarkNotificationOpened,MarkAllNotificationsRead}CommandHandler.cs`
+- DTO: `.../DTOs/Response/Notification/NotificationDto.cs`
 
-**Device Tokens:**
-- Controller: `services/NotificationService/src/NotificationService.Api/Controllers/DeviceTokensController.cs`
-- Handlers: `services/NotificationService/src/NotificationService.Application/CQRS/Handler/DeviceToken/`
-- DTO: `services/NotificationService/src/NotificationService.Application/DTOs/Response/DeviceToken/DeviceTokenDto.cs`
-- Entity: `services/NotificationService/src/NotificationService.Domain/Entities/DeviceToken.cs`
+**Device Tokens:** `.../Api/Controllers/DeviceTokensController.cs` · `.../Handler/DeviceToken/` ·
+`.../Domain/Entities/DeviceToken.cs`
 
-**Notification Preferences:**
-- Controller: `services/NotificationService/src/NotificationService.Api/Controllers/PreferencesController.cs`
-- Handlers: `services/NotificationService/src/NotificationService.Application/CQRS/Handler/Preference/`
-- DTO: `services/NotificationService/src/NotificationService.Application/DTOs/Response/Preference/NotificationPreferenceDto.cs`
-- Entity: `services/NotificationService/src/NotificationService.Domain/Entities/NotificationPreference.cs`
+**Preferences:** `.../Api/Controllers/PreferencesController.cs` · `.../Handler/Preference/` ·
+`.../DTOs/Response/Preference/NotificationCategoryPreferenceDto.cs` ·
+`.../Domain/Entities/{NotificationPreference,NotificationCategoryPreference}.cs`
+
+**Admin Templates:** `.../Api/Controllers/AdminNotificationTemplatesController.cs` ·
+`.../Infrastructure/Persistence/Seeders/NotificationTemplateCatalog.cs`
+
+**Unsubscribe:** `.../Api/Controllers/NotificationUnsubscribeController.cs` ·
+`.../Application/Services/UnsubscribeTokenService.cs`
+
+**Realtime:** `.../Infrastructure/Realtime/NotificationHub.cs` · `SignalRNotificationNotifier.cs`
+
+**Dispatch:** `.../Infrastructure/Services/NotificationDispatcher.cs` ·
+`.../Infrastructure/BackgroundJobs/` (7 worker) · `.../Application/Services/*Options.cs`
+
+**Channels:** `.../Infrastructure/Channels/{InApp,ExpoPush,EmailBus,SmsBus}Channel.cs`
+
+**Consumers:** `.../Application/Consumers/` (31 class) · `NotificationWriter.cs` · `NotificationDebounce.cs`
 
 **Chung:**
-- Domain enums: `services/NotificationService/src/NotificationService.Domain/Enums/`
-- Pagination wrapper (computed fields `totalPages`/`hasNextPage`/`hasPreviousPage`): `shared/src/SharedContracts/Common/Responses/PaginationResponse.cs`
-- Pagination request (clamp `pageSize` max 100): `shared/src/SharedContracts/Common/Requests/PaginationRequest.cs`
-- Flow event-driven (RabbitMQ Consumer) — xem `overall.md §3.3` và các consumer trong `NotificationService.Application/Consumers/` (`AlertTicketSagaFailedConsumer`, `BatteryAlertEscalationRequestedConsumer`, `IotDeviceWentOfflineConsumer`, `EnvironmentalIncidentDetectedConsumer`, `EnvironmentalIncidentResolvedConsumer`).
+- Domain enums: `.../NotificationService.Domain/Enums/` (gồm `NotificationCategoryMap.cs`)
+- `PaginationResponse` / `PaginationRequest` (clamp `pageSize` ≤ 100): `shared/src/SharedContracts/Common/`
+- Metrics: `shared/src/SharedInfrastructure/Metrics/AppMetrics.cs`
+- Bus retry/DLQ: `shared/src/SharedInfrastructure/Bus/MassTransitExtensions.cs`
+- Spec: `overall.md` §3.3–§3.6 (entity + routing matrix + giới hạn), §17 Sprint 6.2 / Sprint 6.3
+  (§17.6.3.1–§17.6.3.5 gồm decision log 4 fork + lý do huỷ NOTI3-03)
+- Review nguồn: `reviewnotification.md`

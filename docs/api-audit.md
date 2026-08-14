@@ -10,7 +10,7 @@
 
 `AuditAggregatorService` là **read-store hợp nhất (materialized view)** gom audit event của TOÀN hệ thống (Auth/Battery/Ticket/File/Notification/Sms…) về 1 nơi (`audit_aggregate`), phục vụ **điều tra forensic, truy vết bảo mật, compliance, GDPR**. Service consume `AuditCreatedEventV1` từ RabbitMQ và expose REST API tra cứu chỉ cho **Admin**.
 
-> **KHÔNG phải nguồn chân lý** — bản gốc nằm ở bảng append-only `{service}_audit_logs` của từng service; read-store có thể replay lại.
+> **KHÔNG phải nguồn chân lý** — bản gốc nằm ở bảng append-only của từng service; read-store replay lại được từ `{service}_audit_outbox` (xem `POST /api/admin/audit/replay`).
 
 ---
 
@@ -94,6 +94,45 @@
 ### `ActionCode` (mã hành động)
 
 String PascalCase thì quá khứ (vd `LoginSucceeded`, `BatteryUpdated`, `StateTransitioned`). Danh sách đầy đủ theo từng service: xem [docs/audit/action-code-registry.md](audit/action-code-registry.md).
+
+> **Cập nhật Sprint 6.2/6.3 — nguồn `NotificationService`:**
+>
+> - **Sprint 6.2 NOTI-13 (#684):** 7 action của NotificationService (`PushSent`, `PushFailed`,
+>   `PushDelivered`, `PushOpened`, `InAppCreated`, `InAppRead`, `InAppDismissed`) **nay mới thật sự
+>   được ghi**. Trước đó bảng `notification_audit_logs` + outbox + relay đã có sẵn nhưng **không dòng
+>   code nào tạo record** ⇒ Audit Explorer lọc `service=NotificationService` luôn trả **rỗng**.
+>   Từ sprint này, dữ liệu bắt đầu chảy về Aggregator — FE nên kỳ vọng thấy nhóm event mới.
+> - **Sprint 6.3 NOTI3-12 (#712):** thêm action **`TemplateTestSent`** (category `Communication`,
+>   severity **`Warning`**) — ghi mỗi lần Admin bấm "gửi thử" một template email.
+>   `metadataJson` gồm `templateId`, `type`, `locale`, `version`, `quotaUsed`, `recipientSource`.
+>
+> Đặc thù khi lọc/hiển thị các event nguồn NotificationService:
+> `targetType` luôn là `Notification`, `targetId` = id record notification; `actorAccountId` là
+> **người NHẬN** notification (do hệ thống phát, không có người thao tác) chứ không phải người gây ra
+> hành động — đừng hiển thị nhãn "người thực hiện" cho nhóm này. `actorRole` và `actorDisplay` luôn `null`.
+> Kênh **Email/Sms không sinh audit** (nằm ngoài 7 action của `#AUDIT-34`).
+
+> **Cập nhật Sprint Chat DoD (2026-07-31) — nguồn `TicketService` thêm 7 action:**
+>
+> `ChatCreated` · `ChatEdited` · `ChatDeleted` · `ChatPinned` · `ChatUnpinned` · `ChatReacted` ·
+> `ChatMentioned` (giá trị enum 22–28). Trước đó module Chat **không ghi audit nào** — mọi thao tác
+> trên kênh trao đổi Customer ↔ Staff/Manager đều không có vết forensic, trong khi đây là nơi dễ
+> phát sinh tranh chấp nội dung nhất. `TicketService` nay có **28** action code.
+>
+> Cả 7 đều `severity = Info`, `category = DataModification`. Đặc thù khi hiển thị:
+>
+> - **`targetId` là ID TICKET, KHÔNG phải ID tin nhắn** (`targetDisplay` = mã ticket). ID tin nhắn
+>   nằm trong `metadataJson.chatId`. Đừng render `targetId` với nhãn "tin nhắn".
+> - **`metadataJson`** — `ChatCreated`: `chatId`, `isInternal`; `ChatReacted`: `chatId`,
+>   `reactionType`; `ChatMentioned`: `chatId`, `mentionedUserIds[]`; bốn action còn lại chỉ có `chatId`.
+> - **Một lần gửi tin có tag người sinh 2 bản ghi** (`ChatCreated` + `ChatMentioned`) cùng
+>   `correlationId`. Nếu FE đếm "số tin nhắn" theo số bản ghi audit sẽ ra số lớn hơn thực tế —
+>   phải đếm riêng `ChatCreated`.
+>
+> ⚠️ **4 action code của TicketService đã khai báo nhưng CHƯA CÓ handler nào ghi** (rà mã nguồn
+> 2026-08-01): `AttachmentUploaded` · `AttachmentDeleted` · `ClosedByUser` · `FalseAlarmMarked`.
+> Thực tế chỉ **24/28** mã xuất hiện trong dữ liệu; lọc theo 4 mã đó luôn trả `200` + rỗng.
+> Dựng dropdown chọn action thì nên ẩn hoặc gắn nhãn "chưa có dữ liệu".
 
 ### `groupBy` (param của `/stats`)
 
@@ -364,7 +403,24 @@ String PascalCase thì quá khứ (vd `LoginSucceeded`, `BatteryUpdated`, `State
 
 **Request body:** Không có.
 
-**Response thành công `202 Accepted`:** `CommonResponse<object>` — `data = null`, `message` xác nhận đã nhận yêu cầu (re-ingestion chạy nền, ghi meta-audit `AuditReplayed`).
+**Response thành công `202 Accepted`:** `CommonResponse<object>` — `data` chứa `jobId`, `service`, `from`, `to`, `expectedResponders`, `status`.
+`202` chỉ được trả **sau khi job đã ghi vào DB**; nếu ghi hỏng sẽ trả lỗi chứ không trả 202.
+
+**Response `400`:** tham số sai — `service` không thuộc 6 service có audit, `from > to`, hoặc `from` ở tương lai. Khi đó **không** tạo job.
+
+### `GET /api/admin/audit/replay/{jobId}`
+
+**Mục đích:** xem tiến độ job replay.
+
+| Trường | Ý nghĩa |
+|---|---|
+| `status` | `Requested` / `InProgress` / `Completed` / `CompletedWithErrors` |
+| `respondedServices` / `pendingServices` | Đã / chưa phản hồi — dùng khi job treo |
+| `republishedCount` | Tổng bản ghi audit đã phát lại |
+| `truncated` | `true` ⇒ **dữ liệu chưa đầy đủ** (chạm trần 50.000/lần hoặc payload hỏng) |
+| `error` | Lỗi gộp từ các service báo thất bại |
+
+**`404`** nếu không có job.
 
 > **Phạm vi capstone:** endpoint ghi nhận yêu cầu; re-publish per-service hoàn thiện khi onboard từng service.
 

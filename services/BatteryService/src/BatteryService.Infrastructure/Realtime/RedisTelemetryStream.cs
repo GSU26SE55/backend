@@ -34,17 +34,52 @@ public class RedisTelemetryStream : ITelemetryStream
         string.IsNullOrEmpty(sensorSourceCode) ||
         string.Equals(sensorSourceCode, "primary", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Tách "&lt;streamId&gt; &lt;json&gt;" mà publisher gắn vào kênh asset.</summary>
+    /// <remarks>
+    /// Dung thứ payload KHÔNG có tiền tố (instance cũ publish trong lúc rolling deploy, hoặc replay
+    /// bị tắt): khi đó coi cả chuỗi là JSON và id = null. Id của Redis Stream luôn dạng
+    /// <c>&lt;số&gt;-&lt;số&gt;</c> nên không thể nhầm với JSON (bắt đầu bằng '{').
+    /// </remarks>
+    internal static (string? Id, string Json) SplitReplayEnvelope(string raw)
+    {
+        var sp = raw.IndexOf(' ');
+        if (sp <= 0)
+            return (null, raw);
+
+        var head = raw.AsSpan(0, sp);
+        var dash = head.IndexOf('-');
+        if (dash <= 0)
+            return (null, raw);
+
+        foreach (var c in head)
+            if (!char.IsAsciiDigit(c) && c != '-')
+                return (null, raw);
+
+        return (head.ToString(), raw[(sp + 1)..]);
+    }
+
     public async IAsyncEnumerable<SseMessage> SubscribeAsync(
         TelemetryScope scope,
+        string? lastEventId,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var scopeLabel = scope.Label;   // nhãn chuẩn khớp keyword (asset/customer/site/type/all/site:none)
         var isAsset = scope.IsSingleAsset;
         var output = Channel.CreateUnbounded<SseMessage>(new UnboundedChannelOptions { SingleReader = true });
         var latest = new ConcurrentDictionary<Guid, LiveReadingDto>();
+        // Id đã phát bù — dùng để loại bản live trùng (một sự kiện có thể vừa nằm trong XRANGE vừa
+        // được pub/sub giao tới, vì ta subscribe TRƯỚC khi đọc lịch sử).
+        var replayed = new HashSet<string>();
 
         var sub = _redis.GetSubscriber();
         var channels = RedisTelemetryChannels.ChannelsFor(scope)
+            .Select(RedisChannel.Literal)
+            .ToList();
+
+        // Sprint Bonus NS-04 (#649) — kênh stats riêng, handler riêng (forward thẳng, KHÔNG parse
+        // LiveReadingDto / coalesce). Đẩy trên MỌI scope (kể cả multi-asset): mỗi message stats là
+        // cho 1 pin, FE phân biệt theo batteryAssetId + window.
+        var statsChannels = RedisTelemetryChannels.StatsChannelsFor(scope)
             .Select(RedisChannel.Literal)
             .ToList();
 
@@ -52,16 +87,22 @@ public class RedisTelemetryStream : ITelemetryStream
         {
             if (!val.HasValue)
                 return;
+            var (eventId, json) = SplitReplayEnvelope(val.ToString());
+
             LiveReadingDto? dto;
             try
-            { dto = JsonSerializer.Deserialize<LiveReadingDto>(val!, RedisTelemetryPublisher.JsonOptions); }
+            { dto = JsonSerializer.Deserialize<LiveReadingDto>(json, RedisTelemetryPublisher.JsonOptions); }
             catch { return; }
             if (dto is null)
                 return;
 
             if (isAsset)
             {
-                output.Writer.TryWrite(new SseMessage("reading", val.ToString()));
+                // Chống phát trùng: sự kiện vừa được phát bù ở bước replay thì bỏ qua bản live.
+                if (eventId is not null && replayed.Contains(eventId))
+                    return;
+
+                output.Writer.TryWrite(new SseMessage("reading", json, eventId));
                 RealtimeMetrics.EventsPushed.WithLabels(scopeLabel, "reading").Inc();
             }
             else
@@ -77,14 +118,45 @@ public class RedisTelemetryStream : ITelemetryStream
             }
         }
 
+        void StatsHandler(RedisChannel _, RedisValue val)
+        {
+            if (!val.HasValue)
+                return;
+            output.Writer.TryWrite(new SseMessage("stats", val.ToString()));
+            RealtimeMetrics.EventsPushed.WithLabels(scopeLabel, "stats").Inc();
+        }
+
         foreach (var ch in channels)
             await sub.SubscribeAsync(ch, Handler);
+        foreach (var ch in statsChannels)
+            await sub.SubscribeAsync(ch, StatsHandler);
         RealtimeMetrics.ActiveConnections.WithLabels(scopeLabel).Inc();
+
+        // ─── Phát bù (#614) ───
+        // THỨ TỰ QUAN TRỌNG: subscribe pub/sub xong mới đọc lịch sử. Nếu đọc trước rồi mới subscribe
+        // thì sự kiện rơi vào khe giữa 2 bước sẽ mất hẳn. Làm ngược lại chỉ sinh trùng — và trùng thì
+        // lọc được bằng `replayed`.
+        var backlog = new List<SseMessage>();
+        if (isAsset && !string.IsNullOrWhiteSpace(lastEventId))
+        {
+            foreach (var m in await ReadBacklogAsync(scope.Ids[0], lastEventId!))
+            {
+                if (m.Id is not null)
+                    replayed.Add(m.Id);
+                backlog.Add(m);
+            }
+        }
 
         var pump = Task.Run(() => PumpAsync(scopeLabel, isAsset, latest, output.Writer, cancellationToken), cancellationToken);
 
         try
         {
+            foreach (var msg in backlog)
+            {
+                RealtimeMetrics.EventsPushed.WithLabels(scopeLabel, "reading").Inc();
+                yield return msg;
+            }
+
             await foreach (var msg in output.Reader.ReadAllAsync(cancellationToken))
                 yield return msg;
         }
@@ -92,11 +164,55 @@ public class RedisTelemetryStream : ITelemetryStream
         {
             foreach (var ch in channels)
                 await sub.UnsubscribeAsync(ch, Handler);
+            foreach (var ch in statsChannels)
+                await sub.UnsubscribeAsync(ch, StatsHandler);
             RealtimeMetrics.ActiveConnections.WithLabels(scopeLabel).Dec();
             output.Writer.TryComplete();
             try
             { await pump; }
             catch { /* shutdown */ }
+        }
+    }
+
+    /// <summary>
+    /// Đọc các reading SAU <paramref name="lastEventId"/> từ stream replay của pin.
+    ///
+    /// <para><c>StreamRangeAsync</c> của Redis là <b>bao gồm cả 2 đầu</b>, nên truyền thẳng
+    /// <paramref name="lastEventId"/> sẽ phát lại chính sự kiện client ĐÃ nhận. Redis 6.2+ hỗ trợ
+    /// tiền tố <c>(</c> để loại trừ, nhưng để không phụ thuộc phiên bản, ta đọc bao gồm rồi tự bỏ
+    /// phần tử đầu nếu trùng id.</para>
+    ///
+    /// <para>Lỗi Redis ở đây KHÔNG được làm hỏng kết nối: mất phát bù còn hơn mất luôn luồng
+    /// realtime — client vẫn nhận được số liệu mới.</para>
+    /// </summary>
+    private async Task<IReadOnlyList<SseMessage>> ReadBacklogAsync(Guid assetId, string lastEventId)
+    {
+        try
+        {
+            var db = _redis.GetDatabase();
+            var entries = await db.StreamRangeAsync(
+                RedisTelemetryChannels.AssetReplay(assetId),
+                minId: lastEventId,
+                maxId: "+",
+                count: Math.Max(1, _options.ReplayMaxEvents));
+
+            var result = new List<SseMessage>(entries.Length);
+            foreach (var e in entries)
+            {
+                var id = e.Id.ToString();
+                if (id == lastEventId)
+                    continue;   // client đã nhận rồi
+
+                var payload = e.Values
+                    .FirstOrDefault(v => v.Name == RedisTelemetryPublisher.ReplayPayloadField).Value;
+                if (payload.HasValue)
+                    result.Add(new SseMessage("reading", payload.ToString(), id));
+            }
+            return result;
+        }
+        catch
+        {
+            return Array.Empty<SseMessage>();
         }
     }
 

@@ -2,8 +2,10 @@ using BatteryService.Application.CQRS.Command.IotDevice;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.CQRS.Handler.IotDevice;
 using BatteryService.Application.CQRS.Handler.SensorReading;
+using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
+using BatteryService.Infrastructure.Implements.Services;
 using BatteryService.UnitTests.Helpers;
 
 namespace BatteryService.UnitTests.Application;
@@ -30,7 +32,7 @@ public class IotDeviceLifecycleHandlerTests
         var deviceId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(ActiveDevice(deviceId, Guid.NewGuid()));
-        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled(), new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new ProvisionIotDeviceCommand
         {
@@ -46,12 +48,46 @@ public class IotDeviceLifecycleHandlerTests
     }
 
     [Fact]
+    public async Task Provision_MapsSiteBatteriesToStableModbusUnitIds()
+    {
+        var deviceId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var otherSiteId = Guid.NewGuid();
+        var uow = new MockUnitOfWorkBuilder()
+            .WithIotDevices(ActiveDevice(deviceId, siteId))
+            .WithBatteryAssets(
+                new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "BAT-002", SiteId = siteId },
+                new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "BAT-001", SiteId = siteId },
+                new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "BAT-OTHER", SiteId = otherSiteId },
+                new BatteryAsset { Id = Guid.NewGuid(), SerialNumber = "BAT-DELETED", SiteId = siteId, IsDeleted = true });
+        var handler = new ProvisionIotDeviceCommandHandler(
+            uow.Build(), TestMqttBrokerEndpointProvider.Enabled(),
+            new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
+
+        var result = await handler.Handle(new ProvisionIotDeviceCommand
+        {
+            DeviceId = deviceId,
+            DeviceCode = "ESP32-LF",
+            FirmwareVersion = "1.0.0",
+            DeviceTimestamp = DateTime.UtcNow
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.BatteryMappings.Should().BeEquivalentTo(
+            new[]
+            {
+                new { BatteryAssetSerial = "BAT-001", UnitId = (int?)1, SensorSourceCode = "primary" },
+                new { BatteryAssetSerial = "BAT-002", UnitId = (int?)2, SensorSourceCode = "primary" }
+            }, options => options.WithStrictOrdering());
+    }
+
+    [Fact]
     public async Task Provision_Fails_WhenClockSkewExceedsThreshold()
     {
         var deviceId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithIotDevices(ActiveDevice(deviceId, Guid.NewGuid()));
-        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled(), new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new ProvisionIotDeviceCommand
         {
@@ -66,11 +102,36 @@ public class IotDeviceLifecycleHandlerTests
     }
 
     [Fact]
-    public async Task Heartbeat_InsertsHistoryRowAndUpdatesLastSeen()
+    public async Task RotateKey_ReplacesStoredPlaintext_AndGetByIdReturnsNewKey()
     {
         var deviceId = Guid.NewGuid();
         var device = ActiveDevice(deviceId, Guid.NewGuid());
-        device.Status = IotDeviceStatusEnum.Offline; // sẽ flip lên Active
+        device.ApiKeyPlaintext = "iotk_old-key-abcd"; // key cũ đã lưu
+        var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
+        var rotateHandler = new RotateIotDeviceApiKeyCommandHandler(uow.Build(), new IotApiKeyService(uow.Build()), TestMqttBrokerEndpointProvider.Enabled(), NoopMqttPasswordFileSync.Instance());
+
+        var rotated = await rotateHandler.Handle(new RotateIotDeviceApiKeyCommand { Id = deviceId }, default);
+
+        rotated.IsSuccess.Should().BeTrue();
+        var newRawKey = rotated.Data!.RawApiKey;
+        newRawKey.Should().StartWith("iotk_").And.NotBe("iotk_old-key-abcd");
+
+        // GET by id phải trả key MỚI (đã replace), không phải key cũ.
+        var getById = new GetIotDeviceByIdQueryHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled());
+        var detail = await getById.Handle(new GetIotDeviceByIdQuery { Id = deviceId }, default);
+
+        detail.Data!.ApiKey.Should().Be(newRawKey);
+        detail.Data.ApiKey.Should().NotBe("iotk_old-key-abcd");
+    }
+
+    [Fact]
+    public async Task Heartbeat_RequiresTwoConsecutiveSignalsBeforeOfflineDeviceRecovers()
+    {
+        var deviceId = Guid.NewGuid();
+        var device = ActiveDevice(deviceId, Guid.NewGuid());
+        device.Status = IotDeviceStatusEnum.Offline;
+        device.LastSeenAt = DateTime.UtcNow.AddMinutes(-10);
+        device.LastOfflineAt = DateTime.UtcNow.AddMinutes(-5);
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
         var handler = new IotDeviceHeartbeatCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder());
 
@@ -89,7 +150,25 @@ public class IotDeviceLifecycleHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Data!.NextHeartbeatInSeconds.Should().Be(60);
         result.Data.ClockSkewWarning.Should().BeFalse();
-        uow.IotDeviceHeartbeats.Verify(r => r.AddAsync(It.IsAny<IotDeviceHeartbeat>()), Times.Once);
+        device.Status.Should().Be(IotDeviceStatusEnum.Offline,
+            "one isolated heartbeat must not revive a flapping device");
+
+        var second = await handler.Handle(new IotDeviceHeartbeatCommand
+        {
+            DeviceId = deviceId,
+            DeviceCode = "ESP32-LF",
+            FirmwareVersion = "1.0.0",
+            DeviceTimestamp = DateTime.UtcNow,
+            RssiDbm = -54,
+            FreeMemoryPercent = 66m,
+            UptimeSeconds = 3660,
+            QueuedReadingCount = 0
+        }, default);
+
+        second.IsSuccess.Should().BeTrue();
+        device.Status.Should().Be(IotDeviceStatusEnum.Active,
+            "the second healthy signal inside the expected cadence confirms recovery");
+        uow.IotDeviceHeartbeats.Verify(r => r.AddAsync(It.IsAny<IotDeviceHeartbeat>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -98,7 +177,7 @@ public class IotDeviceLifecycleHandlerTests
         var assetId = Guid.NewGuid();
         var uow = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-1", IsDeleted = false });
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), new BatteryService.UnitTests.Helpers.NoopTelemetryStatsService(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var result = await handler.Handle(new BatchIngestSensorReadingsCommand
         {
@@ -135,7 +214,7 @@ public class IotDeviceLifecycleHandlerTests
                 Unit = "V",
                 CalibratedAt = DateTime.UtcNow.AddDays(-1)
             });
-        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
+        var handler = new BatchIngestSensorReadingsCommandHandler(uow.Build(), new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(), new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(), new BatteryService.UnitTests.Helpers.NoopTelemetryStatsService(), Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
 
         var captured = new List<SensorReading>();
         uow.SensorReadings.Setup(r => r.AddAsync(It.IsAny<SensorReading>()))

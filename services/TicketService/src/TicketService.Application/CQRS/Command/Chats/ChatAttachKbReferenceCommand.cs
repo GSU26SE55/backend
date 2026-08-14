@@ -33,16 +33,16 @@ public class ChatAttachKbReferenceCommand : IRequest<CommonResponse<object>>, IV
         var response = new CommonResponse<object>();
 
         if (KbArticleId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "KbArticleId", Detail = "KbArticleId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "KbArticleId", Detail = "Invalid KbArticleId." });
 
         if (!Enum.IsDefined(typeof(KbReferenceTypeEnum), ReferenceType))
-            response.ListErrors.Add(new Errors { Field = "ReferenceType", Detail = "Loại tham chiếu không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ReferenceType", Detail = "Invalid reference type." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

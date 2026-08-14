@@ -14,17 +14,20 @@ public class ChatSummarizeCommandHandler : IRequestHandler<ChatSummarizeCommand,
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IChatTextAiClient _aiClient;
+    private readonly IPiiDetector _piiDetector;
     private readonly ChatOptions _opts;
     private readonly ILogger<ChatSummarizeCommandHandler> _logger;
 
     public ChatSummarizeCommandHandler(
         ITicketUnitOfWork uow,
         IChatTextAiClient aiClient,
+        IPiiDetector piiDetector,
         IOptions<ChatOptions> opts,
         ILogger<ChatSummarizeCommandHandler> logger)
     {
         _uow = uow;
         _aiClient = aiClient;
+        _piiDetector = piiDetector;
         _opts = opts.Value;
         _logger = logger;
     }
@@ -49,18 +52,20 @@ public class ChatSummarizeCommandHandler : IRequestHandler<ChatSummarizeCommand,
         if (chats.Count == 0)
             return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 200, Message = "No chats to summarize" };
 
-        var context = string.Join("\n", chats.Select(c =>
-            $"[{c.CreatedAt:HH:mm}] [{c.AuthorRole}] {c.AuthorDisplayName}: {c.Body}"));
+        var rawContext = string.Join("\n", chats.Select(c =>
+            $"[{c.CreatedAt:HH:mm}] [{c.AuthorRole}]: {c.Body}"));
+
+        var (maskedContext, _) = await _piiDetector.MaskAsync(rawContext, ct);
 
         string summary;
         try
         {
-            summary = await _aiClient.SummarizeAsync(context, _opts.Ai.SummarizeLinesCount, ct);
+            summary = await _aiClient.SummarizeAsync(maskedContext, _opts.Ai.SummarizeLinesCount, ct);
         }
         catch (InvalidOperationException ex) when (ex.Message == "RATE_LIMITED")
         {
             _logger.LogWarning("[ChatSummarize] AI rate limit hit for ticket {TicketId}", request.TicketId);
-            return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 429, Message = "AI service đang bận, vui lòng thử lại sau ít giây." };
+            return new ChatSummarizeResponse { IsSuccess = false, StatusCode = 429, Message = "AI service is busy, please try again in a few seconds." };
         }
         catch (Exception ex)
         {

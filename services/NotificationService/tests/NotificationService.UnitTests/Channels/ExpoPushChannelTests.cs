@@ -36,7 +36,7 @@ public class ExpoPushChannelTests
         new(HttpStatusCode.OK)
         {
             Content = new StringContent(
-                JsonSerializer.Serialize(new { data = new { status = "ok", id = "ticket-123" } }),
+                JsonSerializer.Serialize(new { data = new[] { new { status = "ok", id = "ticket-123" } } }),
                 Encoding.UTF8, "application/json")
         };
 
@@ -46,11 +46,14 @@ public class ExpoPushChannelTests
             Content = new StringContent(
                 JsonSerializer.Serialize(new
                 {
-                    data = new
+                    data = new[]
                     {
-                        status = "error",
-                        message = "\"ExponentPushToken[abc123]\" is not a registered push notification recipient",
-                        details = new { error = "DeviceNotRegistered" }
+                        new
+                        {
+                            status = "error",
+                            message = "\"ExponentPushToken[abc123]\" is not a registered push notification recipient",
+                            details = new { error = "DeviceNotRegistered" }
+                        }
                     }
                 }),
                 Encoding.UTF8, "application/json")
@@ -87,9 +90,87 @@ public class ExpoPushChannelTests
 
         captured.Should().NotBeNull();
         using var doc = JsonDocument.Parse(captured!);
-        doc.RootElement.GetProperty("to").GetString().Should().Be(ExpoToken);
-        doc.RootElement.GetProperty("priority").GetString().Should().Be("high");
-        doc.RootElement.GetProperty("channelId").GetString().Should().Be("alerts-critical");
+
+        // Sprint 6.2 NOTI-16 (#687) — payload nay là MẢNG message (Expo batch API, tối đa 100/call).
+        doc.RootElement.ValueKind.Should().Be(JsonValueKind.Array);
+        doc.RootElement.GetArrayLength().Should().Be(1);
+
+        var message = doc.RootElement[0];
+        message.GetProperty("to").GetString().Should().Be(ExpoToken);
+        message.GetProperty("priority").GetString().Should().Be("high");
+        message.GetProperty("channelId").GetString().Should().Be("alerts-critical");
+    }
+
+    /// <summary>
+    /// 03/08/2026 — push phải mang theo cặp <c>entityType</c>/<c>entityId</c>.
+    ///
+    /// <para><b>Vì sao:</b> trước đó <c>data</c> chỉ có <c>notificationId</c> cộng các khoá payload,
+    /// nên client phải <i>đoán</i> mở màn nào. Mobile đoán bằng <c>ticketId</c> ⇒ thông báo về pin
+    /// (1.228/1.285 dòng = 95,6%) bấm vào không đi đâu cả, còn danh sách trong app lại dùng
+    /// <c>entityType</c> — cùng một thông báo mà hai đường mở hai màn khác nhau.</para>
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_GuiKemEntityTypeVaEntityId_DeClientMoDungManHinh()
+    {
+        string? captured = null;
+        var handler = new MockHttpMessageHandler(ExpoSuccess(), req =>
+        {
+            captured = req.Content!.ReadAsStringAsync().Result;
+        });
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://exp.host") };
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient("expo")).Returns(client);
+
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var channel = new ExpoPushChannel(factory.Object, uow.Object, NullLogger<ExpoPushChannel>.Instance);
+
+        var batteryId = Guid.NewGuid();
+        var request = MakeRequest();
+        request.EntityType = "Battery";
+        request.EntityId = batteryId;
+
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(captured!);
+        var data = doc.RootElement[0].GetProperty("data");
+
+        data.GetProperty("entityType").GetString().Should().Be("Battery");
+        data.GetProperty("entityId").GetString().Should().Be(batteryId.ToString());
+    }
+
+    /// <summary>
+    /// Payload do consumer viết KHÔNG được ghi đè cặp định tuyến — nếu ghi đè được thì một consumer
+    /// vô tình đặt khoá trùng tên sẽ đẩy người dùng sang màn hình sai.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_PayloadKhongGhiDeDuocEntityType()
+    {
+        string? captured = null;
+        var handler = new MockHttpMessageHandler(ExpoSuccess(), req =>
+        {
+            captured = req.Content!.ReadAsStringAsync().Result;
+        });
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://exp.host") };
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient("expo")).Returns(client);
+
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var channel = new ExpoPushChannel(factory.Object, uow.Object, NullLogger<ExpoPushChannel>.Instance);
+
+        var request = MakeRequest();
+        request.EntityType = "Battery";
+        request.EntityId = Guid.NewGuid();
+        request.PayloadJson = """{"entityType":"Ticket","screen":"TicketDetail"}""";
+
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(captured!);
+        var data = doc.RootElement[0].GetProperty("data");
+
+        data.GetProperty("entityType").GetString().Should().Be("Battery",
+            "cặp định tuyến lấy từ bản ghi notification, không phải từ payload consumer tự viết");
+        data.GetProperty("screen").GetString().Should().Be("TicketDetail",
+            "các khoá payload khác vẫn được gửi kèm như thường");
     }
 
     [Fact]
@@ -113,6 +194,31 @@ public class ExpoPushChannelTests
         result.ErrorMessage.Should().Be("DeviceNotRegistered");
         deviceToken.IsActive.Should().BeFalse();
         deviceTokenRepo.Verify(r => r.UpdateAsync(deviceToken), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendAsync_ChatNotification_UsesConversationChannel()
+    {
+        string? captured = null;
+        var handler = new MockHttpMessageHandler(ExpoSuccess(), request =>
+        {
+            captured = request.Content!.ReadAsStringAsync().Result;
+        });
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://exp.host") };
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient("expo")).Returns(client);
+
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var channel = new ExpoPushChannel(factory.Object, uow.Object, NullLogger<ExpoPushChannel>.Instance);
+        var request = MakeRequest();
+        request.Type = NotificationTypeEnum.ChatCreated;
+
+        await channel.SendAsync(request);
+
+        using var doc = JsonDocument.Parse(captured!);
+        doc.RootElement[0].GetProperty("channelId").GetString().Should().Be("chat-messages");
+        doc.RootElement[0].GetProperty("data").GetProperty("notificationType").GetInt32()
+            .Should().Be((int)NotificationTypeEnum.ChatCreated);
     }
 
     [Theory]
@@ -145,6 +251,93 @@ public class ExpoPushChannelTests
 
         result.Success.Should().BeFalse();
     }
+
+    /// <summary>
+    /// Sprint 6.2 NOTI-16 (#687) — nhiều device token của cùng 1 user gộp vào 1 HTTP call.
+    /// Trước đây mỗi token là 1 request riêng.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_MultipleTokens_SendsSingleBatchedRequest()
+    {
+        var requestCount = 0;
+        string? captured = null;
+        var handler = new MockHttpMessageHandler(ExpoSuccessBatch(3), req =>
+        {
+            requestCount++;
+            captured = req.Content!.ReadAsStringAsync().Result;
+        });
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://exp.host") };
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient("expo")).Returns(client);
+
+        var (uow, _, _) = MockNotificationUnitOfWork.Build();
+        var channel = new ExpoPushChannel(factory.Object, uow.Object, NullLogger<ExpoPushChannel>.Instance);
+
+        var request = MakeRequest();
+        request.ExpoTokens = ["ExponentPushToken[a]", "ExponentPushToken[b]", "ExponentPushToken[c]"];
+
+        var result = await channel.SendAsync(request);
+
+        result.Success.Should().BeTrue();
+        requestCount.Should().Be(1, "3 token phải gộp vào đúng 1 request");
+
+        using var doc = JsonDocument.Parse(captured!);
+        doc.RootElement.GetArrayLength().Should().Be(3);
+    }
+
+    /// <summary>Một token hỏng không được kéo cả batch xuống thất bại.</summary>
+    [Fact]
+    public async Task SendAsync_PartialFailure_ReturnsSuccess_AndDeactivatesOnlyBadToken()
+    {
+        var goodToken = "ExponentPushToken[good]";
+        var badToken = "ExponentPushToken[bad]";
+
+        var bad = new DeviceTokenEntity
+        {
+            Id = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            Token = badToken,
+            IsActive = true
+        };
+
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    data = new object[]
+                    {
+                        new { status = "ok", id = "t-1" },
+                        new { status = "error", details = new { error = "DeviceNotRegistered" } }
+                    }
+                }),
+                Encoding.UTF8, "application/json")
+        };
+
+        var factory = BuildFactory(response);
+        var (uow, deviceTokenRepo, _) = MockNotificationUnitOfWork.Build(deviceTokenSeed: [bad]);
+        var channel = new ExpoPushChannel(factory, uow.Object, NullLogger<ExpoPushChannel>.Instance);
+
+        var request = MakeRequest();
+        request.ExpoTokens = [goodToken, badToken];
+
+        var result = await channel.SendAsync(request);
+
+        result.Success.Should().BeTrue("vẫn có thiết bị nhận được thông báo");
+        bad.IsActive.Should().BeFalse();
+        deviceTokenRepo.Verify(r => r.UpdateAsync(bad), Times.Once);
+    }
+
+    private static HttpResponseMessage ExpoSuccessBatch(int count) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    data = Enumerable.Range(0, count).Select(i => new { status = "ok", id = $"ticket-{i}" }).ToArray()
+                }),
+                Encoding.UTF8, "application/json")
+        };
 
     [Fact]
     public void ChannelType_IsPush()

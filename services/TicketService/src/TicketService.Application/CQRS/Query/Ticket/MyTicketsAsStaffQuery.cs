@@ -12,4 +12,17 @@ public class MyTicketsAsStaffQuery : PaginationRequest, IRequest<CommonResponse<
     /// Trạng thái.
     /// </summary>
     public TicketStatusEnum? Status { get; set; }
+
+    /// <summary>
+    /// true = chỉ lấy ticket đang trong vòng theo dõi SLA
+    /// (status = InProgress và có SLA timer)
+    /// — phục vụ bảng SLA Monitor không bị cap theo pageSize.
+    /// </summary>
+    public bool? SlaOpen { get; set; }
+
+    /// <summary>
+    /// "slaRemaining" = sort theo hạn SLA (DueAt) tăng dần — ticket gần breach lên đầu.
+    /// Mặc định (null/khác): Priority tăng dần rồi CreatedAt giảm dần.
+    /// </summary>
+    public string? SortBy { get; set; }
 }

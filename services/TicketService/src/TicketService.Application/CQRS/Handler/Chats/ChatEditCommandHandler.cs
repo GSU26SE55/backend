@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
@@ -31,7 +33,10 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly IChatCacheService _chatCache;
+    private readonly ICacheService _cache;
     private readonly ILogger<ChatEditCommandHandler> _logger;
+
+    private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.edit
 
     public ChatEditCommandHandler(
         ITicketUnitOfWork uow,
@@ -44,8 +49,11 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         IIntegrationEventOutboxWriter outboxWriter,
         ITicketChatRealtimeNotifier realtimeNotifier,
         IChatCacheService chatCache,
-        ILogger<ChatEditCommandHandler> logger)
+        ICacheService cache,
+        ILogger<ChatEditCommandHandler> logger,
+        IPublisher publisher)
     {
+        _publisher = publisher;
         _uow = uow;
         _activityLogger = activityLogger;
         _markdownRenderer = markdownRenderer;
@@ -56,6 +64,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         _outboxWriter = outboxWriter;
         _realtimeNotifier = realtimeNotifier;
         _chatCache = chatCache;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -63,14 +72,14 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
     {
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var blockReason = ChatClosedStateHelper.GetBlockReason(
             ticket.Status, request.UserRole, ChatClosedStateHelper.ChatAction.Edit, _chatOptions.BlockEditOnClosed);
@@ -81,32 +90,19 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             chat,
             request.UserId,
             request.UserPermissions,
-            !string.IsNullOrWhiteSpace(request.EditReason),
             _chatOptions.EditWindowMinutes);
 
         if (authResult == ChatAuthorizationResult.EditWindowExpired)
-            return Fail(403, $"Đã quá thời gian cho phép chỉnh sửa ({_chatOptions.EditWindowMinutes} phút).");
-
-        if (authResult == ChatAuthorizationResult.ReasonRequired)
-        {
-            var response = new TicketActionResponse
-            {
-                IsSuccess = false,
-                StatusCode = 400,
-                Message = "Dữ liệu đầu vào không hợp lệ."
-            };
-            response.ListErrors.Add(new Errors { Field = "EditReason", Detail = "Bắt buộc nhập lý do khi sửa bình luận của người khác." });
-            return response;
-        }
+            return Fail(403, $"The edit window has expired ({_chatOptions.EditWindowMinutes} minutes).");
 
         if (authResult == ChatAuthorizationResult.Forbidden)
-            return Fail(403, "Không có quyền sửa bình luận này.");
+            return Fail(403, "You do not have permission to edit this comment.");
 
         var warnings = new List<string>();
         if (_profanityFilter.ContainsProfanity(request.Body, out var profanityMatches))
-            warnings.Add($"Nội dung có thể chứa từ ngữ không phù hợp: {string.Join(", ", profanityMatches)}.");
+            warnings.Add($"Content may contain inappropriate language: {string.Join(", ", profanityMatches)}.");
         if (_piiDetector.ContainsPii(request.Body, out var piiMatches))
-            warnings.Add($"Nội dung có thể chứa thông tin cá nhân: {string.Join(", ", piiMatches)}.");
+            warnings.Add($"Content may contain personal information: {string.Join(", ", piiMatches)}.");
 
         var oldBody = chat.Body;
 
@@ -120,7 +116,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             EditedAt = DateTime.UtcNow,
             EditedByUserId = request.UserId,
             EditedByRole = request.UserRole,
-            EditReason = request.EditReason
+            EditReason = null
         };
         await _uow.TicketChatEdits.AddAsync(chatEdit);
 
@@ -142,7 +138,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             ActivityActionEnum.ChatEdited,
             ChatTextHelper.Truncate(oldBody),
             ChatTextHelper.Truncate(request.Body),
-            request.EditReason);
+            null);
 
         if (warnings.Count > 0)
         {
@@ -158,9 +154,32 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
             (int)request.UserRole,
             oldBody,
             request.Body,
-            request.EditReason ?? string.Empty), ct);
+            string.Empty), ct);
+
+        // #633 — Soft-delete stale translations atomically with the chat edit save
+        var translations = await _uow.TicketChatTranslations
+            .GetAllAsync()
+            .Where(t => !t.IsDeleted && t.ChatId == chat.Id)
+            .ToListAsync(ct);
+
+        foreach (var t in translations)
+        {
+            t.IsDeleted = true;
+            t.DeletedAt = DateTime.UtcNow;
+            _uow.TicketChatTranslations.UpdateAsync(t);
+        }
+
+        // Sprint Chat DoD — audit ChatEdited. Publish TRƯỚC SaveChanges để entry audit +
+        // outbox đi cùng transaction với thay đổi nghiệp vụ (#AUDIT-25/26).
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.ChatEdited, ticket.Id, targetDisplay: ticket.Code,
+            metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id }), ct);
 
         await _uow.SaveChangesAsync(ct);
+
+        // Clear Redis only after DB is committed
+        foreach (var t in translations)
+            await _cache.RemoveAsync($"chat-translation:{chat.Id}:{t.TargetLanguage}", ct);
 
         await _chatCache.InvalidateAsync(ticket.Id, ct);
 
@@ -191,7 +210,7 @@ public class ChatEditCommandHandler : IRequestHandler<ChatEditCommand, TicketAct
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Sửa bình luận thành công.",
+            Message = "Comment edited successfully.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),

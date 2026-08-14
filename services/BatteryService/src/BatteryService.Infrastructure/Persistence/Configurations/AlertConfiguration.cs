@@ -21,6 +21,9 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
         builder.Property(alert => alert.BatteryAssetId)
             .HasColumnName("battery_asset_id");
 
+        builder.Property(alert => alert.IotDeviceId)
+            .HasColumnName("iot_device_id");
+
         builder.Property(alert => alert.SiteId)
             .HasColumnName("site_id");
 
@@ -79,6 +82,12 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             .HasColumnName("dedup_window_end_utc")
             .IsRequired();
 
+        // GH-778 — id prescription của AI (uuid dạng chuỗi). 64 ký tự dư sức, và giới hạn độ dài
+        // để một id dị thường không âm thầm phình cột.
+        builder.Property(a => a.AiPrescriptionId)
+            .HasColumnName("ai_prescription_id")
+            .HasMaxLength(64);
+
         builder.Property(alert => alert.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();
@@ -101,6 +110,11 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             .HasForeignKey(alert => alert.BatteryAssetId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(alert => alert.IotDevice)
+            .WithMany(device => device.Alerts)
+            .HasForeignKey(alert => alert.IotDeviceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasOne(alert => alert.Site)
             .WithMany()
             .HasForeignKey(alert => alert.SiteId)
@@ -119,11 +133,20 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             "battery_asset_id IS NOT NULL OR site_id IS NOT NULL"));
 
         builder.HasIndex(alert => alert.BatteryAssetId);
+        builder.HasIndex(alert => alert.IotDeviceId);
         builder.HasIndex(alert => alert.SiteId);
         builder.HasIndex(alert => alert.EnvironmentalIncidentId);
         builder.HasIndex(alert => alert.Status);
         builder.HasIndex(alert => alert.Severity);
         builder.HasIndex(alert => new { alert.BatteryAssetId, alert.AnomalyType, alert.Status, alert.DedupWindowEndUtc });
+
+        // One unresolved DeviceOffline incident per device. The transition service resolves this
+        // row before the next genuine incident can be opened; the database guard closes races
+        // between MQTT LWT, the polling fallback, and multiple BatteryService replicas.
+        builder.HasIndex(alert => alert.IotDeviceId)
+            .IsUnique()
+            .HasFilter("iot_device_id IS NOT NULL AND anomaly_type = 7 AND status IN (1, 2) AND is_deleted = false")
+            .HasDatabaseName("ux_alerts_open_device_offline_incident");
 
         builder.Ignore(alert => alert.DomainEvents);
     }

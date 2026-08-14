@@ -16,8 +16,11 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
     private readonly IActivityLogger _activityLogger;
     private readonly IChatAuthorizationService _chatAuthorizationService;
 
-    public ChatUnpinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IChatAuthorizationService chatAuthorizationService)
+    private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.unpin
+
+    public ChatUnpinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IChatAuthorizationService chatAuthorizationService, IPublisher publisher)
     {
+        _publisher = publisher;
         _uow = uow;
         _activityLogger = activityLogger;
         _chatAuthorizationService = chatAuthorizationService;
@@ -26,21 +29,21 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
     public async Task<TicketActionResponse> Handle(ChatUnpinCommand request, CancellationToken ct)
     {
         if (!_chatAuthorizationService.CanPinChat(request.UserPermissions))
-            return Fail(403, "Không có quyền unpin bình luận.");
+            return Fail(403, "You do not have permission to unpin comments.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (!chat.IsPinned)
-            return Fail(400, "Bình luận chưa được pin.");
+            return Fail(400, "Comment is not pinned.");
 
         chat.IsPinned = false;
         chat.PinnedAt = null;
@@ -56,13 +59,19 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
             ChatTextHelper.Truncate(chat.Body),
             null);
 
+        // Sprint Chat DoD — audit ChatUnpinned. Publish TRƯỚC SaveChanges để entry audit +
+        // outbox đi cùng transaction với thay đổi nghiệp vụ (#AUDIT-25/26).
+        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
+            TicketService.Domain.Enums.TicketAuditActionEnum.ChatUnpinned, ticket.Id, targetDisplay: ticket.Code,
+            metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id }), ct);
+
         await _uow.SaveChangesAsync(ct);
 
         return new TicketActionResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Unpin bình luận thành công.",
+            Message = "Comment unpinned successfully.",
             Data = new TicketActionDTO
             {
                 Id = chat.Id.ToString(),

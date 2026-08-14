@@ -26,7 +26,7 @@ public class ChatReactionRemoveCommandHandlerTests
         Ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" },
         AuthorUserId = authorId,
         AuthorRole = ActorRoleEnum.Customer,
-        Body = "Pin sạc rất chậm"
+        Body = "Battery charges very slowly"
     };
 
     private static (Mock<ITicketUnitOfWork> uow, Mock<IGenericRepository<TicketChatReaction>> reactionsRepo) BuildUow(
@@ -146,7 +146,7 @@ public class ChatReactionRemoveCommandHandlerTests
         var authorId = Guid.NewGuid();
         var chat = MakeChat(ticketId, Guid.NewGuid(), authorId);
         chat.Ticket!.CustomerId = Guid.NewGuid();
-        chat.Ticket!.AssignedStaffId = Guid.NewGuid();
+        chat.Ticket!.PrimaryHandlerStaffId = Guid.NewGuid();
 
         var (uow, _) = BuildUow(chat, new List<TicketChatReaction>());
         var handler = new ChatReactionRemoveCommandHandler(uow.Object, _outboxWriter.Object, _realtimeNotifier.Object, _logger.Object);

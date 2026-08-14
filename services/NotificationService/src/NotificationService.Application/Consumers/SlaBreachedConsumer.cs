@@ -11,7 +11,21 @@ namespace NotificationService.Application.Consumers;
 
 /// <summary>
 /// GH-107 — SLA timer đã breach → notify Manager + Admin. GH-604: recipient resolve qua
-/// <see cref="IRecipientResolver"/> (broadcast Manager + Admin). Ghi trực tiếp qua UnitOfWork (InApp + Push).
+/// <see cref="IRecipientResolver"/>.
+///
+/// Sprint 6.2 NOTI-06 (#677) — PHÂN NHÁNH THEO PRIORITY đúng spec §3.4 / design.md.
+/// Trước đó mọi priority xử lý giống hệt nhau (Manager+Admin, InApp+Push) dù payload đã có
+/// <c>Priority</c> (reviewnotification.md §4.2):
+///
+/// <list type="table">
+/// <item><term>P1 Critical</term><description>Manager + Admin · InApp + Push + Email + SMS (kèm escalate — do
+/// <c>EscalationBackgroundService</c> bên TicketService thực hiện).</description></item>
+/// <item><term>P2 High</term><description>Manager · InApp + Push + Email (KHÔNG SMS).</description></item>
+/// <item><term>P3 Standard</term><description>Manager · chỉ InApp (không push/email).</description></item>
+/// </list>
+///
+/// Lưu ý: priority KHÔNG bị đổi khi breach (Priority Policy trong <c>.claude/rules/design.md</c>) —
+/// breach chỉ thêm nhân lực/kênh báo, không đổi deadline.
 /// </summary>
 public class SlaBreachedConsumer : IConsumer<SlaBreachedEvent>
 {
@@ -34,34 +48,108 @@ public class SlaBreachedConsumer : IConsumer<SlaBreachedEvent>
 
     public async Task Consume(ConsumeContext<SlaBreachedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "SlaBreached", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate SlaBreached message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
+            var tier = ResolvePriorityTier(evt.Priority);
 
-        var evt = context.Message;
+            var roles = tier == PriorityTier.P1
+                ? new[] { "Manager", "Admin" }
+                : new[] { "Manager" };
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager", "Admin");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No Manager/Admin recipient resolved for SlaBreached ticket={TicketId} — skip.", evt.TicketId);
-            return;
-        }
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, roles);
+            if (recipientIds.Count == 0)
+            {
+                _logger.LogWarning("No {Roles} recipient resolved for SlaBreached ticket={TicketId} — skip.",
+                    string.Join("/", roles), evt.TicketId);
+                return;
+            }
 
-        var title = "🔴 SLA đã bị vi phạm";
-        var body = $"Ticket (ưu tiên {evt.Priority}) đã breach SLA lúc {evt.BreachedAt:dd/MM HH:mm}. Cần escalate thêm nhân lực.";
-        var payload = JsonSerializer.Serialize(new
-        {
-            ticketId = evt.TicketId,
-            breachedAt = evt.BreachedAt,
-            priority = evt.Priority,
-            screen = "TicketDetail"
+            var channels = ResolveChannels(tier);
+
+            var codeSuffix = string.IsNullOrWhiteSpace(evt.Code) ? "" : $" {evt.Code}";
+
+            var title = tier switch
+            {
+                PriorityTier.P1 => $"🔴 SLA P1 breached{codeSuffix} — immediate action required",
+                PriorityTier.P2 => $"🟠 SLA P2 breached{codeSuffix}",
+                _ => $"🟡 SLA P3 breached{codeSuffix}",
+            };
+
+            var body = tier switch
+            {
+                PriorityTier.P1 =>
+                    $"Priority {evt.Priority} ticket breached SLA at {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Reassign to Senior (Tier 3) and notify Admin immediately.",
+                PriorityTier.P2 =>
+                    $"Priority {evt.Priority} ticket breached SLA at {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Manager should consider reassigning to Tier 2/3.",
+                _ =>
+                    $"Priority {evt.Priority} ticket breached SLA at {evt.BreachedAt:dd/MM HH:mm}. " +
+                    "Manager review required when possible.",
+            };
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                // 03/08/2026 — xem chú thích cùng chủ đề ở SlaWarningConsumer.
+                code = evt.Code,
+                breachedAt = evt.BreachedAt,
+                priority = evt.Priority,
+                priorityTier = tier.ToString(),
+                screen = "TicketDetail"
+            });
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.SlaBreached, channels,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
+    }
 
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.SlaBreached, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
+    private static NotificationChannelEnum[] ResolveChannels(PriorityTier tier) => tier switch
+    {
+        PriorityTier.P1 =>
+        [
+            NotificationChannelEnum.InApp,
+            NotificationChannelEnum.Push,
+            NotificationChannelEnum.Email,
+            NotificationChannelEnum.Sms,
+        ],
+        PriorityTier.P2 =>
+        [
+            NotificationChannelEnum.InApp,
+            NotificationChannelEnum.Push,
+            NotificationChannelEnum.Email,
+        ],
+        _ => [NotificationChannelEnum.InApp],
+    };
+
+    /// <summary>
+    /// Payload mang priority dạng chuỗi (<c>TicketPriorityEnum.ToString()</c> = "P1Critical" /
+    /// "P2High" / "P3Normal"). Nhận diện theo tiền tố để không phụ thuộc TicketService.Domain.
+    /// Không đọc được → coi như P3 (mức ồn ào thấp nhất, tránh bắn SMS vì dữ liệu lạ).
+    /// </summary>
+    private static PriorityTier ResolvePriorityTier(string? priority)
+    {
+        if (string.IsNullOrWhiteSpace(priority))
+            return PriorityTier.P3;
+
+        var value = priority.Trim();
+        if (value.StartsWith("P1", StringComparison.OrdinalIgnoreCase))
+            return PriorityTier.P1;
+        if (value.StartsWith("P2", StringComparison.OrdinalIgnoreCase))
+            return PriorityTier.P2;
+
+        return PriorityTier.P3;
+    }
+
+    private enum PriorityTier
+    {
+        P1 = 1,
+        P2 = 2,
+        P3 = 3,
     }
 }

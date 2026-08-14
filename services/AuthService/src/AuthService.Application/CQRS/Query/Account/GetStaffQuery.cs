@@ -6,4 +6,10 @@ namespace AuthService.Application.CQRS.Query.Account;
 public class GetStaffQuery : IRequest<StaffAssignmentProfileListResponse>
 {
     public string? Skill { get; set; }
+
+    /// <summary>
+    /// Optional ticket priority used to return staff eligible as the primary handler.
+    /// Accepted values: Urgent, P1Critical, P2High, P3Normal.
+    /// </summary>
+    public string? TicketPriority { get; set; }
 }

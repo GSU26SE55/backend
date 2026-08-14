@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
@@ -84,15 +85,16 @@ public class AlertTicketSagaStateMachine : MassTransitStateMachine<AlertTicketSa
             });
 
         // ===== Initial: nhận anomaly event → send CreateTicketFromAlertCommand =====
+        //
+        // FIX duplicate-saga: BatteryService publish CẢ V1 LẪN V2 cho cùng 1 alert
+        // (AnomalyDetectionService — V2 là bản mở rộng thêm SiteId/Tier-2 fields).
+        // Cả hai đều SelectId(AlertId) ⇒ CÙNG correlation id ⇒ 2 message tranh nhau tạo
+        // saga instance ⇒ 23505 PK_alert_ticket_saga_states, và nhánh thua nhận AlertLinked
+        // sai state ⇒ UnhandledEventException.
+        //
+        // Chỉ V2 được khởi tạo saga (nhiều field hơn). V1 KHÔNG còn ở Initially — nó vẫn
+        // được DuringAny bắt để dedup, và NotificationService vẫn consume V1 như cũ.
         Initially(
-            When(AnomalyDetectedV1)
-                .Then(ctx => HydrateFromV1(ctx.Saga, ctx.Message))
-                .Then(_ => AppMetrics.SagaStarted.Inc())
-                .Then(_ => AppMetrics.SagaActive.Inc())
-                .Activity(x => x.OfInstanceType<SendCreateTicketActivity>())
-                .Schedule(TicketCreationTimer, ctx => new TicketCreationTimeoutFired(ctx.Saga.CorrelationId))
-                .TransitionTo(TicketRequested),
-
             When(AnomalyDetectedV2)
                 .Then(ctx => HydrateFromV2(ctx.Saga, ctx.Message))
                 .Then(_ => AppMetrics.SagaStarted.Inc())
@@ -199,6 +201,11 @@ public class AlertTicketSagaStateMachine : MassTransitStateMachine<AlertTicketSa
         SetCompletedWhenFinalized();
     }
 
+    /// <summary>
+    /// Hydrate saga từ event V1. HIỆN KHÔNG DÙNG — saga chỉ khởi tạo từ V2 (xem comment
+    /// ở <c>Initially</c>: V1+V2 cùng correlation id gây tranh chấp tạo saga). Giữ lại để
+    /// rollback nhanh nếu BatteryService ngừng publish V2.
+    /// </summary>
     private static void HydrateFromV1(AlertTicketSagaState saga, BatteryAnomalyDetectedEvent evt)
     {
         saga.AlertId = evt.AlertId;
@@ -230,6 +237,24 @@ public class AlertTicketSagaStateMachine : MassTransitStateMachine<AlertTicketSa
         saga.InternalResistanceMilliohm = evt.InternalResistanceMilliohm;
         saga.CellVoltageDeltaMv = evt.CellVoltageDeltaMv;
         saga.EnvironmentalIncidentId = evt.EnvironmentalIncidentId;
+        saga.AiPrescription = evt.AiPrescription;            // BE-AI (nullable — chỉ V2 từ SohPrediction job)
+
+        // BE-AI structured — gói lại thành 1 JSON để mang qua chặng sau. Ticket từ threshold
+        // engine không có tín hiệu AI nào ⇒ để null, không ghi chuỗi "{}" vô nghĩa vào DB.
+        var aiPayload = new AiSuggestionPayload(
+            ActionSteps: evt.AiActionSteps,
+            PpeRequired: evt.AiPpeRequired,
+            SopReferences: evt.AiSopReferences,
+            EscalationConditions: evt.AiEscalationConditions,
+            SafetyWarnings: evt.AiSafetyWarnings,
+            KbDocRefs: evt.AiKbDocRefs,
+            HumanVerificationRequired: evt.AiHumanVerificationRequired,
+            Blocked: evt.AiBlocked,
+            Enriched: evt.AiEnriched,
+            LlmProvider: evt.AiLlmProvider,
+            PrescriptionId: evt.AiPrescriptionId);
+        saga.AiSuggestionJson = aiPayload.IsEmpty ? null : JsonSerializer.Serialize(aiPayload);
+
         saga.StartedAt = DateTime.UtcNow;
     }
 

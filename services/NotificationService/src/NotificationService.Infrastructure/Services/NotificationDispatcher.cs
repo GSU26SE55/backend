@@ -1,90 +1,123 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NotificationService.Application.DTOs.Request.Notification;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Application.Services;
+using NotificationService.Application.Templates;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.Channels;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Metrics;
 
 namespace NotificationService.Infrastructure.Services;
 
 public class NotificationDispatcher : INotificationDispatcher
 {
+    /// <summary>
+    /// Sự kiện hội thoại phải tới ngay, không được xếp hàng chờ.
+    ///
+    /// <para>Hai cơ chế làm chậm bị bỏ qua cho nhóm này:</para>
+    /// <list type="bullet">
+    ///   <item><description><b>Hạn mức người dùng</b> — một đợt cảnh báo dồn dập không được đẩy tin
+    ///   nhắn thật sang digest hàng giờ sau.</description></item>
+    ///   <item><description><b>Quiet hours</b> — từ khi kênh Push trở thành đường realtime chính của
+    ///   chat (ADR-0019), hoãn tới hết giờ yên lặng nghĩa là buổi tối nhắn tin không ai nhận được
+    ///   gì. Quiet hours sinh ra để chặn thông báo hệ thống làm phiền, không phải để chặn người
+    ///   thật đang nói chuyện với nhau.</description></item>
+    /// </list>
+    ///
+    /// <para>Người dùng vẫn tắt được hoàn toàn bằng tuỳ chọn kênh hoặc tuỳ chọn nhóm "Trao đổi" —
+    /// đó mới là công tắc dành cho ý muốn "đừng làm phiền tôi vì chat".</para>
+    /// </summary>
+    private static readonly IReadOnlySet<NotificationTypeEnum> RealtimeConversationTypes =
+        new HashSet<NotificationTypeEnum>
+        {
+            NotificationTypeEnum.ChatCreated,
+            NotificationTypeEnum.ChatMentioned
+        };
+
+    /// <summary>
+    /// Loại này có được bỏ qua các cơ chế làm chậm (hạn mức, quiet hours) hay không.
+    /// Gom một chỗ để hai đường gửi (fan-out và worker) không bao giờ lệch luật nhau.
+    /// </summary>
+    private static bool IsRealtimeConversation(NotificationTypeEnum type) =>
+        RealtimeConversationTypes.Contains(type);
+
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
     private readonly IEnumerable<INotificationChannel> _channels;
+    private readonly ITemplateRenderer _templateRenderer;
+    private readonly INotificationAuditWriter _auditWriter;
+    private readonly INotificationRateLimiter? _rateLimiter;         // Sprint 6.3 NOTI3-06 (#706)
+    private readonly NotificationRateLimitOptions _rateLimitOptions; // Sprint 6.3 NOTI3-06 (#706)
+    private readonly NotificationDispatchOptions _options;
     private readonly ILogger<NotificationDispatcher> _logger;
 
-    private static readonly NotificationChannelEnum[] _defaultChannels = [NotificationChannelEnum.InApp];
-
-    // overall.md §3.4 — Type → Channel matrix
-    private static readonly Dictionary<NotificationTypeEnum, NotificationChannelEnum[]> TypeChannelMatrix = new()
-    {
-        [NotificationTypeEnum.TicketCreated] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.TicketAssigned] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
-        [NotificationTypeEnum.TicketStatusChanged] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.TicketResolved] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
-        [NotificationTypeEnum.TicketClosed] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.TicketEscalated] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.SlaWarning] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.SlaBreached] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
-        [NotificationTypeEnum.BatteryAnomalyDetected] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
-        [NotificationTypeEnum.EnvironmentalIncidentDetected] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
-        [NotificationTypeEnum.EnvironmentalIncidentResolved] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.IncidentDeclared] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email, NotificationChannelEnum.Sms],
-        [NotificationTypeEnum.AccountActivated] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Email],
-        [NotificationTypeEnum.AdminInvite] = [NotificationChannelEnum.Email],
-        [NotificationTypeEnum.BatteryAlertEscalationPending] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.AlertTicketSagaFailed] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.IotDeviceWentOffline] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
-        [NotificationTypeEnum.System] = [NotificationChannelEnum.InApp],
-    };
-
-    // overall.md §3.4 — Critical types bypass quiet hours automatically
-    private static readonly HashSet<NotificationTypeEnum> CriticalTypes =
-    [
-        NotificationTypeEnum.EnvironmentalIncidentDetected,
-        NotificationTypeEnum.IncidentDeclared,
-        NotificationTypeEnum.BatteryAlertEscalationPending,
-        NotificationTypeEnum.AlertTicketSagaFailed,
-        NotificationTypeEnum.SlaBreached,
-    ];
+    private readonly IReadOnlyDictionary<NotificationTypeEnum, NotificationChannelEnum[]> _typeChannelMatrix;
+    private readonly IReadOnlySet<NotificationTypeEnum> _criticalTypes;
 
     public NotificationDispatcher(
         INotificationUnitOfWork unitOfWork,
         ICacheService cache,
         IEnumerable<INotificationChannel> channels,
-        ILogger<NotificationDispatcher> logger)
+        ITemplateRenderer templateRenderer,
+        INotificationAuditWriter auditWriter,
+        IOptions<NotificationDispatchOptions> options,
+        ILogger<NotificationDispatcher> logger,
+        // Sprint 6.3 NOTI3-06 (#706) — optional để mọi caller/test cũ vẫn biên dịch nguyên vẹn.
+        // Không truyền = không áp hạn mức (đúng hành vi trước sprint này).
+        INotificationRateLimiter? rateLimiter = null,
+        IOptions<NotificationRateLimitOptions>? rateLimitOptions = null)
     {
         _unitOfWork = unitOfWork;
         _cache = cache;
         _channels = channels;
+        _templateRenderer = templateRenderer;
+        _auditWriter = auditWriter;
+        _rateLimiter = rateLimiter;
+        _rateLimitOptions = rateLimitOptions?.Value ?? new NotificationRateLimitOptions();
+        _options = options.Value;
         _logger = logger;
+
+        // NOTI-14 (#685) — ma trận + critical types nay đọc từ config (default = giá trị hardcode cũ).
+        _typeChannelMatrix = _options.ResolveTypeChannelMatrix();
+        _criticalTypes = _options.ResolveCriticalTypes();
     }
+
+    // ─────────────────────────── Fan-out từ event (tự tạo record) ───────────────────────────
 
     public async Task DispatchAsync(DispatchRequest request, CancellationToken ct = default)
     {
         if (request.Recipients.Count == 0)
             return;
 
-        var targetChannels = TypeChannelMatrix.GetValueOrDefault(request.Type, _defaultChannels);
-        bool isCritical = request.BypassQuietHours || CriticalTypes.Contains(request.Type);
+        var targetChannels = _typeChannelMatrix.TryGetValue(request.Type, out var configured)
+            ? configured
+            : NotificationDispatchOptions.DefaultChannels;
+
+        bool isCritical = request.BypassQuietHours || _criticalTypes.Contains(request.Type);
+
+        // Chat xuyên qua quiet hours nhưng KHÔNG vì thế mà thành "critical": critical còn kéo theo
+        // bỏ qua hạn mức ở mọi kênh và đổi độ ưu tiên của gói push. Tách hai khái niệm ra.
+        bool bypassQuietHours = isCritical || IsRealtimeConversation(request.Type);
 
         foreach (var recipient in request.Recipients)
         {
             var pref = await LoadPreferenceAsync(recipient.UserId, ct);
-            bool isQuiet = !isCritical && IsQuietHours(pref);
+            bool isQuiet = !bypassQuietHours && IsQuietHours(pref);
 
-            // Push: 1 record per device token
+            // Push: one policy/delivery record per recipient. SignalR needs no device token.
             if (targetChannels.Contains(NotificationChannelEnum.Push))
                 await DispatchPushAsync(request, recipient, pref, isQuiet, ct);
 
             // Non-push channels: 1 record each
             foreach (var channelType in targetChannels.Where(c => c != NotificationChannelEnum.Push))
             {
-                if (!IsChannelEnabled(pref, channelType))
+                // NOTI3-04 (#704) — xét cả tuỳ chọn theo nhóm nghiệp vụ, không chỉ công tắc kênh.
+                if (!await IsChannelEnabledAsync(pref, request.Type, channelType, ct))
                     continue;
                 if (isQuiet && channelType != NotificationChannelEnum.InApp)
                     continue;
@@ -117,27 +150,20 @@ public class NotificationDispatcher : INotificationDispatcher
         bool isQuiet,
         CancellationToken ct)
     {
-        if (!pref.PushEnabled || isQuiet)
+        // NOTI3-04 (#704) — push cũng phải qua cả hai cấp tuỳ chọn, không chỉ công tắc PushEnabled.
+        if (isQuiet || !await IsChannelEnabledAsync(pref, request.Type, NotificationChannelEnum.Push, ct))
             return;
 
         var pushChannel = _channels.FirstOrDefault(c => c.ChannelType == NotificationChannelEnum.Push);
         if (pushChannel is null)
             return;
 
-        var tokens = await _unitOfWork.DeviceTokens.GetAllAsync()
-            .Where(dt => dt.UserId == recipient.UserId && !dt.IsDeleted && dt.IsActive)
-            .ToListAsync(ct);
+        bool isCritical = _criticalTypes.Contains(request.Type) || request.BypassQuietHours;
 
-        if (tokens.Count == 0)
-        {
-            _logger.LogDebug("Dispatcher: no device tokens for user {UserId}, skipping Push", recipient.UserId);
-            return;
-        }
-
-        bool isCritical = CriticalTypes.Contains(request.Type) || request.BypassQuietHours;
-        foreach (var token in tokens)
-            await SendSingleAsync(request, recipient, NotificationChannelEnum.Push, pushChannel,
-                isCritical, expoToken: token.Token, ct: ct);
+        // NOTI-16 (#687) — 1 record + 1 lần gọi Expo cho TẤT CẢ token của user (batch),
+        // thay vì 1 record + 1 HTTP call cho mỗi token.
+        await SendSingleAsync(request, recipient, NotificationChannelEnum.Push, pushChannel,
+            isCritical, ct: ct);
     }
 
     private async Task SendSingleAsync(
@@ -146,7 +172,6 @@ public class NotificationDispatcher : INotificationDispatcher
         NotificationChannelEnum channelType,
         INotificationChannel channel,
         bool isCritical,
-        string? expoToken = null,
         CancellationToken ct = default)
     {
         var notification = new Notification
@@ -170,11 +195,14 @@ public class NotificationDispatcher : INotificationDispatcher
         {
             NotificationId = notification.Id,
             UserId = recipient.UserId,
+            Type = notification.Type,   // NOTI3-15 (#715) — cần để dựng link hủy theo nhóm
             Title = request.Title,
             Body = request.Body,
             PayloadJson = request.PayloadJson,
             IsCritical = isCritical,
-            ExpoToken = expoToken,
+            EntityType = notification.EntityType,
+            EntityId = notification.EntityId,
+            CreatedAt = notification.CreatedAt,
             Email = recipient.Email,
             PhoneNumber = recipient.PhoneNumber,
         };
@@ -190,6 +218,452 @@ public class NotificationDispatcher : INotificationDispatcher
         if (!result.Success)
             _logger.LogWarning("Dispatcher: {Channel} failed for user {UserId}: {Error}",
                 channelType, recipient.UserId, result.ErrorMessage);
+    }
+
+    // ─────────────────── NOTI-01: gửi 1 record Pending có sẵn (worker path) ───────────────────
+
+    public async Task<DispatchOutcome> DispatchPendingAsync(Notification notification, CancellationToken ct = default)
+    {
+        if (notification.Status != NotificationStatusEnum.Pending)
+            return DispatchOutcome.Sent;   // đã xử lý ở vòng trước — coi như xong, không đụng vào nữa
+
+        var channel = _channels.FirstOrDefault(c => c.ChannelType == notification.Channel);
+        if (channel is null)
+            return await MarkFailedAsync(notification, $"No channel handles {notification.Channel}.", ct, "no_channel_handler");
+
+        // Recipient placeholder Guid.Empty là "broadcast chưa resolve" — không gửi được cho ai.
+        if (notification.UserId == Guid.Empty)
+            return await MarkFailedAsync(notification, "UserId is empty (unresolved broadcast placeholder).", ct, "empty_user_id");
+
+        var pref = await LoadPreferenceAsync(notification.UserId, ct);
+        bool isCritical = _criticalTypes.Contains(notification.Type) || HasBypassQuietHoursFlag(notification.PayloadJson);
+
+        // 1) Preference tắt kênh → không bao giờ gửi được, kết thúc luôn (tránh retry vô hạn).
+        // NOTI3-04 (#704) — tắt ở cấp kênh HOẶC cấp nhóm × kênh đều dừng ở đây.
+        if (!await IsChannelEnabledAsync(pref, notification.Type, notification.Channel, ct))
+            return await MarkFailedAsync(notification,
+                $"The user has disabled the {notification.Channel} channel for the "
+                + $"{NotificationCategoryMap.Resolve(notification.Type)} group in their notification preferences.",
+                ct, "channel_disabled");
+
+        // 2) Digest (NOTI-12) — gom notification không-critical của user bật digest,
+        //    NotificationDigestBackgroundService sẽ gộp và gửi 1 lần.
+        //    Bản digest tổng hợp thì KHÔNG gom tiếp (nếu không sẽ tự hoãn chính nó mãi mãi).
+        //    ADR-0019: chat cũng được miễn gom digest, cùng lý do với quiet hours ở bước 3. Người
+        //    dùng đặt Frequency=Daily mà tin nhắn cũng bị gom thì mỗi ngày mới nhận chat một lần —
+        //    digest sinh ra để gộp thông báo hệ thống, không phải để gộp người đang nói chuyện.
+        //    Muốn tắt hẳn thông báo chat thì tắt kênh Push hoặc tắt nhóm "Trao đổi" trong tuỳ chọn.
+        if (!isCritical
+            && !IsRealtimeConversation(notification.Type)
+            && notification.EntityType != NotificationDigest.EntityType
+            && IsDigestChannel(notification.Channel)
+            && TryGetDigestWindow(pref, out var window))
+            return await DeferAsync(notification, DateTime.UtcNow.Add(window),
+                $"Gom vào digest {window.TotalMinutes:0} phút.", ct, "digest");
+
+        // 2b) Hạn mức người dùng (NOTI3-06) — chỉ áp cho kênh CHỦ ĐỘNG (Push/Email/SMS).
+        //     InApp không làm phiền ai nên không giới hạn; critical thì bỏ qua hạn mức hoàn toàn —
+        //     hạn mức tồn tại để giữ sự chú ý của người dùng, không phải để chặn cảnh báo an toàn.
+        //     Vượt trần thì HOÃN (gom vào digest), KHÔNG vứt bỏ: vứt là mất dữ liệu nghiệp vụ.
+        if (!isCritical
+            && _rateLimiter is not null
+            && notification.Channel != NotificationChannelEnum.InApp
+            && notification.EntityType != NotificationDigest.EntityType
+            && !IsRealtimeConversation(notification.Type))
+        {
+            var decision = await _rateLimiter.TryConsumeAsync(notification.UserId, notification.Type, ct);
+
+            if (!decision.Allowed)
+            {
+                AppMetrics.NotificationRateLimitedTotal
+                    .WithLabels(notification.Channel.ToString(), decision.Reason ?? "unknown").Inc();
+
+                var deferUntil = DateTime.UtcNow.AddMinutes(Math.Max(1, _rateLimitOptions.DeferMinutes));
+                return await DeferAsync(notification, deferUntil,
+                    $"Vượt hạn mức thông báo ({decision.Reason}) — gom vào digest.", ct, "rate_limited");
+            }
+        }
+
+        // 3) Quiet hours — InApp vẫn ghi được (im lặng), các kênh chủ động thì hoãn tới hết giờ yên.
+        //    ADR-0019: chat được miễn. Push nay là đường realtime chính của hội thoại, hoãn nó tới
+        //    sáng hôm sau tức là buổi tối nhắn tin không ai nhận được gì.
+        if (!isCritical
+            && !IsRealtimeConversation(notification.Type)
+            && notification.Channel != NotificationChannelEnum.InApp
+            && IsQuietHours(pref))
+            return await DeferAsync(notification, ResolveQuietHoursEndUtc(pref),
+                "Đang trong quiet hours — hoãn tới khi hết.", ct, "quiet_hours");
+
+        var account = await LoadAccountAsync(notification.UserId, ct);
+
+        // 4) Thiếu địa chỉ nhận → lỗi vĩnh viễn.
+        if (notification.Channel == NotificationChannelEnum.Email && string.IsNullOrWhiteSpace(account?.Email))
+            return await MarkFailedAsync(notification, "Recipient has no email in the read model.", ct, "no_email");
+
+        if (notification.Channel == NotificationChannelEnum.Sms && string.IsNullOrWhiteSpace(account?.PhoneNumber))
+            return await MarkFailedAsync(notification, "Recipient has no phone number in the read model.", ct, "no_phone");
+
+        var (title, body) = await RenderContentAsync(notification, ct);
+
+        var sendRequest = new SendRequest
+        {
+            NotificationId = notification.Id,
+            UserId = notification.UserId,
+            Type = notification.Type,   // NOTI3-15 (#715) — cần để dựng link hủy theo nhóm
+            Title = title,
+            Body = body,
+            PayloadJson = notification.PayloadJson,
+            // Để kênh push gửi kèm, giúp client mở đúng màn hình mà danh sách trong app cũng mở.
+            EntityType = notification.EntityType,
+            EntityId = notification.EntityId,
+            IsCritical = isCritical,
+            CreatedAt = notification.CreatedAt,
+            Email = account?.Email,
+            PhoneNumber = account?.PhoneNumber,
+        };
+
+        // GH-792 — CHIẾM bản ghi và ghi xuống DB TRƯỚC khi gọi provider.
+        //
+        // Trước đây bản ghi ở nguyên Pending trong suốt lúc gọi provider; tiến trình chết sau khi
+        // provider đã nhận nhưng trước khi kịp ghi Sent là vòng quét sau gửi lại — người dùng nhận
+        // email/SMS/push lần thứ hai. Ghi Processing trước thu hẹp cửa sổ đó xuống còn "chết trước
+        // khi kịp gửi", trường hợp mà gửi lại là ĐÚNG.
+        //
+        // DispatchAttemptCount tăng ngay tại đây, không đợi kết quả: một lần chiếm việc rồi chết
+        // vẫn là một lần thử. Đếm theo kết quả thì sự cố lặp lại sẽ quay vòng mãi mà số đếm không
+        // nhích, và MaxAttempts không bao giờ chạm tới.
+        // GH-793 — chiếm bằng MỘT câu UPDATE có điều kiện, không phải "đọc rồi ghi": hai replica
+        // cùng thấy Pending thì cơ sở dữ liệu chọn đúng một bên. Không dựa vào leader lease, vì
+        // lease hết hạn giữa chừng hay Redis sự cố là lại có hai chủ.
+        var claimedAt = DateTime.UtcNow;
+        if (!await _unitOfWork.TryClaimForDispatchAsync(notification.Id, claimedAt, ct))
+        {
+            _logger.LogDebug(
+                "Dispatch: notification {Id} đã được instance khác chiếm — bỏ qua.", notification.Id);
+            return DispatchOutcome.Deferred;
+        }
+
+        // Đồng bộ bản trong bộ nhớ với những gì câu UPDATE vừa ghi: ExecuteUpdate không đi qua bộ
+        // theo dõi thay đổi của EF, nên nếu bỏ bước này thì mọi đoạn phía sau (và bản ghi audit)
+        // vẫn nhìn thấy trạng thái cũ.
+        notification.Status = NotificationStatusEnum.Processing;
+        notification.ProcessingStartedAt = claimedAt;
+        notification.DispatchAttemptCount += 1;
+
+        ChannelResult result;
+        try
+        {
+            result = await channel.SendAsync(sendRequest, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Dispatch: channel {Channel} ném exception cho notification {Id}",
+                notification.Channel, notification.Id);
+            result = new ChannelResult(false, ex.Message);
+        }
+
+        if (result.Success)
+        {
+            notification.Status = NotificationStatusEnum.Sent;
+            notification.SentAt = DateTime.UtcNow;
+            notification.FailureReason = null;
+            notification.NextAttemptAt = null;
+            // GH-792 — số lần thử đã tăng lúc chiếm việc; tăng lại ở đây là đếm đôi.
+            notification.ProcessingStartedAt = null;
+            _unitOfWork.Notifications.UpdateAsync(notification);
+
+            // NOTI3-07 (#707) — delivery-rate tách theo channel là metric cơ bản nhất.
+            var channelLabel = notification.Channel.ToString();
+            AppMetrics.NotificationSentTotal.WithLabels(channelLabel, notification.Type.ToString()).Inc();
+            AppMetrics.NotificationDeliveryLatencySeconds
+                .WithLabels(channelLabel)
+                .Observe(Math.Max(0, (notification.SentAt!.Value - notification.CreatedAt).TotalSeconds));
+
+            await WriteAuditAsync(notification, success: true, reason: null, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+            return DispatchOutcome.Sent;
+        }
+
+        // Lỗi → retry có backoff cho tới MaxAttempts.
+        // GH-792 — số lần thử đã tăng lúc chiếm việc.
+        notification.ProcessingStartedAt = null;
+        notification.FailureReason = Truncate(result.ErrorMessage, 1000);
+
+        if (notification.DispatchAttemptCount >= _options.MaxAttempts)
+        {
+            notification.Status = NotificationStatusEnum.Failed;
+            notification.NextAttemptAt = null;
+            _unitOfWork.Notifications.UpdateAsync(notification);
+
+            AppMetrics.NotificationFailedTotal
+                .WithLabels(notification.Channel.ToString(), "max_attempts_exceeded").Inc();
+
+            await WriteAuditAsync(notification, success: false, notification.FailureReason, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+
+            _logger.LogWarning(
+                "Dispatch: notification {Id} thất bại vĩnh viễn sau {Attempts} lần — {Reason}",
+                notification.Id, notification.DispatchAttemptCount, notification.FailureReason);
+            return DispatchOutcome.Failed;
+        }
+
+        // GH-792 — trả về hàng đợi tường minh: bản ghi đang ở Processing (đã chiếm), không tự quay
+        // lại Pending được. Quên dòng này là nó kẹt ở Processing tới khi bộ thu hồi nhặt lên.
+        notification.Status = NotificationStatusEnum.Pending;
+        notification.NextAttemptAt = DateTime.UtcNow.Add(BackoffFor(notification.DispatchAttemptCount));
+        _unitOfWork.Notifications.UpdateAsync(notification);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        AppMetrics.NotificationRetryTotal.WithLabels(notification.Channel.ToString()).Inc();
+        return DispatchOutcome.Retrying;
+    }
+
+    // ─────────────────────────────────── Helpers ───────────────────────────────────
+
+    /// <summary>
+    /// NOTI-14 (#685) — chốt 1 pattern template: nếu DB có template active khớp
+    /// (Type × Channel) thì render nó với PayloadJson; không có thì dùng Title/Body inline
+    /// mà consumer đã ghi. Template hỏng KHÔNG chặn gửi — rơi về inline.
+    ///
+    /// <para>02/08/2026 — bỏ nhánh chọn locale (kèm bước lùi về locale mặc định): hệ thống tiếng Việt
+    /// only nên mỗi cặp (Type × Channel) chỉ còn đúng một template active.</para>
+    /// </summary>
+    private async Task<(string Title, string Body)> RenderContentAsync(Notification notification, CancellationToken ct)
+    {
+        if (!_options.UseDbTemplates)
+            return (notification.Title, notification.Body);
+
+        // 03/08/2026 — nội dung của lần gửi hàng loạt THỦ CÔNG là do admin tự gõ, KHÔNG được đem
+        // khuôn mẫu đè lên.
+        //
+        // Màn hình gửi hàng loạt cho chọn bất kỳ loại thông báo nào (loại quyết định nhóm tuỳ chọn
+        // nhận tin, nên không thể ép về mỗi System). Chọn "Ticket mới" rồi gõ tay tiêu đề thì tới
+        // lượt dispatcher, template (TicketCreated × kênh) khớp và render — nhưng payload của một
+        // lần gửi tay KHÔNG có `code`/`priority`, nên ra "Ticket mới " với chỗ trống, và chữ admin
+        // vừa gõ biến mất sạch.
+        //
+        // Lỗi này có từ khi có tính năng gửi hàng loạt và đã âm thầm áp cho Email/Push/SMS; riêng
+        // InApp thì trước 03/08 kết quả render bị vứt đi nên không ai thấy — tới khi InApp ghi ngược
+        // nội dung vào dòng notification thì nó lộ ra ngay trên feed.
+        //
+        // Chỉ chặn lần gửi THỦ CÔNG (`Manual`) mà admin KHÔNG chọn dùng mẫu. Hai trường hợp còn lại
+        // vẫn render như thường:
+        //   • lần gửi sinh tự động từ sự kiện — mẫu chính là chỗ đặt câu chữ của nó;
+        //   • lần gửi thủ công có bật "dùng mẫu" — admin cố ý chọn, và đã điền biến vào PayloadJson.
+        //     Đây là lý do phải render lúc gửi chứ không đổ sẵn chữ vào ô soạn: mỗi kênh có mẫu
+        //     riêng (bản SMS nén ngắn), nên một lần gửi 3 kênh phải ra 3 nội dung khác nhau.
+        if (notification.BatchId is not null)
+        {
+            var boQuaMau = await _unitOfWork.NotificationBatches.GetAllAsync(false)
+                .AnyAsync(b => b.Id == notification.BatchId
+                               && b.Source == NotificationBatchSourceEnum.Manual
+                               && !b.UseTemplate, ct);
+
+            if (boQuaMau)
+                return (notification.Title, notification.Body);
+        }
+
+        try
+        {
+            var template = await _unitOfWork.NotificationTemplates.GetAllAsync()
+                .Where(t => !t.IsDeleted
+                            && t.IsActive
+                            && t.Type == notification.Type
+                            && t.Channel == notification.Channel)
+                .OrderByDescending(t => t.Version)
+                .FirstOrDefaultAsync(ct);
+
+            if (template is null)
+                return (notification.Title, notification.Body);
+
+            var model = BuildTemplateModel(notification);
+            var title = string.IsNullOrWhiteSpace(template.TitleTemplate)
+                ? notification.Title
+                : _templateRenderer.RenderInline(template.TitleTemplate, model);
+            var body = string.IsNullOrWhiteSpace(template.BodyTemplate)
+                ? notification.Body
+                : _templateRenderer.RenderInline(template.BodyTemplate, model);
+
+            return (
+                string.IsNullOrWhiteSpace(title) ? notification.Title : title,
+                string.IsNullOrWhiteSpace(body) ? notification.Body : body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Dispatch: render DB template lỗi cho notification {Id} — dùng nội dung inline.",
+                notification.Id);
+            return (notification.Title, notification.Body);
+        }
+    }
+
+    private static Dictionary<string, object?> BuildTemplateModel(Notification notification)
+    {
+        var model = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Title"] = notification.Title,
+            ["Body"] = notification.Body,
+            ["EntityType"] = notification.EntityType,
+            ["EntityId"] = notification.EntityId,
+            ["UserId"] = notification.UserId,
+            ["CreatedAt"] = notification.CreatedAt,
+        };
+
+        if (string.IsNullOrWhiteSpace(notification.PayloadJson))
+            return model;
+
+        try
+        {
+            var payload = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(notification.PayloadJson);
+            if (payload is null)
+                return model;
+
+            foreach (var (key, value) in payload)
+                model[key] = JsonElementToObject(value);
+        }
+        catch (JsonException)
+        {
+            // Payload không phải JSON object — bỏ qua, model vẫn có các field cơ bản.
+        }
+
+        return model;
+    }
+
+    private static object? JsonElementToObject(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.String => element.GetString(),
+        JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDouble(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Null or JsonValueKind.Undefined => null,
+        _ => element.ToString(),
+    };
+
+    private async Task<AccountReadModel?> LoadAccountAsync(Guid userId, CancellationToken ct) =>
+        await _unitOfWork.Accounts.GetAllAsync()
+            .FirstOrDefaultAsync(a => a.Id == userId && !a.IsDeleted, ct);
+
+    /// <param name="metricReason">
+    /// Nhóm lý do NGẮN dùng làm label Prometheus (vd "channel_disabled"). Tuyệt đối không truyền
+    /// message thô vào đây — mỗi giá trị khác nhau tạo 1 time-series mới, sẽ nổ cardinality.
+    /// </param>
+    private async Task<DispatchOutcome> MarkFailedAsync(
+        Notification notification, string reason, CancellationToken ct, string metricReason = "unknown")
+    {
+        AppMetrics.NotificationFailedTotal
+            .WithLabels(notification.Channel.ToString(), metricReason).Inc();
+
+        notification.Status = NotificationStatusEnum.Failed;
+        notification.FailureReason = Truncate(reason, 1000);
+        notification.NextAttemptAt = null;
+        notification.DispatchAttemptCount += 1;
+        _unitOfWork.Notifications.UpdateAsync(notification);
+
+        await WriteAuditAsync(notification, success: false, reason, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Dispatch: notification {Id} kết thúc Failed — {Reason}", notification.Id, reason);
+        return DispatchOutcome.Failed;
+    }
+
+    private async Task<DispatchOutcome> DeferAsync(
+        Notification notification, DateTime nextAttemptUtc, string reason, CancellationToken ct, string metricReason = "unknown")
+    {
+        // Hoãn KHÔNG tính là 1 lần thử — nếu không, quiet hours dài sẽ ăn hết MaxAttempts.
+        notification.NextAttemptAt = nextAttemptUtc;
+        _unitOfWork.Notifications.UpdateAsync(notification);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        AppMetrics.NotificationDeferredTotal
+            .WithLabels(notification.Channel.ToString(), metricReason).Inc();
+
+        _logger.LogDebug("Dispatch: hoãn notification {Id} tới {Next} — {Reason}",
+            notification.Id, nextAttemptUtc, reason);
+        return DispatchOutcome.Deferred;
+    }
+
+    /// <summary>NOTI-13 (#684) — chỉ Push/InApp nằm trong 7 action của #AUDIT-34; Email/Sms bỏ qua.</summary>
+    private async Task WriteAuditAsync(Notification notification, bool success, string? reason, CancellationToken ct)
+    {
+        NotificationAuditActionEnum? action = notification.Channel switch
+        {
+            NotificationChannelEnum.Push => success
+                ? NotificationAuditActionEnum.PushSent
+                : NotificationAuditActionEnum.PushFailed,
+            NotificationChannelEnum.InApp when success => NotificationAuditActionEnum.InAppCreated,
+            _ => null,
+        };
+
+        if (action is null)
+            return;
+
+        await _auditWriter.WriteAsync(
+            action.Value,
+            notification.Id,
+            notification.UserId,
+            success,
+            reason,
+            new Dictionary<string, object?>
+            {
+                ["channel"] = notification.Channel.ToString(),
+                ["type"] = notification.Type.ToString(),
+                ["attempt"] = notification.DispatchAttemptCount,
+                ["entityType"] = notification.EntityType,
+                ["entityId"] = notification.EntityId,
+            },
+            ct);
+    }
+
+    private TimeSpan BackoffFor(int attempt)
+    {
+        // attempt = 1 → Base; 2 → Base*2; 3 → Base*4 … chặn trần MaxBackoffSeconds.
+        var seconds = _options.BaseBackoffSeconds * Math.Pow(2, Math.Max(0, attempt - 1));
+        return TimeSpan.FromSeconds(Math.Min(seconds, _options.MaxBackoffSeconds));
+    }
+
+    /// <summary>Digest chỉ áp cho kênh chủ động ồn ào (Email/Push); InApp/SMS gửi ngay.</summary>
+    private static bool IsDigestChannel(NotificationChannelEnum channel) =>
+        channel is NotificationChannelEnum.Email or NotificationChannelEnum.Push;
+
+    /// <summary>
+    /// NOTI-12 (#683) — quy đổi preference thành cửa sổ digest.
+    /// <c>DigestWindowMinutes</c> ưu tiên; nếu null mà <c>Frequency = Daily</c> thì coi như 24 giờ.
+    /// </summary>
+    internal static bool TryGetDigestWindow(NotificationPreference pref, out TimeSpan window)
+    {
+        if (pref.DigestWindowMinutes is > 0)
+        {
+            window = TimeSpan.FromMinutes(pref.DigestWindowMinutes.Value);
+            return true;
+        }
+
+        if (pref.Frequency == NotificationFrequencyEnum.Daily)
+        {
+            window = TimeSpan.FromDays(1);
+            return true;
+        }
+
+        window = TimeSpan.Zero;
+        return false;
+    }
+
+    /// <summary>Đọc cờ <c>bypassQuietHours</c> mà CreateNotificationCommandHandler merge vào payload (#IoT2-31).</summary>
+    private static bool HasBypassQuietHoursFlag(string? payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                   && doc.RootElement.TryGetProperty("bypassQuietHours", out var flag)
+                   && flag.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private async Task<NotificationPreference> LoadPreferenceAsync(Guid userId, CancellationToken ct)
@@ -216,22 +690,103 @@ public class NotificationDispatcher : INotificationDispatcher
         return pref;
     }
 
+    private static TimeZoneInfo ResolveTimeZone(NotificationPreference pref)
+    {
+        try
+        { return TimeZoneInfo.FindSystemTimeZoneById(pref.TimeZone); }
+        catch { return TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh"); }
+    }
+
     private static bool IsQuietHours(NotificationPreference pref)
     {
         if (pref.QuietHoursStart is null || pref.QuietHoursEnd is null)
             return false;
 
-        TimeZoneInfo tz;
-        try
-        { tz = TimeZoneInfo.FindSystemTimeZoneById(pref.TimeZone); }
-        catch { tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh"); }
-
+        var tz = ResolveTimeZone(pref);
         var now = TimeOnly.FromTimeSpan(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).TimeOfDay);
         var start = pref.QuietHoursStart.Value;
         var end = pref.QuietHoursEnd.Value;
 
         // Wraps midnight (e.g. 22:00–07:00)
         return start > end ? now >= start || now < end : now >= start && now < end;
+    }
+
+    /// <summary>
+    /// Thời điểm UTC quiet hours kết thúc — mốc hẹn lại cho record bị hoãn.
+    /// Cộng thêm 1 phút đệm để tránh tick đúng biên rồi lại bị coi là còn trong quiet hours.
+    /// </summary>
+    private static DateTime ResolveQuietHoursEndUtc(NotificationPreference pref)
+    {
+        if (pref.QuietHoursEnd is null)
+            return DateTime.UtcNow.AddMinutes(15);
+
+        var tz = ResolveTimeZone(pref);
+        var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var end = pref.QuietHoursEnd.Value;
+
+        var localEnd = new DateTime(localNow.Year, localNow.Month, localNow.Day, end.Hour, end.Minute, 0, DateTimeKind.Unspecified);
+        if (localEnd <= localNow)
+            localEnd = localEnd.AddDays(1);
+
+        return TimeZoneInfo.ConvertTimeToUtc(localEnd, tz).AddMinutes(1);
+    }
+
+    /// <summary>
+    /// Sprint 6.3 NOTI3-04 (#704) — kiểm tra tuỳ chọn ở CẢ HAI cấp: kênh toàn cục và nhóm × kênh.
+    ///
+    /// Quan hệ là **và logic**: công tắc lớn (tắt Email) thắng mọi tuỳ chọn nhóm — đó là điều người
+    /// dùng mong đợi khi gạt nó. Ngược lại, chưa có dòng tuỳ chọn nhóm nào thì coi như chưa tuỳ chỉnh
+    /// và rơi về hành vi cũ, nên dữ liệu cũ không cần backfill.
+    /// </summary>
+    private async Task<bool> IsChannelEnabledAsync(
+        NotificationPreference pref, NotificationTypeEnum type, NotificationChannelEnum channel, CancellationToken ct)
+    {
+        if (!IsChannelEnabled(pref, channel))
+            return false;
+
+        var category = NotificationCategoryMap.Resolve(type);
+        var categoryPref = await LoadCategoryPreferenceAsync(pref.UserId, category, ct);
+
+        return categoryPref is null || IsCategoryChannelEnabled(categoryPref, channel);
+    }
+
+    private static bool IsCategoryChannelEnabled(NotificationCategoryPreference pref, NotificationChannelEnum channel) =>
+        channel switch
+        {
+            NotificationChannelEnum.Push => pref.PushEnabled,
+            NotificationChannelEnum.Email => pref.EmailEnabled,
+            NotificationChannelEnum.Sms => pref.SmsEnabled,
+            NotificationChannelEnum.InApp => pref.InAppEnabled,
+            _ => false,
+        };
+
+    /// <summary>
+    /// Sprint 6.3 NOTI3-04 (#704) — đọc tuỳ chọn nhóm, có cache 5' như preference kênh.
+    /// Trả <c>null</c> nghĩa là người dùng CHƯA tuỳ chỉnh nhóm này (khác với "đã tắt hết").
+    /// </summary>
+    private async Task<NotificationCategoryPreference?> LoadCategoryPreferenceAsync(
+        Guid userId, NotificationCategoryEnum category, CancellationToken ct)
+    {
+        var cacheKey = $"notif_cat_pref:{userId}:{(int)category}";
+
+        // Sentinel: cache cả trường hợp "chưa tuỳ chỉnh" để không truy vấn DB lại mỗi lần gửi.
+        var cached = await _cache.GetAsync<CategoryPreferenceCacheEntry>(cacheKey, ct);
+        if (cached is not null)
+            return cached.Preference;
+
+        var pref = await _unitOfWork.NotificationCategoryPreferences.GetAllAsync()
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.Category == category && !p.IsDeleted, ct);
+
+        await _cache.SetAsync(cacheKey, new CategoryPreferenceCacheEntry { Preference = pref },
+            TimeSpan.FromMinutes(5), ct);
+
+        return pref;
+    }
+
+    /// <summary>Bọc để phân biệt "cache miss" với "đã cache và kết quả là chưa tuỳ chỉnh".</summary>
+    private sealed class CategoryPreferenceCacheEntry
+    {
+        public NotificationCategoryPreference? Preference { get; set; }
     }
 
     private static bool IsChannelEnabled(NotificationPreference pref, NotificationChannelEnum channel) =>
@@ -243,4 +798,11 @@ public class NotificationDispatcher : INotificationDispatcher
             NotificationChannelEnum.InApp => pref.InAppEnabled,
             _ => false,
         };
+
+    private static string? Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+        return value.Length <= maxLength ? value : value[..maxLength];
+    }
 }

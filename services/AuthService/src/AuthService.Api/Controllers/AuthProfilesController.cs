@@ -223,13 +223,13 @@ public class AuthProfilesController : ControllerBase
     {
         IsSuccess = false,
         StatusCode = 401,
-        Message = "Chưa đăng nhập."
+        Message = "Not logged in."
     };
 
     private static MyPermissionsResponse UnauthMyPermissionsResponse() => new()
     {
         IsSuccess = false,
         StatusCode = 401,
-        Message = "Chưa đăng nhập."
+        Message = "Not logged in."
     };
 }

@@ -6,9 +6,16 @@ namespace TicketService.Application.Interfaces.Services;
 /// </summary>
 public interface ISpamDetector
 {
+    Task<SpamLease?> TryAcquireLeaseAsync(Guid ticketId, Guid userId, CancellationToken cancellationToken = default);
+    Task<bool> RenewLeaseAsync(SpamLease lease, CancellationToken cancellationToken = default);
+    Task ReleaseLeaseAsync(SpamLease lease, CancellationToken cancellationToken = default);
     /// <summary>
-    /// Ghi nhận <paramref name="body"/> vừa được post và trả về <c>true</c> nếu đây là lần lặp
-    /// thứ 3 (hoặc hơn) của cùng nội dung trong window — caller nên reject request khi <c>true</c>.
+    /// Kiểm tra liệu <paramref name="body"/> có là lần lặp thứ ba (hoặc hơn) trong cửa sổ hay không.
+    /// Chỉ gọi <see cref="RecordAcceptedMessageAsync"/> sau khi chat đã lưu thành công.
     /// </summary>
     Task<bool> IsSpamAsync(Guid ticketId, Guid userId, string body, CancellationToken cancellationToken = default);
+
+    Task RecordAcceptedMessageAsync(Guid ticketId, Guid userId, string body, CancellationToken cancellationToken = default);
 }
+
+public record SpamLease(string Key, string OwnerToken);

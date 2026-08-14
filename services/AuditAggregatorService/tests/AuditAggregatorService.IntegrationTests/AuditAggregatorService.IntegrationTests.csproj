@@ -18,8 +18,18 @@
         <PackageReference Include="FluentAssertions" Version="6.12.0" />
         <PackageReference Include="Moq" Version="4.20.70" />
         <PackageReference Include="MockQueryable.Moq" Version="7.0.0" />
-        <PackageReference Include="Testcontainers.PostgreSql" Version="3.8.0" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+        <!-- AuditCreatedConsumer là đường vào duy nhất của read-store. Không có harness thì
+             không kiểm được nó, và nhánh idempotent/geo-enrichment/race sẽ không ai chạm. -->
+        <PackageReference Include="MassTransit" Version="8.5.9" />
+        <PackageReference Include="MassTransit.TestFramework" Version="8.5.9" />
+        <!-- DoD Sprint audit: cần collector này mới đo được coverage 80%. Trước 2026-08-01 project
+             thiếu package nên chạy XPlat Code Coverage xong KHÔNG sinh ra file cobertura nào. -->
+        <PackageReference Include="coverlet.collector" Version="6.0.2">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
     </ItemGroup>
 
     <ItemGroup>

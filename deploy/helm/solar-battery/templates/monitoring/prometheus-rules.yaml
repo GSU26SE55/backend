@@ -1,8 +1,27 @@
 {{/*
   PrometheusRule CRD — kube-prometheus-stack auto-discover và load.
-  Chỉ render khi monitoring.prometheusRules.enabled=true (cần có CRD `monitoring.coreos.com/v1`).
+  Chỉ render khi monitoring.prometheusRules.enabled=true (cần CRD `monitoring.coreos.com/v1`).
 
-  Source content: monitoring/prometheus/alert-rules.yml (10 alert rule).
+  ───────────────────────────────────────────────────────────────────────────────
+  Nội dung rule KHÔNG viết ở đây. Nó được nạp nguyên khối từ `files/alert-rules.yml`.
+
+  Trước đây file này chép tay từng rule và đã trôi rất xa bản gốc: 26 alert so với 40 —
+  thiếu trọn 3 nhóm `auth-security`, `chat_hub_alerts`, `notification-delivery`. Nghĩa là
+  14 cảnh báo chạy bình thường trên docker-compose nhưng chưa bao giờ tồn tại trên K8s,
+  và không có gì báo cho ai biết.
+
+  Chép tay còn kéo theo một bẫy nữa: rule của Prometheus dùng chính cú pháp ngoặc nhọn đôi
+  (vd $value, $labels.channel), nên khi nhúng vào template Helm phải escape từng chỗ bằng
+  backtick. Quên một chỗ là Helm nuốt mất biến — alert vẫn nổ nhưng nội dung rỗng.
+
+  `.Files.Get` đọc file ở dạng thô và Helm KHÔNG render lại chuỗi trả về, nên toàn bộ
+  ngoặc nhọn đôi của Prometheus đi thẳng ra output, không cần escape gì.
+
+  ⚠️ `files/alert-rules.yml` phải trùng khít `monitoring/prometheus/alert-rules.yml`
+  (bản mà docker-compose mount). Helm chỉ đọc được file NẰM TRONG thư mục chart nên buộc
+  phải giữ một bản sao. `ci/scripts/rule-checks.sh` có luật so khớp hai file — CI đỏ nếu lệch.
+  Đồng bộ bằng: make sync-alert-rules
+  ───────────────────────────────────────────────────────────────────────────────
 */}}
 {{- if .Values.monitoring.prometheusRules.enabled -}}
 apiVersion: monitoring.coreos.com/v1
@@ -11,293 +30,8 @@ metadata:
   name: solar-battery-rules
   labels:
     {{- include "solar.labels" . | nindent 4 }}
-    # Label này yêu cầu kube-prometheus-stack discover (set qua chart values)
+    # Label này để kube-prometheus-stack discover (khớp ruleSelector trong chart values)
     release: monitoring
 spec:
-  groups:
-  # ---- Service availability & error rates ----
-  - name: service-health
-    interval: 30s
-    rules:
-    - alert: ServiceDown
-      expr: up{tier=~"backend|gateway"} == 0
-      for: 1m
-      labels: { severity: critical }
-      annotations:
-        summary: "Service {{`{{ $labels.service }}`}} is down"
-        description: "Prometheus failed to scrape {{`{{ $labels.service }}`}} for over 1 minute."
-
-    - alert: HighErrorRate
-      expr: |
-        (
-          sum(rate(http_requests_received_total{code=~"5.."}[5m])) by (service)
-          /
-          sum(rate(http_requests_received_total[5m])) by (service)
-        ) > 0.05
-      for: 5m
-      labels: { severity: critical }
-      annotations:
-        summary: "High 5xx rate on {{`{{ $labels.service }}`}}"
-        description: "More than 5% of requests are 5xx errors over the last 5 minutes."
-
-    - alert: HighLatencyP95
-      expr: |
-        histogram_quantile(0.95,
-          sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
-        ) > 1
-      for: 5m
-      labels: { severity: warning }
-      annotations:
-        summary: "p95 latency on {{`{{ $labels.service }}`}} > 1s"
-        description: "Request latency degraded — investigate downstream calls."
-
-  # ---- Messaging & Reliability patterns ----
-  - name: messaging-reliability
-    interval: 30s
-    rules:
-    - alert: OutboxBacklog
-      expr: outbox_messages_pending_count > 100
-      for: 5m
-      labels: { severity: warning }
-      annotations:
-        summary: "Outbox backlog > 100 messages"
-        description: "{{`{{ $value }}`}} messages pending publish — RabbitMQ down or relay job stuck."
-
-    - alert: OutboxPublishFailures
-      expr: rate(outbox_messages_failures_total[5m]) > 1
-      for: 2m
-      labels: { severity: critical }
-      annotations:
-        summary: "Outbox publish failing"
-        description: "Reasons: {{`{{ $labels.reason }}`}}. Likely RabbitMQ outage."
-
-    - alert: OutboxPoisonMessages
-      expr: increase(outbox_messages_skipped_total[10m]) > 0
-      for: 1m
-      labels: { severity: warning }
-      annotations:
-        summary: "Outbox skipped poison messages"
-        description: "Messages reached MaxRetries — manual intervention required."
-
-    - alert: HighInboxDuplicateRate
-      expr: |
-        (
-          sum(rate(inbox_messages_skipped_duplicate_total[5m])) by (consumer)
-          /
-          (sum(rate(inbox_messages_processed_total[5m])) by (consumer)
-           + sum(rate(inbox_messages_skipped_duplicate_total[5m])) by (consumer))
-        ) > 0.5
-      for: 5m
-      labels: { severity: warning }
-      annotations:
-        summary: "Consumer {{`{{ $labels.consumer }}`}} duplicate rate > 50%"
-        description: "Consumer is retrying too often — check ack logic."
-
-    - alert: IdempotencyConflictSpike
-      expr: rate(idempotency_key_conflicts_total[5m]) > 0.5
-      for: 5m
-      labels: { severity: warning }
-      annotations:
-        summary: "Idempotency conflicts spike"
-        description: "Client may be sending parallel duplicate requests."
-
-  # ---- Alert-Ticket Saga (Sprint 5B #239) ----
-  - name: alert-ticket-saga
-    interval: 30s
-    rules:
-    - alert: SagaFailedRateSpike
-      expr: increase(saga_alert_ticket_failed_total[5m]) > 5
-      for: 2m
-      labels: { severity: critical }
-      annotations:
-        summary: "Alert-Ticket Saga failures {{`{{ $value }}`}} in 5m"
-        description: "Reason {{`{{ $labels.reason }}`}}. Runbook: docs/runbooks/08-saga-failed.md"
-
-    - alert: SagaStuck
-      expr: saga_alert_ticket_active_count > 50
-      for: 15m
-      labels: { severity: warning }
-      annotations:
-        summary: "Saga active count {{`{{ $value }}`}} over 15min"
-        description: "Quartz timer drift or consumer crash. Runbook: docs/runbooks/09-saga-stuck.md"
-
-  # ---- Sprint IoT-2 — IoT edge device fleet (§52.12 metric schema) ----
-  # Metric names: iot_device_heartbeats_total, iot_devices_online_count,
-  #               iot_devices_offline_total, iot_sensor_readings_ingested_total,
-  #               iot_sensor_readings_rejected_total{reason}, iot_firmware_updates_total,
-  #               iot_devices_auto_decommissioned_total, iot_cross_source_mismatch_alerts_total.
-  - name: iot-device-fleet
-    interval: 30s
-    rules:
-    - alert: IotDeviceOfflineSpike
-      expr: increase(iot_devices_offline_total[5m]) > 3
-      for: 2m
-      labels: { severity: warning }
-      annotations:
-        summary: "{{`{{ $value }}`}} IoT device(s) marked Offline in 5m"
-        description: "Check WiFi/network at site, MQTT broker status, heartbeat handler."
-
-    - alert: IotHeartbeatStall
-      expr: |
-        rate(iot_device_heartbeats_total[5m]) == 0
-        and on() iot_devices_online_count > 0
-      for: 5m
-      labels: { severity: critical }
-      annotations:
-        summary: "No IoT heartbeats received in 5min while fleet is online"
-        description: "Possible: gateway down, /api/iot-devices/heartbeat route broken, or full-fleet disconnect."
-
-    - alert: IotSensorOutlierSpike
-      expr: |
-        (
-          sum(rate(iot_sensor_readings_rejected_total{reason="sensor_outlier"}[10m]))
-          /
-          (sum(rate(iot_sensor_readings_ingested_total[10m]))
-           + sum(rate(iot_sensor_readings_rejected_total{reason="sensor_outlier"}[10m])))
-        ) > 0.1
-      for: 10m
-      labels: { severity: warning }
-      annotations:
-        summary: "Outlier reject rate {{`{{ $value | humanizePercentage }}`}} > 10%"
-        description: "Check device calibration profiles or raw BMS reading."
-
-    - alert: IotClockDriftFleetWide
-      expr: |
-        (
-          sum(rate(iot_device_heartbeats_total{status="clock_drift"}[15m]))
-          /
-          sum(rate(iot_device_heartbeats_total[15m]))
-        ) > 0.5
-      for: 15m
-      labels: { severity: warning }
-      annotations:
-        summary: "{{`{{ $value | humanizePercentage }}`}} of heartbeats have clock_drift status"
-        description: "Likely NTP outage — check time.google.com reachability."
-
-    - alert: IotFirmwareUpdateFailureSpike
-      expr: |
-        (
-          sum(increase(iot_firmware_updates_total{status=~"failed|rolledback"}[1h]))
-          /
-          sum(increase(iot_firmware_updates_total[1h]))
-        ) > 0.3
-      for: 5m
-      labels: { severity: critical }
-      annotations:
-        summary: "Firmware update fail rate {{`{{ $value | humanizePercentage }}`}} in last 1h"
-        description: "Consider archiving release via POST /api/admin/iot-firmware-releases/{id}/archive."
-
-    # Sprint IoT-2 #IoT2-17 — device tự decommission do outlier > 50/h.
-    - alert: IotDeviceAutoDecommissionedSpike
-      expr: increase(iot_devices_auto_decommissioned_total[1h]) > 0
-      for: 1m
-      labels: { severity: critical }
-      annotations:
-        summary: "{{`{{ $value }}`}} device(s) auto-decommissioned (outlier > 50/h)"
-        description: "Sensor may be faulty. Inspect IotDevice.AutoDecommissionedAt + last calibration."
-
-    # Sprint IoT-2 #IoT2-28 — BMS vs IoT cross-source mismatch burst.
-    - alert: IotCrossSourceMismatchBurst
-      expr: increase(iot_cross_source_mismatch_alerts_total[1h]) > 5
-      for: 10m
-      labels: { severity: warning }
-      annotations:
-        summary: "{{`{{ $value }}`}} SensorMismatch alerts in 1h"
-        description: "BMS calibration drift or IoT sensor lệch. Check Bms vs IotGateway readings."
-
-    # Sprint IoT-2 #IoT2-18 — mapping permission denied burst (key abuse?).
-    - alert: IotIngestMappingDenied
-      expr: increase(iot_sensor_readings_rejected_total{reason="mapping_invalid"}[5m]) > 20
-      for: 5m
-      labels: { severity: warning }
-      annotations:
-        summary: "{{`{{ $value }}`}} readings rejected — device/site mismatch"
-        description: "API key may be misconfigured or compromised. Audit IotDevice.SiteId vs BatteryAsset.SiteId."
-
-  # ---- Sprint IoT-2 — MQTT bridge alerts (broker thuộc iot repo) ----
-  - name: iot-mqtt-bridge
-    interval: 30s
-    rules:
-    - alert: MqttBridgeDisconnected
-      expr: mqtt_bridge_connected == 0 and on() mqtt_bridge_enabled == 1
-      for: 2m
-      labels: { severity: critical }
-      annotations:
-        summary: "MQTT bridge disconnected from broker > 2min"
-        description: "Check broker reachability, Mqtt__Password, TLS cert, ACL. Bridge auto-reconnects every Mqtt__ReconnectIntervalSeconds."
-
-  # ---- Infrastructure ----
-  - name: infrastructure
-    interval: 30s
-    rules:
-    - alert: ContainerMemoryHigh
-      expr: |
-        (container_memory_working_set_bytes{name!=""}
-         / container_spec_memory_limit_bytes{name!=""}) > 0.9
-      for: 5m
-      labels: { severity: warning }
-      annotations:
-        summary: "Container {{`{{ $labels.name }}`}} memory > 90%"
-
-    - alert: PostgresConnectionsHigh
-      expr: |
-        (sum(pg_stat_activity_count) by (instance)
-         / sum(pg_settings_max_connections) by (instance)) > 0.8
-      for: 5m
-      labels: { severity: warning }
-      annotations:
-        summary: "Postgres connections > 80% of limit"
-
-  # ---- Sprint 7 #118 — Environmental incident monitoring ----
-  # Metrics: environmental_incident_detected_total{type,severity},
-  #          environmental_incident_detection_latency_seconds_bucket.
-  - name: environmental-monitoring
-    interval: 30s
-    rules:
-    - alert: EnvironmentalIncidentCriticalDetected
-      expr: increase(environmental_incident_detected_total{severity="Critical"}[5m]) > 0
-      for: 0m
-      labels: { severity: critical }
-      annotations:
-        summary: "Critical environmental incident detected ({{`{{ $labels.type }}`}})"
-        description: "{{`{{ $value }}`}} Critical incident (type={{`{{ $labels.type }}`}}) in 5m. Page Manager + Admin."
-
-    - alert: EnvironmentalIncidentDetectionLatencyHigh
-      expr: |
-        histogram_quantile(0.95,
-          sum(rate(environmental_incident_detection_latency_seconds_bucket[15m])) by (le)
-        ) > 300
-      for: 10m
-      labels: { severity: warning }
-      annotations:
-        summary: "Env incident detection latency p95 {{`{{ $value }}`}}s"
-        description: "Environmental incident detection slow (p95 > 5min). Check report/ingest pipeline."
-
-  # ---- Sprint audit #AUDIT-44 — audit pipeline (mirror monitoring/prometheus/alert-rules.yml group audit-pipeline) ----
-  - name: audit-pipeline
-    interval: 30s
-    rules:
-    - alert: AuditOutboxBacklog
-      expr: audit_outbox_pending_total > 1000
-      for: 5m
-      labels: { severity: warning, domain: audit }
-      annotations:
-        summary: "Audit outbox backlog on {{`{{ $labels.service }}`}} ({{`{{ $value }}`}} pending)"
-        description: "audit_outbox_pending_total > 1000 trong 5 phút. Check relay running / RabbitMQ healthy / Redis leader key. Runbook: docs/audit/operations-runbook.md."
-
-    - alert: AuditConsumerLag
-      expr: histogram_quantile(0.99, sum(rate(audit_consumer_lag_seconds_bucket[5m])) by (le)) > 30
-      for: 5m
-      labels: { severity: warning, domain: audit }
-      annotations:
-        summary: "Audit consumer lag p99 > 30s ({{`{{ $value | humanize }}`}}s)"
-        description: "Aggregator ingest lag p99 vượt 30s (SLO < 10s). Scale aggregator pod / check audit_aggregate index."
-
-    - alert: AuditDlqGrowing
-      expr: audit_dlq_size_total > 100
-      for: 5m
-      labels: { severity: critical, domain: audit }
-      annotations:
-        summary: "Audit DLQ growing ({{`{{ $value }}`}} messages)"
-        description: "aggregator.audit.events.dlq > 100. Inspect poison message, fix consumer, shovel DLQ → main queue. Runbook: docs/audit/operations-runbook.md."
+{{ .Files.Get "files/alert-rules.yml" | indent 2 }}
 {{- end }}

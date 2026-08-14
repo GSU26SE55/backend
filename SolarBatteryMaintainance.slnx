@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/ApiGateway/">
     <Project Path="services/ApiGateway/src/ApiGateway/ApiGateway.csproj" />
+    <Project Path="services/ApiGateway/tests/ApiGateway.UnitTests/ApiGateway.UnitTests.csproj" />
   </Folder>
   <Folder Name="/Services/" />
   <Folder Name="/Services/AIService/" />
@@ -31,6 +32,7 @@
     <Project Path="services/FileStorageService/src/FileStorageService.Application/FileStorageService.Application.csproj" />
     <Project Path="services/FileStorageService/src/FileStorageService.Domain/FileStorageService.Domain.csproj" />
     <Project Path="services/FileStorageService/src/FileStorageService.Infrastructure/FileStorageService.Infrastructure.csproj" />
+    <Project Path="services/FileStorageService/tests/FileStorageService.IntegrationTests/FileStorageService.IntegrationTests.csproj" />
     <Project Path="services/FileStorageService/tests/FileStorageService.UnitTests/FileStorageService.UnitTests.csproj" />
   </Folder>
   <Folder Name="/Services/SmsService/">
@@ -53,7 +55,7 @@
     <Project Path="services\TicketService\src\TicketService.Api\TicketService.Api.csproj" />
     <Project Path="services\TicketService\src\TicketService.Application\TicketService.Application.csproj" />
     <Project Path="services\TicketService\src\TicketService.Domain\TicketService.Domain.csproj" />
-    <Project Path="services\TicketService\tests\TicketService.IntergrationTests\TicketService.IntergrationTests.csproj" Type="Classic C#" />
+    <Project Path="services\TicketService\tests\TicketService.IntegrationTests\TicketService.IntegrationTests.csproj" Type="Classic C#" />
     <Project Path="services\TicketService\tests\TicketService.UnitTests\TicketService.UnitTests.csproj" Type="Classic C#" />
   </Folder>
   <Folder Name="/Services/AuditAggregatorService/">
@@ -67,6 +69,7 @@
     <Project Path="shared/src/SharedContracts/SharedContracts.csproj" />
     <Project Path="shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />
     <Project Path="shared/src/SharedKernels/SharedKernels.csproj" />
+    <Project Path="shared/tests/SharedInfrastructure.IntegrationTests/SharedInfrastructure.IntegrationTests.csproj" />
     <Project Path="shared/tests/SharedInfrastructure.UnitTests/SharedInfrastructure.UnitTests.csproj" />
   </Folder>
   <Folder Name="/SolutionItems/" />

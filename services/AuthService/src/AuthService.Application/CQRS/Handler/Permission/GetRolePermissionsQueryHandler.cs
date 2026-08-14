@@ -23,7 +23,7 @@ public class GetRolePermissionsQueryHandler : IRequestHandler<GetRolePermissions
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "RoleId không hợp lệ."
+                Message = "Invalid RoleId."
             };
         }
 
@@ -37,7 +37,7 @@ public class GetRolePermissionsQueryHandler : IRequestHandler<GetRolePermissions
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Role không tồn tại."
+                Message = "Role does not exist."
             };
         }
 

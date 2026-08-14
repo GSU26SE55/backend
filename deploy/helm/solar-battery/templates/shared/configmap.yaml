@@ -1,4 +1,5 @@
 {{/* ConfigMap chứa toàn bộ non-secret config — mọi service envFrom block này */}}
+{{- $frontendOrigin := .Values.global.frontendOrigin | default (printf "https://%s" .Values.global.domain) -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -23,21 +24,59 @@ data:
   ReverseProxy__Clusters__ticketCluster__Destinations__destination1__Address: "http://ticketservice:80"
   ReverseProxy__Clusters__notificationCluster__Destinations__destination1__Address: "http://notificationservice:80"
   ReverseProxy__Clusters__smsCluster__Destinations__destination1__Address: "http://smsservice:80"
+  ReverseProxy__Clusters__auditAggregatorCluster__Destinations__destination1__Address: "http://auditaggregatorservice:80"
 
   # Object Storage URLs build từ domain
   ObjectStorage__PublicServiceUrl: "https://files.{{ .Values.global.domain }}"
-  ObjectStorage__PublicBaseUrl: "https://files.{{ .Values.global.domain }}/{{ .Values.minio.bucketName }}"
+  # GH-788 — bucket là private nên KHÔNG phát URL public nữa: URL đó chỉ trả 403, mà FE lại tưởng
+  # dùng được. Rỗng ⇒ API trả publicUrl=null ⇒ client buộc đi đường presigned URL (có hạn) hoặc
+  # endpoint download của FileStorageService (kiểm quyền). Giống hệt dev, vốn đã chạy như vậy.
+  ObjectStorage__PublicBaseUrl: ""
+
+  # GH-790 — kênh gRPC nội bộ FileStorage ↔ TicketService.
+  # BẮT BUỘC: thiếu là FileStorageService KHÔNG khởi động được (Program.cs ném
+  # InvalidOperationException "FILE_STORAGE_SERVICE_GRPC_SERVER_PORT (or Grpc:Port) must be
+  # configured."). Chart trước đây chưa bao giờ khai hai biến này, nên cả voice transcription lẫn
+  # quét virus đính kèm đều không có đường chạy trên k8s.
+  # Cổng phải KHÁC 8080 (cổng HTTP) — Program.cs cũng chặn trường hợp trùng.
+  FILE_STORAGE_SERVICE_GRPC_SERVER_PORT: "8081"
+  FILE_STORAGE_GRPC_CLIENT_ADDRESS: "http://filestorageservice:8081"
 
   # Google OAuth callback — build theo domain
-  GoogleOAuth__RedirectUri: "https://api.{{ .Values.global.domain }}/auth-service/api/auth/google/callback"
-  GoogleOAuth__FrontendCallbackUrl: "https://{{ .Values.global.domain }}/auth/google-callback"
+  GoogleOAuth__RedirectUri: "https://api.{{ .Values.global.domain }}/api/auth/google/callback"
+  GoogleOAuth__AllowedRedirectUris__0: "https://api.{{ .Values.global.domain }}/api/auth/google/callback"
+  GoogleOAuth__FrontendCallbackUrl: {{ printf "%s/auth/google-callback" $frontendOrigin | quote }}
 
   # Admin invite email link — EmailService append ?token=...
-  AdminInvite__AcceptUrlBase: "https://{{ .Values.global.domain }}/auth/accept-invite"
+  AdminInvite__AcceptUrlBase: {{ printf "%s/auth/accept-invite" $frontendOrigin | quote }}
+
+  # Sprint 6.3 NOTI3-15 — gốc URL cho link hủy đăng ký một chạm trong email.
+  # Gmail/Yahoo POST thẳng vào URL này (List-Unsubscribe-Post), nên phải là domain công khai
+  # thật. Ingress của apigateway phục vụ host api.{domain} ở path "/", còn controller nằm tại
+  # /api/notification-unsubscribe ⇒ base đúng là https://api.{domain}.
+  # Thiếu biến này thì EmailBusChannel vẫn gửi email nhưng bỏ header List-Unsubscribe và chỉ
+  # ghi 1 dòng LogWarning — im lặng về phía người dùng.
+  Notification__Unsubscribe__PublicBaseUrl: "https://api.{{ .Values.global.domain }}"
 
   # #AUTH-51 — Frontend Web app base URL (cross-device 2FA confirm email link).
   # AuthService dùng `Frontend:WebBaseUrl` để build URL "https://{domain}/2fa/cross-device-confirm?token=..."
-  Frontend__WebBaseUrl: "https://{{ .Values.global.domain }}"
+  Frontend__WebBaseUrl: {{ $frontendOrigin | quote }}
+
+  # ---------- #AUTH-05 (P0) — CORS whitelist ----------
+  # Origin mặc định = chính domain phục vụ FE Web, dựng từ `global.domain` giống
+  # `Frontend__WebBaseUrl` ở trên để không bao giờ lệch nhau.
+  #
+  # ⚠️ BẮT BUỘC khi `global.aspnetEnvironment: Production` — thiếu khoá này thì `AddCorsExtentions`
+  # ném `InvalidOperationException` và **cả 9 pod CrashLoopBackOff**, không phải chỉ cảnh báo.
+  # Ở Development/Staging thì thiếu chỉ ra cảnh báo + mở cho mọi origin, nhưng cụm staging đã có
+  # Ingress công khai + cert thật nên vẫn nên siết.
+  #
+  # Origin = scheme + host (+ port nếu khác 443/80). KHÔNG kèm path, KHÔNG kèm dấu '/' cuối.
+  # Thêm origin khác (mobile web, cổng dev, domain phụ) qua `global.extraCorsOrigins` trong values.
+  Cors__AllowedOrigins__0: {{ $frontendOrigin | quote }}
+  {{- range $i, $origin := .Values.global.extraCorsOrigins }}
+  Cors__AllowedOrigins__{{ add $i 1 }}: {{ $origin | quote }}
+  {{- end }}
 
   # Tất cả entry còn lại lấy từ .Values.config map
   {{- range $key, $value := .Values.config }}

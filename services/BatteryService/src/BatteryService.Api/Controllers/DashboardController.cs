@@ -31,10 +31,19 @@ public class DashboardController : ControllerBase
     ///
     /// Cách hoạt động:
     /// - Nếu <c>siteId</c> được truyền, mọi count đều filter theo site đó.
-    /// - Nếu không, trả tổng hợp toàn bộ system (yêu cầu role Admin/Manager).
+    /// - Nếu không, trả tổng hợp toàn bộ system.
     /// - Filter <c>!IsDeleted</c> trên tất cả truy vấn.
     ///
-    /// Phân quyền: yêu cầu JWT hợp lệ (<c>[Authorize]</c> ở controller).
+    /// Phân quyền (GH-774) — kiểm trong handler chứ không phải bằng attribute, vì đây là giới hạn
+    /// theo DỮ LIỆU: attribute ở controller không chặn được ca truyền <c>siteId</c> của người khác.
+    /// <list type="bullet">
+    ///   <item><description>Không có <c>siteId</c> (toàn hệ thống): chỉ Admin/Manager — còn lại 403.</description></item>
+    ///   <item><description>Có <c>siteId</c>: Admin/Manager/Staff xem được mọi site (spec §34.10.6);
+    ///   Customer chỉ site của mình, site của người khác trả 404 (403 sẽ xác nhận site đó có thật).</description></item>
+    /// </list>
+    /// Trước GH-774 chú thích này ghi "yêu cầu role Admin/Manager" nhưng code chỉ có
+    /// <c>[Authorize]</c>: đo được lúc chạy thật là Staff và Customer đều nhận 200 với đủ số liệu
+    /// toàn đội tàu.
     /// </remarks>
     /// <param name="siteId">Tùy chọn — giới hạn thống kê trong 1 site cụ thể.</param>
     /// <returns><c>CommonResponse</c> chứa <c>BatteryDashboardStatsDto</c>.</returns>

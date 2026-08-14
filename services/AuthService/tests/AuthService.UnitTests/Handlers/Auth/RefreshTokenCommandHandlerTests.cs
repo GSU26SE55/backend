@@ -98,7 +98,7 @@ public class RefreshTokenCommandHandlerTests
 
         response.IsSuccess.Should().BeFalse();
         response.StatusCode.Should().Be(401);
-        response.Message.Should().Contain("tái sử dụng");
+        response.Message.Should().Contain("reuse");
 
         otherActive.Status.Should().Be(RefreshTokenStatus.Revoked);
         otherActive.RevokedAt.Should().NotBeNull();

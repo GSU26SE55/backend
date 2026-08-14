@@ -28,7 +28,7 @@ public class ResolveAlertCommandHandler : IRequestHandler<ResolveAlertCommand, C
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy cảnh báo."
+                Message = "Alert not found."
             };
         }
 
@@ -38,7 +38,7 @@ public class ResolveAlertCommandHandler : IRequestHandler<ResolveAlertCommand, C
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Cảnh báo đã được gộp vào cảnh báo khác."
+                Message = "Alert has already been merged into another alert."
             };
         }
 
@@ -52,7 +52,7 @@ public class ResolveAlertCommandHandler : IRequestHandler<ResolveAlertCommand, C
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đóng cảnh báo thành công."
+            Message = "Alert resolved successfully."
         };
     }
 }

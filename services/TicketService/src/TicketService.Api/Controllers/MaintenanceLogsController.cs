@@ -55,7 +55,7 @@ public class MaintenanceLogsController : ControllerBase
         {
             IsSuccess = true,
             StatusCode = StatusCodes.Status200OK,
-            Message = "Lấy danh sách nhật ký bảo trì thành công.",
+            Message = "Maintenance logs retrieved successfully.",
             Data = result
         });
     }
@@ -95,7 +95,7 @@ public class MaintenanceLogsController : ControllerBase
         {
             IsSuccess = true,
             StatusCode = StatusCodes.Status200OK,
-            Message = "Lấy nhật ký bảo trì theo ticket thành công.",
+            Message = "Maintenance logs for the ticket retrieved successfully.",
             Data = result
         });
     }

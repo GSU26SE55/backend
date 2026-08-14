@@ -39,8 +39,8 @@ public class ChatSuggestCommandHandlerTests
     {
         Id = id,
         Code = "TK-001",
-        Title = "Pin bị lỗi",
-        Description = "Mô tả lỗi pin",
+        Title = "Battery fault",
+        Description = "Battery fault description",
         Category = TicketCategoryEnum.Charging,
         Status = TicketStatusEnum.Open,
         BatteryAssetId = Guid.NewGuid(),
@@ -63,7 +63,7 @@ public class ChatSuggestCommandHandlerTests
                 .Also(m => m.Setup(r => r.GetAllAsync()).Returns(new List<Ticket> { ticket }.BuildMock()))
                 .Object);
 
-        var expectedSuggestions = new List<string> { "Gợi ý 1", "Gợi ý 2", "Gợi ý 3" };
+        var expectedSuggestions = new List<string> { "Suggestion 1", "Suggestion 2", "Suggestion 3" };
         _aiClient
             .Setup(c => c.SuggestAsync(It.IsAny<string>(), It.IsAny<ChatAiIntentEnum>(),
                 It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -83,7 +83,7 @@ public class ChatSuggestCommandHandlerTests
         Assert.True(result.IsSuccess);
         Assert.NotNull(result.Data);
         Assert.Equal(3, result.Data.Suggestions.Count);
-        Assert.Equal("Gợi ý 1", result.Data.Suggestions[0]);
+        Assert.Equal("Suggestion 1", result.Data.Suggestions[0]);
         _aiSuggestions.Verify(r => r.AddAsync(It.IsAny<ChatAiSuggestion>()), Times.Once);
     }
 

@@ -99,6 +99,7 @@ public class ProfileExtensionHandlerTests
             Account = matchingAccount,
             Department = "Ops",
             IsAvailable = true,
+            SkillTier = StaffSkillTierEnum.ModuleSpecialist,
             MaxConcurrentTickets = 4,
             Skills = new List<StaffSkill>
             {
@@ -128,6 +129,7 @@ public class ProfileExtensionHandlerTests
         response.IsSuccess.Should().BeTrue();
         response.Data.Should().ContainSingle();
         response.Data![0].AccountId.Should().Be(matchingAccount.Id);
+        response.Data[0].SkillTier.Should().Be((int)StaffSkillTierEnum.ModuleSpecialist);
         response.Data[0].Skills.Should().ContainSingle(skill => skill.SkillCode == "LiFePO4");
     }
 }

@@ -6,6 +6,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -14,12 +15,17 @@ namespace TicketService.Application.CQRS.Handler.Participants;
 public class ParticipantAddCommandHandler : IRequestHandler<ParticipantAddCommand, ParticipantActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IActivityLogger _activityLogger;
 
-    public ParticipantAddCommandHandler(ITicketUnitOfWork uow, IMessageProducerService producer)
+    public ParticipantAddCommandHandler(
+        ITicketUnitOfWork uow,
+        IIntegrationEventOutboxWriter outboxWriter,
+        IActivityLogger activityLogger)
     {
         _uow = uow;
-        _producer = producer;
+        _outboxWriter = outboxWriter;
+        _activityLogger = activityLogger;
     }
 
     public async Task<ParticipantActionResponse> Handle(ParticipantAddCommand request, CancellationToken ct)
@@ -28,7 +34,7 @@ public class ParticipantAddCommandHandler : IRequestHandler<ParticipantAddComman
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var activeParticipants = await _uow.TicketParticipants.GetAllAsync()
             .AsNoTracking()
@@ -39,10 +45,10 @@ public class ParticipantAddCommandHandler : IRequestHandler<ParticipantAddComman
         var isPrimaryAssignee = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.ParticipantType == ParticipantTypeEnum.PrimaryAssignee);
 
         if (!isManagerOrAdmin && !isPrimaryAssignee)
-            return Fail(403, "Không có quyền thêm participant vào ticket này.");
+            return Fail(403, "You do not have permission to add a participant to this ticket.");
 
         if (activeParticipants.Any(p => p.UserId == request.UserId))
-            return Fail(400, "Người dùng này đã là participant active của ticket.");
+            return Fail(400, "This user is already an active participant of the ticket.");
 
         var participant = new TicketParticipant
         {
@@ -59,20 +65,27 @@ public class ParticipantAddCommandHandler : IRequestHandler<ParticipantAddComman
         };
 
         await _uow.TicketParticipants.AddAsync(participant);
-        await _uow.SaveChangesAsync(ct);
-
-        await _producer.PublishAsync(new ParticipantAddedEvent(
+        await _outboxWriter.WriteAsync(new ParticipantAddedEvent(
             ticket.Id,
             participant.UserId,
             (int)participant.UserRole,
             (int)participant.ParticipantType,
             request.ActorUserId), ct);
 
+        await _activityLogger.LogAsync(
+            ticket.Id,
+            request.ActorUserId,
+            request.ActorRole,
+            request.ActorName,
+            ActivityActionEnum.ParticipantAdded,
+            newValue: $"User {participant.UserId} added as {participant.ParticipantType}.");
+        await _uow.SaveChangesAsync(ct);
+
         return new ParticipantActionResponse
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Thêm participant thành công.",
+            Message = "Participant added successfully.",
             Data = ToDto(participant)
         };
     }

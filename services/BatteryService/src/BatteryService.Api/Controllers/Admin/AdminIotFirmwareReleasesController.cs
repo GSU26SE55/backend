@@ -276,8 +276,8 @@ public class AdminIotFirmwareReleasesController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "File firmware là bắt buộc.",
-                ListErrors = new() { new() { Field = "File", Detail = "Bắt buộc upload file .bin." } }
+                Message = "Firmware file is required.",
+                ListErrors = new() { new() { Field = "File", Detail = "You must upload a .bin file." } }
             });
         }
 
@@ -288,8 +288,8 @@ public class AdminIotFirmwareReleasesController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Chỉ chấp nhận file .bin.",
-                ListErrors = new() { new() { Field = "File", Detail = "Extension phải là .bin" } }
+                Message = "Only .bin files are accepted.",
+                ListErrors = new() { new() { Field = "File", Detail = "Extension must be .bin" } }
             });
         }
 
@@ -335,7 +335,7 @@ public class AdminIotFirmwareReleasesController : ControllerBase
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Upload firmware binary thành công. Dùng URL + SHA-256 để tạo release.",
+            Message = "Firmware binary uploaded successfully. Use the URL + SHA-256 to create a release.",
             Data = new FirmwareBinaryUploadDto
             {
                 ArtifactUrl = artifactUrl,

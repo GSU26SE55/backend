@@ -94,7 +94,7 @@ public class ChangePasswordCommandHandlerTests
         }, CancellationToken.None);
 
         resp.StatusCode.Should().Be(400);
-        resp.Message.Should().Contain("khác");
+        resp.Message.Should().Contain("different");
         // hasher.Verify KHÔNG được gọi vì check new==old đứng trước.
         _hasher.Verify(h => h.Verify(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
@@ -296,6 +296,6 @@ public class ChangePasswordCommandHandlerTests
 
         resp.IsSuccess.Should().BeFalse();
         resp.StatusCode.Should().Be(409);
-        resp.Message.Should().Contain("thay đổi bởi tiến trình khác");
+        resp.Message.Should().Contain("modified by another process");
     }
 }

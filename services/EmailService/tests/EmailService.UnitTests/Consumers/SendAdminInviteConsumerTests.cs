@@ -32,8 +32,8 @@ public class SendAdminInviteConsumerTests : IAsyncLifetime
             .ReturnsAsync("<html>ADMIN INVITE HTML</html>");
 
         _inbox = new Mock<IInboxStore>();
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
 
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -56,10 +56,21 @@ public class SendAdminInviteConsumerTests : IAsyncLifetime
         services.AddSingleton<EmailSenderService>(sp => new EmailSenderService(
             sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<HttpClient>()));
+        // Sprint 6.3 NOTI3-05 (#705) — consumer nay phụ thuộc IEmailProvider (seam cho provider thứ 2).
+        services.AddSingleton<IEmailProvider>(sp => sp.GetRequiredService<EmailSenderService>());
 
         services.AddMassTransitTestHarness(x =>
         {
             x.AddConsumer<SendAdminInviteConsumer>();
+
+            // Sửa flaky 2026-07-31 — mặc định inactivity timeout của MassTransit v8 chỉ **1 giây**.
+            // `harness.Consumed.Any<T>()` ngừng chờ khi bus "im" quá ngưỡng đó rồi trả `false`, nên
+            // **hết giờ và hỏng thật cho ra CÙNG một kết quả**. Khi chạy cả solution song song
+            // (~9 assembly cùng lúc) việc điều phối luồng trượt quá 1 giây là test đỏ dù code đúng —
+            // chạy riêng assembly này thì pass trong 168ms. Nới trần theo đúng khuôn đã dùng ở
+            // NotificationService (`Helpers/ConsumerTestHarness.cs`): hỏng chậm 30 giây vẫn tốt hơn
+            // xanh-đỏ thất thường.
+            x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
         });
 
         _provider = services.BuildServiceProvider(true);
@@ -113,8 +124,8 @@ public class SendAdminInviteConsumerTests : IAsyncLifetime
     [Fact]
     public async Task Consume_DuplicateMessage_InboxBlocks_NoEmailSent()
     {
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendAdminInviteConsumer), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), nameof(SendAdminInviteConsumer), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(InboxClaim.Completed);
 
         await _harness.Bus.Publish(new SendAdminInviteEvent(
             Guid.NewGuid(),
@@ -125,7 +136,7 @@ public class SendAdminInviteConsumerTests : IAsyncLifetime
             DateTime.UtcNow.AddHours(72)));
 
         await ConsumerTestWaiter.UntilAsync(
-            () => _inbox.Verify(s => s.TryMarkProcessedAsync(
+            () => _inbox.Verify(s => s.TryBeginAsync(
                 It.IsAny<Guid>(),
                 nameof(SendAdminInviteConsumer),
                 It.IsAny<CancellationToken>()), Times.AtLeastOnce),

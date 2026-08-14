@@ -27,29 +27,41 @@ public class ReportEnvironmentalIncidentCommand
     /// <summary>Ghi chú tự do.</summary>
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// GH-806 — site của thiết bị đã xác thực, lấy từ claim <c>iot:site_id</c>.
+    /// <c>null</c> khi người gọi là con người dùng JWT (endpoint report thủ công).
+    /// </summary>
+    /// <remarks>
+    /// <c>[JsonIgnore][BindNever]</c>: client KHÔNG được đặt trường này qua body — nếu không, thiết
+    /// bị chỉ cần tự khai site của mình là đi vòng qua toàn bộ hàng rào.
+    /// </remarks>
+    [JsonIgnore]
+    [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+    public Guid? AuthenticatedDeviceSiteId { get; set; }
+
     public Task<EnvironmentalIncidentResponse> ValidateAsync()
     {
         var response = new EnvironmentalIncidentResponse();
 
         if (SiteId == Guid.Empty)
-            AddError(response, nameof(SiteId), "SiteId là bắt buộc.");
+            AddError(response, nameof(SiteId), "SiteId is required.");
 
         if (!Enum.IsDefined(typeof(EnvironmentalIncidentTypeEnum), IncidentType))
-            AddError(response, nameof(IncidentType), "IncidentType không hợp lệ.");
+            AddError(response, nameof(IncidentType), "Invalid IncidentType.");
 
         if (!Enum.IsDefined(typeof(AlertSeverityEnum), Severity))
-            AddError(response, nameof(Severity), "Severity không hợp lệ.");
+            AddError(response, nameof(Severity), "Invalid Severity.");
 
         if (DetectedAt == default)
-            AddError(response, nameof(DetectedAt), "DetectedAt là bắt buộc.");
+            AddError(response, nameof(DetectedAt), "DetectedAt is required.");
         else if (DetectedAt > DateTime.UtcNow.AddMinutes(5))
-            AddError(response, nameof(DetectedAt), "DetectedAt không được vượt thời điểm hiện tại quá 5 phút.");
+            AddError(response, nameof(DetectedAt), "DetectedAt cannot be more than 5 minutes ahead of the current time.");
 
         if (ReportedBy?.Length > 256)
-            AddError(response, nameof(ReportedBy), "ReportedBy tối đa 256 ký tự.");
+            AddError(response, nameof(ReportedBy), "ReportedBy must not exceed 256 characters.");
 
         if (Notes?.Length > 1000)
-            AddError(response, nameof(Notes), "Notes tối đa 1000 ký tự.");
+            AddError(response, nameof(Notes), "Notes must not exceed 1000 characters.");
 
         return Task.FromResult(response);
     }
@@ -58,7 +70,7 @@ public class ReportEnvironmentalIncidentCommand
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu báo cáo incident không hợp lệ.";
+        response.Message = "Invalid incident report data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }
@@ -77,10 +89,10 @@ public class AcknowledgeEnvironmentalIncidentCommand
         var response = new EnvironmentalIncidentResponse();
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id incident là bắt buộc.");
+            AddError(response, nameof(Id), "Incident Id is required.");
 
         if (AcknowledgedBy == Guid.Empty)
-            AddError(response, nameof(AcknowledgedBy), "Không xác định được người acknowledge (token không hợp lệ).");
+            AddError(response, nameof(AcknowledgedBy), "Unable to determine the acknowledging user (invalid token).");
 
         return Task.FromResult(response);
     }
@@ -89,7 +101,7 @@ public class AcknowledgeEnvironmentalIncidentCommand
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu acknowledge incident không hợp lệ.";
+        response.Message = "Invalid incident acknowledge data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }
@@ -110,15 +122,15 @@ public class ResolveEnvironmentalIncidentCommand
         var response = new EnvironmentalIncidentResponse();
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id incident là bắt buộc.");
+            AddError(response, nameof(Id), "Incident Id is required.");
 
         if (ResolvedBy == Guid.Empty)
-            AddError(response, nameof(ResolvedBy), "Không xác định được người resolve (token không hợp lệ).");
+            AddError(response, nameof(ResolvedBy), "Unable to determine the resolving user (invalid token).");
 
         if (string.IsNullOrWhiteSpace(ResolutionNote))
-            AddError(response, nameof(ResolutionNote), "ResolutionNote là bắt buộc.");
+            AddError(response, nameof(ResolutionNote), "ResolutionNote is required.");
         else if (ResolutionNote.Length is < 5 or > 2000)
-            AddError(response, nameof(ResolutionNote), "ResolutionNote phải dài 5-2000 ký tự.");
+            AddError(response, nameof(ResolutionNote), "ResolutionNote must be 5-2000 characters long.");
 
         return Task.FromResult(response);
     }
@@ -127,7 +139,7 @@ public class ResolveEnvironmentalIncidentCommand
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu resolve incident không hợp lệ.";
+        response.Message = "Invalid incident resolve data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }
@@ -148,15 +160,15 @@ public class MarkFalseAlarmEnvironmentalIncidentCommand
         var response = new EnvironmentalIncidentResponse();
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id incident là bắt buộc.");
+            AddError(response, nameof(Id), "Incident Id is required.");
 
         if (FalseAlarmBy == Guid.Empty)
-            AddError(response, nameof(FalseAlarmBy), "Không xác định được người đánh dấu false alarm (token không hợp lệ).");
+            AddError(response, nameof(FalseAlarmBy), "Unable to determine the user marking the false alarm (invalid token).");
 
         if (string.IsNullOrWhiteSpace(FalseAlarmReason))
-            AddError(response, nameof(FalseAlarmReason), "FalseAlarmReason là bắt buộc.");
+            AddError(response, nameof(FalseAlarmReason), "FalseAlarmReason is required.");
         else if (FalseAlarmReason.Length is < 5 or > 2000)
-            AddError(response, nameof(FalseAlarmReason), "FalseAlarmReason phải dài 5-2000 ký tự.");
+            AddError(response, nameof(FalseAlarmReason), "FalseAlarmReason must be 5-2000 characters long.");
 
         return Task.FromResult(response);
     }
@@ -165,7 +177,7 @@ public class MarkFalseAlarmEnvironmentalIncidentCommand
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu false-alarm không hợp lệ.";
+        response.Message = "Invalid false-alarm data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 }

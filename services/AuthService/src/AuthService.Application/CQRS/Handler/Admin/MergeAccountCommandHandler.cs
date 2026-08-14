@@ -47,20 +47,20 @@ public class MergeAccountCommandHandler : IRequestHandler<MergeAccountCommand, A
             .Include(a => a.StaffProfile)
             .FirstOrDefaultAsync(a => a.Id == request.PrimaryAccountId, cancellationToken);
         if (primary == null || primary.IsDeleted)
-            return Fail(404, "Primary account không tồn tại hoặc đã bị xoá.");
+            return Fail(404, "Primary account does not exist or has been deleted.");
 
         if (primary.MergedIntoId != null)
-            return Fail(409, "Primary account đã từng bị merge vào account khác.");
+            return Fail(409, "Primary account has already been merged into another account.");
 
         var secondary = await _unitOfWork.Accounts.GetAllAsync()
             .Include(a => a.Profile)
             .Include(a => a.StaffProfile)
             .FirstOrDefaultAsync(a => a.Id == request.SecondaryAccountId, cancellationToken);
         if (secondary == null || secondary.IsDeleted)
-            return Fail(404, "Secondary account không tồn tại hoặc đã bị xoá.");
+            return Fail(404, "Secondary account does not exist or has been deleted.");
 
         if (secondary.MergedIntoId != null)
-            return Fail(409, "Secondary account đã từng bị merge trước đó.");
+            return Fail(409, "Secondary account has already been merged previously.");
 
         var now = DateTime.UtcNow;
         var conflictResolution = new Dictionary<string, object?>();
@@ -201,7 +201,7 @@ public class MergeAccountCommandHandler : IRequestHandler<MergeAccountCommand, A
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã merge account {secondary.Id} vào {primary.Id}. Revoke {activeTokens.Count} session.",
+            Message = $"Merged account {secondary.Id} into {primary.Id}. Revoked {activeTokens.Count} session(s).",
             Data = primary.Id
         };
     }

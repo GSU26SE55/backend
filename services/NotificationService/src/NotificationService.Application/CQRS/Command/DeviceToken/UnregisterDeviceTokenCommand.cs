@@ -20,18 +20,18 @@ public class UnregisterDeviceTokenCommand : IRequest<DeviceTokenActionResponse>,
         var response = new DeviceTokenActionResponse();
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Không xác định được user." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Unable to determine the current user." });
 
         if (string.IsNullOrWhiteSpace(Token))
-            response.ListErrors.Add(new Errors { Field = "Token", Detail = "Token không được trống." });
+            response.ListErrors.Add(new Errors { Field = "Token", Detail = "Token is required." });
         else if (Token.Length > 500)
-            response.ListErrors.Add(new Errors { Field = "Token", Detail = "Token tối đa 500 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Token", Detail = "Token must be at most 500 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

@@ -1,29 +1,118 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
     <meta charset="UTF-8" />
-    <title>Lời mời tham gia {{AppName}}</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="format-detection" content="telephone=no,address=no,email=no,date=no" />
+    <title>Invitation to join {{AppName}}</title>
+    <style type="text/css">
+        body, table, td, a {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        table, td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+        table {
+            border-collapse: collapse !important;
+        }
+        body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+        @media screen and (max-width: 620px) {
+            .sbm-pad {
+                padding-left: 20px !important;
+                padding-right: 20px !important;
+            }
+            .sbm-h1 {
+                font-size: 20px !important;
+                line-height: 28px !important;
+            }
+            .sbm-otp {
+                font-size: 28px !important;
+                letter-spacing: 6px !important;
+            }
+            .sbm-label, .sbm-value {
+                display: block !important;
+                width: 100% !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+            .sbm-label {
+                padding-bottom: 2px !important;
+            }
+            .sbm-value {
+                padding-top: 0 !important;
+                padding-bottom: 14px !important;
+            }
+        }
+    </style>
 </head>
-<body style="margin:0;padding:0;background:#f4f6f8;">
-    <div style="font-family: Helvetica, Arial, sans-serif; min-width:1000px; overflow:auto; line-height:1.7">
-        <div style="margin:50px auto; width:70%; padding:24px; background:#ffffff;">
-            <div style="border-bottom:1px solid #eee; padding-bottom:12px;">
-                <a href="{{AcceptUrl}}" style="font-size:1.4em; color:#00466a; text-decoration:none; font-weight:600">{{AppName}}</a>
-            </div>
-            <p style="font-size:1.1em">Xin chào {{UserName}},</p>
-            <p>Bạn được mời tham gia {{AppName}} với role <strong>{{Role}}</strong>.</p>
-            <p>Nhấn nút bên dưới để kích hoạt tài khoản và đặt mật khẩu lần đầu.</p>
-            <p style="margin:28px 0;">
-                <a href="{{AcceptUrl}}" style="background:#00466a; color:#ffffff; text-decoration:none; padding:12px 18px; border-radius:4px; display:inline-block; font-weight:600;">
-                    Kích hoạt tài khoản
-                </a>
-            </p>
-            <p style="font-size:0.95em;">Link hết hạn lúc <strong>{{ExpiresAt}}</strong>.</p>
-            <p style="font-size:0.9em; color:#555;">Nếu nút không hoạt động, copy link này vào trình duyệt:<br />{{AcceptUrl}}</p>
-            <p style="font-size:0.9em;">Xin cảm ơn,<br />{{AppName}} Team</p>
-            <hr style="border:none;border-top:1px solid #eee" />
-            <p style="font-size:0.8em; color:#777;">Email nhận lời mời: {{Email}}</p>
-        </div>
-    </div>
+<body style="margin:0; padding:0; width:100%; background-color:#eef2f6;">
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all; font-size:1px; line-height:1px; color:#eef2f6;">You have been invited to join {{AppName}} as {{Role}}.</div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; background-color:#eef2f6;">
+        <tr>
+            <td align="center" style="padding:20px 10px;">
+                <!--[if mso]>
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td>
+                <![endif]-->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px; margin:0 auto; background-color:#ffffff; border:1px solid #e3e9ef; border-radius:10px;">
+
+                    <tr>
+                        <td class="sbm-pad" style="padding:18px 32px; background-color:#00466a; border-radius:9px 9px 0 0;">
+                            <span style="font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:17px; line-height:24px; font-weight:bold; color:#ffffff;">{{AppName}}</span>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="sbm-pad" style="padding:30px 32px 8px 32px;">
+                    <h1 class="sbm-h1" style="margin:0 0 18px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:23px; line-height:31px; color:#00466a; font-weight:bold;">Invitation to join the system</h1>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;">Hello <strong>{{UserName}}</strong>,</p>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:26px; color:#2b3440; font-weight:normal;">You have been invited to join <strong>{{AppName}}</strong> as <strong>{{Role}}</strong>. Click the button below to activate your account and set your password for the first time.</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px 0;">
+                        <tr>
+                            <td align="center" style="background-color:#00466a; border-radius:6px;">
+                                <a href="{{AcceptUrl}}" target="_blank" style="display:inline-block; padding:14px 30px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:16px; line-height:20px; font-weight:bold; color:#ffffff; text-decoration:none;">Activate Account</a>
+                            </td>
+                        </tr>
+                    </table>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; margin:0 0 20px 0; border:1px solid #e3e9ef; border-radius:6px;">
+                        <tr style="background-color:#ffffff;">
+                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">Login Email</td>
+                            <td class="sbm-value" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:15px; line-height:22px; color:#2b3440; font-weight:normal; vertical-align:top; word-break:break-word;">{{Email}}</td>
+                        </tr>
+                        <tr style="background-color:#f7f9fb;">
+                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">Role</td>
+                            <td class="sbm-value" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:15px; line-height:22px; color:#2b3440; font-weight:normal; vertical-align:top; word-break:break-word;">{{Role}}</td>
+                        </tr>
+                        <tr style="background-color:#ffffff;">
+                            <td class="sbm-label" width="38%" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:21px; color:#6b7785; vertical-align:top;">Link expires at</td>
+                            <td class="sbm-value" style="padding:11px 16px; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:15px; line-height:22px; color:#2b3440; font-weight:normal; vertical-align:top; word-break:break-word;">{{ExpiresAt}}</td>
+                        </tr>
+                    </table>
+                    <p style="margin:0px 0 6px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:26px; color:#6b7785; font-weight:normal;">If the button doesn't work, copy and paste the following link into your browser:</p>
+                    <p style="margin:0px 0 16px 0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:14px; line-height:26px; color:#6b7785; font-weight:normal;"><span style="word-break:break-all; color:#00466a;">{{AcceptUrl}}</span></p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="sbm-pad" style="padding:18px 32px 24px 32px; border-top:1px solid #e3e9ef;">
+                            <p style="margin:0; font-family:Helvetica,Arial,'Segoe UI',sans-serif; font-size:12px; line-height:19px; color:#6b7785;">This is an automated email from the Solar Battery Monitor system. Please do not reply to this email.</p>
+                        </td>
+                    </tr>
+
+                </table>
+                <!--[if mso]>
+                </td></tr></table>
+                <![endif]-->
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

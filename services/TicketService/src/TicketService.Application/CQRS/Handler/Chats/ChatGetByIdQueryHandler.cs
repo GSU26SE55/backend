@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -23,13 +24,13 @@ public class ChatGetByIdQueryHandler : IRequestHandler<ChatGetByIdQuery, CommonR
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() ?? t.PrimaryHandlerStaffId })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
             return Fail(404, "Ticket not found");
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles))
             return Fail(403, "Forbidden");
 
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
@@ -41,34 +42,40 @@ public class ChatGetByIdQueryHandler : IRequestHandler<ChatGetByIdQuery, CommonR
 
         var isManagerOrAdmin = TicketQueryHelper.IsManagerOrAdmin(request.ActorRoles);
 
-        if (chat is null || (chat.IsDeleted && !isManagerOrAdmin) || (chat.IsInternal && !canViewInternalChats))
-            return Fail(404, "Không tìm thấy bình luận.");
+        if (chat is null || (chat.IsInternal && !canViewInternalChats))
+            return Fail(404, "Comment not found.");
 
-        var attachments = await _unitOfWork.TicketAttachments.GetAllAsync()
-            .AsNoTracking()
-            .Where(a => a.ChatId == chat.Id && !a.IsDeleted)
-            .Select(a => new TicketAttachmentDTO
-            {
-                Id = a.Id.ToString(),
-                TicketId = a.TicketId.ToString(),
-                ChatId = a.ChatId.ToString(),
-                UploadedByUserId = a.UploadedByUserId.ToString(),
-                FileId = a.FileId.ToString(),
-                FileName = a.FileName,
-                ContentType = a.ContentType,
-                SizeBytes = a.SizeBytes,
-                Source = a.Source,
-                ThumbnailUrl = a.ThumbnailUrl,
-                IsInline = a.IsInline,
-                DownloadCount = a.DownloadCount,
-                VirusScanStatus = a.VirusScanStatus,
-                CreatedAt = a.CreatedAt
-            })
-            .ToListAsync(cancellationToken);
+        var loadChildData = !chat.IsDeleted || isManagerOrAdmin;
 
-        var chatIds = new[] { chat.Id };
+        var attachments = loadChildData
+            ? await _unitOfWork.TicketAttachments.GetAllAsync()
+                .AsNoTracking()
+                .Where(a => a.ChatId == chat.Id && !a.IsDeleted)
+                .Select(a => new TicketAttachmentDTO
+                {
+                    Id = a.Id.ToString(),
+                    TicketId = a.TicketId.ToString(),
+                    ChatId = a.ChatId.ToString(),
+                    UploadedByUserId = a.UploadedByUserId.ToString(),
+                    FileId = a.FileId.ToString(),
+                    FileName = a.FileName,
+                    ContentType = a.ContentType,
+                    SizeBytes = a.SizeBytes,
+                    Source = a.Source,
+                    ThumbnailUrl = a.ThumbnailUrl,
+                    Url = a.Url,
+                    IsInline = a.IsInline,
+                    DownloadCount = a.DownloadCount,
+                    VirusScanStatus = a.VirusScanStatus,
+                    CreatedAt = a.CreatedAt
+                })
+                .ToListAsync(cancellationToken)
+            : [];
+
+        var chatIds = loadChildData ? new[] { chat.Id } : [];
         var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_unitOfWork, chatIds, cancellationToken);
         var reactionsByChat = await ChatChildDataLoader.LoadReactionsAsync(_unitOfWork, chatIds, cancellationToken);
+        var translationsByChat = await ChatChildDataLoader.LoadTranslationsForUserAsync(_unitOfWork, chatIds, request.ActorUserId, cancellationToken);
 
         var dto = new TicketChatDTO
         {
@@ -77,24 +84,26 @@ public class ChatGetByIdQueryHandler : IRequestHandler<ChatGetByIdQuery, CommonR
             AuthorUserId = chat.AuthorUserId.ToString(),
             AuthorRole = chat.AuthorRole,
             AuthorDisplayName = chat.AuthorDisplayName,
-            Body = chat.Body,
             IsInternal = chat.IsInternal,
-            AttachmentFileIds = chat.AttachmentFileIds.Select(id => id.ToString()).ToList(),
             CreatedAt = chat.CreatedAt,
-            EditedAt = chat.EditedAt,
-            EditCount = chat.EditCount,
-            LastEditedByUserId = chat.LastEditedByUserId?.ToString(),
-            BodyFormat = chat.BodyFormat,
-            BodyHtml = chat.BodyHtml,
             ParentChatId = chat.ParentChatId?.ToString(),
             ThreadRootId = chat.ThreadRootId?.ToString(),
             ReplyCount = chat.ReplyCount,
             IsPinned = chat.IsPinned,
             PinnedAt = chat.PinnedAt,
             PinnedByUserId = chat.PinnedByUserId?.ToString(),
-            Attachments = attachments,
-            Mentions = mentionsByChat.TryGetValue(chat.Id, out var m) ? m : new(),
-            Reactions = reactionsByChat.TryGetValue(chat.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()
+            IsDeleted = chat.IsDeleted,
+            Body = chat.IsDeleted && !isManagerOrAdmin ? "This message has been deleted." : chat.Body,
+            BodyHtml = chat.IsDeleted && !isManagerOrAdmin ? null : chat.BodyHtml,
+            BodyFormat = chat.IsDeleted && !isManagerOrAdmin ? default : chat.BodyFormat,
+            AttachmentFileIds = loadChildData ? attachments.Select(a => a.FileId).ToList() : [],
+            EditedAt = chat.IsDeleted && !isManagerOrAdmin ? null : chat.EditedAt,
+            EditCount = chat.IsDeleted && !isManagerOrAdmin ? 0 : chat.EditCount,
+            LastEditedByUserId = chat.IsDeleted && !isManagerOrAdmin ? null : chat.LastEditedByUserId?.ToString(),
+            Attachments = loadChildData ? attachments : [],
+            Mentions = loadChildData ? (mentionsByChat.TryGetValue(chat.Id, out var m) ? m : new()) : [],
+            Reactions = loadChildData ? (reactionsByChat.TryGetValue(chat.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()) : new(),
+            ActiveTranslation = loadChildData ? (translationsByChat.TryGetValue(chat.Id, out var tr) ? tr : null) : null,
         };
 
         return new CommonResponse<TicketChatDTO>

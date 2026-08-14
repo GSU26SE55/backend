@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using SharedInfrastructure.Persistence.Repositories;
 using SharedKernels.Interfaces;
@@ -18,6 +19,7 @@ public class UnitOfWork : ITicketUnitOfWork
     }
 
     public IGenericRepository<Ticket> Tickets => new GenericRepository<Ticket>(_context);
+    public IGenericRepository<TicketBatteryAsset> TicketBatteryAssets => new GenericRepository<TicketBatteryAsset>(_context);
     public IGenericRepository<TicketAuditLog> TicketAuditLogs => new GenericRepository<TicketAuditLog>(_context);       // #AUDIT-24
     public IGenericRepository<TicketAuditOutbox> TicketAuditOutboxes => new GenericRepository<TicketAuditOutbox>(_context); // #AUDIT-25
     public IGenericRepository<TicketActivity> TicketActivities => new GenericRepository<TicketActivity>(_context);
@@ -33,20 +35,41 @@ public class UnitOfWork : ITicketUnitOfWork
     public IGenericRepository<KnowledgeBaseArticle> KnowledgeBaseArticles => new GenericRepository<KnowledgeBaseArticle>(_context);
     public IGenericRepository<KbArticleVersion> KbArticleVersions => new GenericRepository<KbArticleVersion>(_context);
     public IGenericRepository<TicketKbReference> TicketKbReferences => new GenericRepository<TicketKbReference>(_context);
+    public IGenericRepository<TicketAiSuggestion> TicketAiSuggestions => new GenericRepository<TicketAiSuggestion>(_context);
     public IGenericRepository<TicketParticipant> TicketParticipants => new GenericRepository<TicketParticipant>(_context);
+    public IGenericRepository<TicketAssignment> TicketAssignments => new GenericRepository<TicketAssignment>(_context);
     public IGenericRepository<TicketChatMention> TicketChatMentions => new GenericRepository<TicketChatMention>(_context);
     public IGenericRepository<TicketChatReaction> TicketChatReactions => new GenericRepository<TicketChatReaction>(_context);
     public IGenericRepository<TicketChatRead> TicketChatReads => new GenericRepository<TicketChatRead>(_context);
-    public IGenericRepository<ChatTemplate> ChatTemplates => new GenericRepository<ChatTemplate>(_context);
+    public IGenericRepository<TicketChatHide> TicketChatHides => new GenericRepository<TicketChatHide>(_context);
     public IGenericRepository<ChatAiSuggestion> ChatAiSuggestions => new GenericRepository<ChatAiSuggestion>(_context);
     public IGenericRepository<TicketChatTranslation> TicketChatTranslations => new GenericRepository<TicketChatTranslation>(_context);
     public IGenericRepository<TicketChatTranslationUser> ChatTranslationUsers => new GenericRepository<TicketChatTranslationUser>(_context);
+    public IGenericRepository<BlogPost> BlogPosts => new GenericRepository<BlogPost>(_context);
+    public IGenericRepository<BlogPostVersion> BlogPostVersions => new GenericRepository<BlogPostVersion>(_context);
+    public IGenericRepository<BlogTemplate> BlogTemplates => new GenericRepository<BlogTemplate>(_context);
 
     public async Task BeginTransactionAsync()
     {
         if (_currentTransaction != null)
             return;
         _currentTransaction = await _context.Database.BeginTransactionAsync();
+    }
+
+    public async Task ExecuteInTransactionAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await operation(cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task CommitTransactionAsync()
@@ -101,5 +124,13 @@ public class UnitOfWork : ITicketUnitOfWork
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<int> IncrementChatReplyCountAsync(Guid parentChatId, CancellationToken cancellationToken = default)
+    {
+        return _context.TicketChats
+            .Where(chat => chat.Id == parentChatId && !chat.IsDeleted)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(chat => chat.ReplyCount, chat => chat.ReplyCount + 1), cancellationToken);
     }
 }

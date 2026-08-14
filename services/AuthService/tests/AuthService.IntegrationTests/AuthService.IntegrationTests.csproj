@@ -18,14 +18,21 @@
         <PackageReference Include="FluentAssertions" Version="6.12.0" />
         <PackageReference Include="Moq" Version="4.20.70" />
         <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.2" />
-        <PackageReference Include="Testcontainers.PostgreSql" Version="3.8.0" />
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
         <PackageReference Include="MassTransit" Version="8.5.9" />
         <PackageReference Include="MassTransit.TestFramework" Version="8.5.9" />
         <PackageReference Include="coverlet.collector" Version="6.0.2">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-    </ItemGroup>
+            <!--
+          Microsoft.Extensions.* 8.0.0 kéo System.Text.Json 8.0.0 — GHSA-hh2w-p6rv-4g7w (High),
+          vá từ 8.0.4. Ghim 8.0.6 tại đây thay vì đặt sàn toàn repo: TicketService đã có
+          STJ 9.0.10 (qua FFMpegCore) nên sàn 8.x sẽ thành hạ cấp và vỡ build (NU1605).
+          Tái diễn ở project mới sẽ bị `make ci-audit` chặn.
+        -->
+        <PackageReference Include="System.Text.Json" Version="8.0.6" />
+</ItemGroup>
 
     <ItemGroup>
         <Content Include="xunit.runner.json">

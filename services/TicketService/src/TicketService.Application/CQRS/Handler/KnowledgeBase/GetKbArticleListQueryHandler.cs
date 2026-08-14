@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.CQRS.Query.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
@@ -23,30 +25,25 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
 
     public async Task<CommonResponse<PaginationResponse<KbArticleListItemDTO>>> Handle(GetKbArticleListQuery query, CancellationToken ct)
     {
-        if (!Guid.TryParse(_currentUserService.UserId, out var customerId))
+        if (!Guid.TryParse(_currentUserService.UserId, out _))
         {
             return new CommonResponse<PaginationResponse<KbArticleListItemDTO>>
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Chưa đăng nhập."
+                Message = "Not logged in."
             };
         }
 
         var dbQuery = _uow.KnowledgeBaseArticles.GetAllAsync()
             .Where(a => !a.IsDeleted);
 
-        // Role-based filtering
-        if (_currentUserService.Role.Equals("Customer", StringComparison.OrdinalIgnoreCase))
-        {
-            dbQuery = dbQuery.Where(a => a.Status == KbArticleStatusEnum.Published && !a.IsInternalOnly);
-        }
-        else
-        {
-            // Internal roles can filter by status
-            if (query.Status.HasValue)
-                dbQuery = dbQuery.Where(a => a.Status == query.Status.Value);
-        }
+        // Internal roles filter by status / template
+        if (query.Status.HasValue)
+            dbQuery = dbQuery.Where(a => a.Status == query.Status.Value);
+
+        if (query.IsTemplate.HasValue)
+            dbQuery = dbQuery.Where(a => a.IsTemplate == query.IsTemplate.Value);
 
         if (query.Category.HasValue)
             dbQuery = dbQuery.Where(a => a.Category == query.Category.Value);
@@ -57,27 +54,32 @@ public class GetKbArticleListQueryHandler : IRequestHandler<GetKbArticleListQuer
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
             var search = query.Q.ToLower();
-            dbQuery = dbQuery.Where(a => a.Title.ToLower().Contains(search) || a.Symptoms.ToLower().Contains(search));
+            dbQuery = dbQuery.Where(a => a.Title.ToLower().Contains(search));
         }
 
-        var totalItems = await dbQuery.CountAsync(ct);
-        var items = await dbQuery
-            .OrderByDescending(a => a.CreatedAt)
-            .Skip((query.PageNumber - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .ToListAsync(ct);
+        var descending = SortHelper.IsDescending(query.SortDir);
+        // Whitelist switch-case: code | title | category | status | viewCount | helpfulCount | createdAt (default).
+        var ordered = (query.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "code" => descending ? dbQuery.OrderByDescending(a => a.Code) : dbQuery.OrderBy(a => a.Code),
+            "title" => descending ? dbQuery.OrderByDescending(a => a.Title) : dbQuery.OrderBy(a => a.Title),
+            "category" => descending ? dbQuery.OrderByDescending(a => a.Category) : dbQuery.OrderBy(a => a.Category),
+            "status" => descending ? dbQuery.OrderByDescending(a => a.Status) : dbQuery.OrderBy(a => a.Status),
+            "viewcount" => descending ? dbQuery.OrderByDescending(a => a.ViewCount) : dbQuery.OrderBy(a => a.ViewCount),
+            "helpfulcount" => descending ? dbQuery.OrderByDescending(a => a.HelpfulCount) : dbQuery.OrderBy(a => a.HelpfulCount),
+            _ => descending ? dbQuery.OrderByDescending(a => a.CreatedAt) : dbQuery.OrderBy(a => a.CreatedAt),
+        };
+
+        // ToListItemDto là method call → EF không dịch sang SQL, phân trang trên entity trước.
+        var page = await ordered
+            .ThenBy(a => a.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(query.PageNumber, query.PageSize, ct);
 
         return new CommonResponse<PaginationResponse<KbArticleListItemDTO>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<KbArticleListItemDTO>
-            {
-                Items = items.Select(KnowledgeBaseMapper.ToListItemDto).ToList(),
-                TotalItems = totalItems,
-                PageNumber = query.PageNumber,
-                PageSize = query.PageSize
-            }
+            Data = page.Map(KnowledgeBaseMapper.ToListItemDto)
         };
     }
 }

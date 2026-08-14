@@ -54,22 +54,22 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (!_passwordHasher.Verify(request.CurrentPassword, account.PasswordHash))
-            return Fail(401, "Mật khẩu hiện tại không chính xác.");
+            return Fail(401, "Current password is incorrect.");
 
         var newEmail = EmailNormalizer.Normalize(request.NewEmail);
 
         if (account.Email.Equals(newEmail, StringComparison.OrdinalIgnoreCase))
-            return Fail(422, "Email mới phải khác email hiện tại.");
+            return Fail(422, "New email must be different from the current email.");
 
         var emailTaken = await _unitOfWork.Accounts
             .GetAllAsync()
             .AnyAsync(a => a.Id != request.AccountId && a.Email.ToLower() == newEmail && !a.IsDeleted, cancellationToken);
 
         if (emailTaken)
-            return Fail(409, "Email mới đã được sử dụng bởi tài khoản khác.");
+            return Fail(409, "New email is already used by another account.");
 
         // #AUTH-24: SET NX reserve email mới với owner = current accountId.
         // Nếu key đã tồn tại với owner khác → user khác đang trong flow đổi sang email này → reject.
@@ -82,7 +82,7 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
         {
             var existingOwner = await db.StringGetAsync(reserveKey);
             if (existingOwner != reserveOwner)
-                return Fail(409, "Email mới đang được tài khoản khác xử lý. Vui lòng chọn email khác hoặc thử lại sau.");
+                return Fail(409, "New email is currently being processed by another account. Please choose a different email or try again later.");
             // Cùng owner → refresh TTL.
             await db.KeyExpireAsync(reserveKey, EmailReserveTtl);
         }
@@ -108,7 +108,7 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "OTP đã gửi tới email mới. Vui lòng confirm để hoàn tất đổi email.",
+            Message = "OTP has been sent to the new email. Please confirm to complete the email change.",
             Data = account.Id
         };
     }

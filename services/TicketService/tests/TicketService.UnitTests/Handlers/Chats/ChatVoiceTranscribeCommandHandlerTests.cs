@@ -1,9 +1,8 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Moq;
+using SharedContracts.Events.Chats;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
-using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -11,248 +10,129 @@ using TicketService.UnitTests.Utils;
 
 namespace TicketService.UnitTests.Handlers.Chats;
 
+/// <summary>Contract tests for the asynchronous, metadata-only voice request.</summary>
 public class ChatVoiceTranscribeCommandHandlerTests
 {
-    private readonly Mock<IVoiceTranscriptionService> _voiceService = new();
-    private readonly Mock<IFileUploadClient> _fileUploadClient = new();
-    private readonly Mock<ILogger<ChatVoiceTranscribeCommandHandler>> _logger = new();
-
-    private static readonly Guid TicketId = Guid.NewGuid();
-    private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly Guid FileId = Guid.NewGuid();
-
-    private static Ticket BuildTicket() => new()
-    {
-        Id = TicketId,
-        Code = "TKT-001",
-        Status = TicketStatusEnum.Open,
-        Title = "Test ticket",
-        Description = "desc",
-        Priority = TicketPriorityEnum.P3Normal,
-        ImpactScope = ImpactScopeEnum.SingleAsset,
-        UrgencyLevel = UrgencyLevelEnum.Low
-    };
-
-    private static Mock<IFormFile> BuildAudioFile(
-        string contentType = "audio/mpeg",
-        string fileName = "voice.mp3",
-        long size = 1024)
-    {
-        var file = new Mock<IFormFile>();
-        file.Setup(f => f.ContentType).Returns(contentType);
-        file.Setup(f => f.FileName).Returns(fileName);
-        file.Setup(f => f.Length).Returns(size);
-        file.Setup(f => f.CopyToAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
-            .Callback<Stream, CancellationToken>((s, _) =>
-            {
-                var bytes = new byte[(int)size];
-                s.Write(bytes, 0, bytes.Length);
-            })
-            .Returns(Task.CompletedTask);
-        return file;
-    }
-
-    private ChatVoiceTranscribeCommandHandler BuildHandler(ITicketUnitOfWork uow)
-        => new(uow, _voiceService.Object, _fileUploadClient.Object, _logger.Object);
-
-    // ── Happy path ───────────────────────────────────────────────────────────
-
     [Fact]
-    public async Task Handle_ValidAudio_Returns201WithChatId()
+    public async Task ValidateAsync_ValidUploadedAudioMetadata_Succeeds()
     {
-        var ticket = BuildTicket();
-        var (uow, _, _, _, _, _, _, chats, attachments, _, _, _, _, _) =
-            MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
-
-        _voiceService
-            .Setup(s => s.TranscribeAsync(It.IsAny<Stream>(), "audio/mpeg", It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Xin chào, đây là tin nhắn giọng nói.");
-
-        _fileUploadClient
-            .Setup(s => s.UploadAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FileId, "http://storage/voice.mp3"));
-
-        var command = new ChatVoiceTranscribeCommand
-        {
-            TicketId = TicketId,
-            UserId = UserId,
-            UserRole = ActorRoleEnum.Staff,
-            UserDisplayName = "Nguyễn Văn A",
-            AudioFile = BuildAudioFile().Object
-        };
-
-        var handler = BuildHandler(uow.Object);
-        var result = await handler.Handle(command, default);
-
-        Assert.True(result.IsSuccess);
-        Assert.Equal(201, result.StatusCode);
-        Assert.NotNull(result.Data?.Id);
-        Assert.Equal(ticket.Code, result.Data?.Code);
-
-        chats.Verify(r => r.AddAsync(It.Is<TicketChat>(c =>
-            c.Body == "Xin chào, đây là tin nhắn giọng nói." &&
-            c.BodyFormat == ChatBodyFormatEnum.PlainText &&
-            c.AuthorUserId == UserId)), Times.Once);
-
-        attachments.Verify(r => r.AddAsync(It.Is<TicketAttachment>(a =>
-            a.FileId == FileId &&
-            a.Source == AttachmentSourceEnum.StaffWork)), Times.Once);
-    }
-
-    [Fact]
-    public async Task Handle_CustomerRole_SetsAttachmentSourceToCustomerSubmission()
-    {
-        var ticket = BuildTicket();
-        var (uow, _, _, _, _, _, _, _, attachments, _, _, _, _, _) =
-            MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
-
-        _voiceService
-            .Setup(s => s.TranscribeAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Customer message");
-
-        _fileUploadClient
-            .Setup(s => s.UploadAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FileId, ""));
-
-        var command = new ChatVoiceTranscribeCommand
-        {
-            TicketId = TicketId,
-            UserId = UserId,
-            UserRole = ActorRoleEnum.Customer,
-            AudioFile = BuildAudioFile().Object
-        };
-
-        var handler = BuildHandler(uow.Object);
-        await handler.Handle(command, default);
-
-        attachments.Verify(r => r.AddAsync(It.Is<TicketAttachment>(a =>
-            a.Source == AttachmentSourceEnum.CustomerSubmission)), Times.Once);
-    }
-
-    // ── Ticket not found ─────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Handle_TicketNotFound_Returns404()
-    {
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) =
-            MockTicketUnitOfWork.BuildExtended(); // empty seed
-
-        var command = new ChatVoiceTranscribeCommand
-        {
-            TicketId = Guid.NewGuid(),
-            AudioFile = BuildAudioFile().Object
-        };
-
-        var handler = BuildHandler(uow.Object);
-        var result = await handler.Handle(command, default);
-
-        Assert.False(result.IsSuccess);
-        Assert.Equal(404, result.StatusCode);
-        _voiceService.Verify(s => s.TranscribeAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task Handle_DeletedTicket_Returns404()
-    {
-        var ticket = BuildTicket();
-        ticket.IsDeleted = true;
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) =
-            MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
-
-        var command = new ChatVoiceTranscribeCommand
-        {
-            TicketId = TicketId,
-            AudioFile = BuildAudioFile().Object
-        };
-
-        var handler = BuildHandler(uow.Object);
-        var result = await handler.Handle(command, default);
-
-        Assert.False(result.IsSuccess);
-        Assert.Equal(404, result.StatusCode);
-    }
-
-    // ── Empty transcription ──────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Handle_EmptyTranscription_Returns422()
-    {
-        var ticket = BuildTicket();
-        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) =
-            MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
-
-        _voiceService
-            .Setup(s => s.TranscribeAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(string.Empty);
-
-        _fileUploadClient
-            .Setup(s => s.UploadAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FileId, ""));
-
-        var command = new ChatVoiceTranscribeCommand
-        {
-            TicketId = TicketId,
-            AudioFile = BuildAudioFile().Object
-        };
-
-        var handler = BuildHandler(uow.Object);
-        var result = await handler.Handle(command, default);
-
-        Assert.False(result.IsSuccess);
-        Assert.Equal(422, result.StatusCode);
-    }
-
-    // ── Validation (ValidateAsync) ───────────────────────────────────────────
-
-    [Fact]
-    public async Task ValidateAsync_NullAudioFile_ReturnsError()
-    {
-        var command = new ChatVoiceTranscribeCommand { AudioFile = null };
-        var result = await command.ValidateAsync();
-
-        Assert.False(result.IsSuccess);
-        Assert.Contains(result.ListErrors, e => e.Field == "audioFile");
-    }
-
-    [Fact]
-    public async Task ValidateAsync_InvalidMimeType_ReturnsError()
-    {
-        var command = new ChatVoiceTranscribeCommand
-        {
-            AudioFile = BuildAudioFile(contentType: "video/mp4").Object
-        };
-        var result = await command.ValidateAsync();
-
-        Assert.False(result.IsSuccess);
-        Assert.Contains(result.ListErrors, e => e.Field == "audioFile" && e.Detail.Contains("Định dạng audio"));
-    }
-
-    [Fact]
-    public async Task ValidateAsync_FileTooLarge_ReturnsError()
-    {
-        var command = new ChatVoiceTranscribeCommand
-        {
-            AudioFile = BuildAudioFile(size: ChatVoiceTranscribeCommand.MaxAudioFileSizeDefault + 1).Object
-        };
-        var result = await command.ValidateAsync();
-
-        Assert.False(result.IsSuccess);
-        Assert.Contains(result.ListErrors, e => e.Field == "audioFile" && e.Detail.Contains("20 MB"));
-    }
-
-    [Fact]
-    public async Task ValidateAsync_ValidAudio_ReturnsSuccess()
-    {
-        var command = new ChatVoiceTranscribeCommand
-        {
-            AudioFile = BuildAudioFile(contentType: "audio/wav", size: 512).Object
-        };
-        var result = await command.ValidateAsync();
-
+        var result = await ValidCommand().ValidateAsync();
         Assert.True(result.IsSuccess);
         Assert.Empty(result.ListErrors);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_RejectsMissingFileId()
+    {
+        var command = ValidCommand();
+        command.FileId = Guid.Empty;
+        var result = await command.ValidateAsync();
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.ListErrors, error => error.Field == nameof(command.FileId));
+    }
+
+    [Fact]
+    public async Task ValidateAsync_RejectsInvalidMimeTypeAndOversizedAudio()
+    {
+        var command = ValidCommand();
+        command.ContentType = "application/pdf";
+        command.SizeBytes = ChatVoiceTranscribeCommand.MaxAudioFileSizeDefault + 1;
+        var result = await command.ValidateAsync();
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.ListErrors, error => error.Field == nameof(command.ContentType));
+        Assert.Contains(result.ListErrors, error => error.Field == nameof(command.SizeBytes));
+    }
+
+    [Fact]
+    public async Task Handle_ValidRequest_CreatesPlaceholderWritesOutboxAndCommits()
+    {
+        var ticket = Ticket();
+        var (uow, _, _, _, _, _, _, chats, attachments, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
+        var authorization = Authorized();
+        var outbox = Outbox();
+
+        var result = await new ChatVoiceTranscribeCommandHandler(uow.Object, authorization.Object, outbox.Object)
+            .Handle(Request(ticket.Id), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(202, result.StatusCode);
+        chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c => c.Body == "Audio is being processed…" && c.VoiceTranscriptionStatus == VoiceTranscriptionStatusEnum.Pending)), Times.Once);
+        attachments.Verify(x => x.AddAsync(It.Is<TicketAttachment>(a => a.FileId != Guid.Empty && a.Url == "https://storage.example/voice.webm")), Times.Once);
+        outbox.Verify(x => x.WriteAsync(It.IsAny<VoiceTranscriptionRequestedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.CommitTransactionAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_InvalidRequest_IsRejectedBeforeHandler()
+    {
+        var request = Request(Ticket().Id);
+        request.SizeBytes = 0;
+
+        var result = await request.ValidateAsync();
+
+        Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task Handle_DatabaseError_RollsBackTransaction()
+    {
+        var ticket = Ticket();
+        var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
+        chats.Setup(x => x.AddAsync(It.IsAny<TicketChat>())).ThrowsAsync(new InvalidOperationException("db"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ChatVoiceTranscribeCommandHandler(uow.Object, Authorized().Object, Outbox().Object).Handle(Request(ticket.Id), CancellationToken.None));
+        uow.Verify(x => x.RollbackTransactionAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_SoftDeletedTicket_IsExcludedAndDoesNotCommit()
+    {
+        var ticket = Ticket();
+        ticket.IsDeleted = true;
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
+
+        var result = await new ChatVoiceTranscribeCommandHandler(uow.Object, Authorized().Object, Outbox().Object).Handle(Request(ticket.Id), CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(404, result.StatusCode);
+        uow.Verify(x => x.CommitTransactionAsync(), Times.Never);
+    }
+
+    private static ChatVoiceTranscribeCommand ValidCommand() => new()
+    {
+        FileId = Guid.NewGuid(),
+        FileName = "voice.webm",
+        ContentType = "audio/webm",
+        SizeBytes = 1024,
+        Url = "https://storage.example/voice.webm"
+    };
+
+    private static ChatVoiceTranscribeCommand Request(Guid ticketId) => new()
+    {
+        TicketId = ticketId,
+        UserId = Guid.NewGuid(),
+        UserRole = ActorRoleEnum.Staff,
+        UserDisplayName = "Staff",
+        FileId = Guid.NewGuid(),
+        FileName = "voice.webm",
+        ContentType = "audio/webm",
+        SizeBytes = 1024,
+        Url = "https://storage.example/voice.webm"
+    };
+
+    private static Ticket Ticket() => new() { Id = Guid.NewGuid(), Code = "TKT-TEST", Title = "Test", Description = "Test", Priority = TicketPriorityEnum.P3Normal, ImpactScope = ImpactScopeEnum.SingleAsset, UrgencyLevel = UrgencyLevelEnum.Low, Status = TicketStatusEnum.Open };
+
+    private static Mock<IChatAuthorizationService> Authorized()
+    {
+        var mock = new Mock<IChatAuthorizationService>();
+        mock.Setup(x => x.CanAccessTicketAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        return mock;
+    }
+
+    private static Mock<IIntegrationEventOutboxWriter> Outbox()
+    {
+        var mock = new Mock<IIntegrationEventOutboxWriter>();
+        mock.Setup(x => x.WriteAsync(It.IsAny<VoiceTranscriptionRequestedEvent>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        return mock;
     }
 }

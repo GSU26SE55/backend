@@ -10,7 +10,16 @@
 | Aggregator API chậm (>200ms p95) | Thiếu index / partition lớn | Verify GIN + B-tree index; check pg_partman partition pruning |
 
 ## Replay từ source-of-truth
-Khi `audit_aggregate` hỏng/mất: `POST /api/admin/audit/replay?service=&from=&to=` → mỗi service re-publish `AuditCreatedEventV1` từ `{service}_audit_logs`. Idempotent consumer đảm bảo không duplicate.
+Khi `audit_aggregate` hỏng/mất: `POST /api/admin/audit/replay?service=&from=&to=` → trả `202` kèm `jobId` sau khi đã **lưu job bền vững**.
+Mỗi service nguồn đọc bảng **`{service}_audit_outbox`** của mình (cột `payload` chính là `AuditCreatedEventV1` đã serialize) rồi phát lại, **giữ nguyên `EventId`**; consumer idempotent theo `EventId` nên chạy lại nhiều lần không sinh bản ghi trùng.
+
+Theo dõi: `GET /api/admin/audit/replay/{jobId}`.
+
+- `pendingServices` cho biết đang chờ service nào — dùng khi job không kết thúc.
+- `truncated = true` ⇒ **dữ liệu CHƯA đầy đủ** dù trạng thái đã kết thúc: có service chạm trần an toàn 50.000 bản ghi/lần, hoặc gặp payload hỏng. Chạy lại với khoảng thời gian hẹp hơn.
+- Trạng thái `CompletedWithErrors` = đủ service phản hồi nhưng có lỗi hoặc bị cắt ngắn.
+
+> Vì sao đọc outbox chứ không đọc `{service}_audit_logs`: sáu bảng audit-log **không đồng nhất** (`AuthService.AuditLog` dùng `IpAddress`/`UserAgent`; `SmsService.SmsAuditLog` thậm chí không phải bảng audit-event). Outbox thì giống nhau ở cả 6 service và giữ đúng payload cần phát lại.
 
 ## GDPR redaction
 `POST /api/admin/audit/redact?accountId={id}` (Admin) → PII ở `audit_aggregate` thành `[REDACTED]`. Source tables KHÔNG redact (legal hold). Ghi meta-audit `AccountDataRedacted`.

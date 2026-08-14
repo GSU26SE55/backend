@@ -58,6 +58,8 @@ public class EmailServiceFactory : WebApplicationFactory<Program>
             // Inject test config — override những key MailJet/RabbitMQ.
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                // Tắt hạn mức nền — xem chú thích ở TicketApiFactory.
+                ["RateLimiting:Enabled"] = "false",
                 ["MailJet:ApiKey"] = "integration-test-key",
                 ["MailJet:ApiSecret"] = "integration-test-secret",
                 ["MailJet:FromEmail"] = "noreply@test.local",
@@ -90,6 +92,9 @@ public class EmailServiceFactory : WebApplicationFactory<Program>
             // Re-add với TestHarness — register cùng 4 consumer như Program.cs (assembly của SendOtpRegisterConsumer).
             services.AddMassTransitTestHarness(x =>
             {
+                // Flaky guard 2026-07-31: inactivity mặc định của MassTransit v8 = 1s ⇒ Consumed.Any<T>()
+                // trả false khi cả solution chạy song song. Khuôn: NotificationService/Helpers/ConsumerTestHarness.cs
+                x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
                 x.AddConsumers(typeof(EmailService.Infrastructure.Consumers.SendOtpRegisterConsumer).Assembly);
             });
 

@@ -10,6 +10,8 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Metrics;
 
 namespace AuthService.Application.CQRS.Handler.Auth;
@@ -25,6 +27,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
     private readonly IAuthTokenIssuer _tokenIssuer;
     private readonly ITwoFactorChallengeStore _challengeStore;
     private readonly IPublisher _publisher;
+    private readonly IMessageProducerService _messageProducer;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public LoginCommandHandler(
@@ -33,6 +36,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         IAuthTokenIssuer tokenIssuer,
         ITwoFactorChallengeStore challengeStore,
         IPublisher publisher,
+        IMessageProducerService messageProducer,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
@@ -40,6 +44,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         _tokenIssuer = tokenIssuer;
         _challengeStore = challengeStore;
         _publisher = publisher;
+        _messageProducer = messageProducer;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -70,7 +75,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                 cancellationToken: cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             AppMetrics.AuthLoginTotal.WithLabels("invalid_credentials").Inc(); // #AUTH-78
-            return Fail(400, "Email hoặc mật khẩu không chính xác.");
+            return Fail(400, "Incorrect email or password.");
         }
 
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
@@ -78,13 +83,13 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             var minutesLeft = (int)Math.Ceiling((account.LockoutEndAt.Value - DateTime.UtcNow).TotalMinutes);
             await PublishAudit(AuditActionEnum.LoginFailedAccountLocked, account.Id, isSuccess: false,
                 targetEmail: account.Email,
-                reason: $"Account đang lockout, còn {minutesLeft} phút.",
+                reason: $"Account is in lockout, {minutesLeft} minute(s) remaining.",
                 cancellationToken: cancellationToken);
             await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountLocked,
-                note: $"Lockout còn {minutesLeft} phút.",
+                note: $"Lockout {minutesLeft} minute(s) remaining.",
                 cancellationToken: cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(423, $"Tài khoản đang bị khóa. Vui lòng thử lại sau {minutesLeft} phút.");
+            return Fail(423, $"Account is locked. Please try again in {minutesLeft} minute(s).");
         }
 
         switch (account.Status)
@@ -95,28 +100,28 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                 await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountNotVerified,
                     cancellationToken: cancellationToken);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
-                return Fail(403, "Tài khoản chưa được xác thực. Vui lòng kiểm tra email.");
+                return Fail(403, "Account is not verified yet. Please check your email.");
             case AccountStatusEnum.Inactive:
                 await PublishAudit(AuditActionEnum.LoginFailedAccountInactive, account.Id, false,
                     targetEmail: account.Email, cancellationToken: cancellationToken);
                 await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountInactive,
                     cancellationToken: cancellationToken);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
-                return Fail(403, "Tài khoản đã bị vô hiệu hóa.");
+                return Fail(403, "Account has been deactivated.");
             case AccountStatusEnum.Suspended:
                 await PublishAudit(AuditActionEnum.LoginFailedAccountSuspended, account.Id, false,
                     targetEmail: account.Email, cancellationToken: cancellationToken);
                 await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountSuspended,
                     cancellationToken: cancellationToken);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
-                return Fail(403, "Tài khoản đang bị đình chỉ.");
+                return Fail(403, "Account is suspended.");
             case AccountStatusEnum.Banned:
                 await PublishAudit(AuditActionEnum.LoginFailedAccountBanned, account.Id, false,
                     targetEmail: account.Email, cancellationToken: cancellationToken);
                 await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountBanned,
                     cancellationToken: cancellationToken);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
-                return Fail(403, "Tài khoản đã bị cấm.");
+                return Fail(403, "Account has been banned.");
             case AccountStatusEnum.Locked:
                 if (!account.LockoutEndAt.HasValue || account.LockoutEndAt.Value <= DateTime.UtcNow)
                 {
@@ -131,7 +136,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                     await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.AccountLocked,
                         cancellationToken: cancellationToken);
                     await _unitOfWork.SaveChangesAsync(cancellationToken);
-                    return Fail(423, "Tài khoản đang bị khóa tạm thời.");
+                    return Fail(423, "Account is temporarily locked.");
                 }
                 break;
         }
@@ -142,6 +147,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         {
             account.FailedLoginAttempts += 1;
             var wasJustLocked = false;
+            var previousStatus = account.Status;   // GH-766 — bắt trước khi có thể bị ghi đè thành Locked.
 
             if (account.FailedLoginAttempts >= MaxFailedAttempts)
             {
@@ -154,7 +160,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
             await PublishAudit(AuditActionEnum.LoginFailedWrongPassword, account.Id, false,
                 targetEmail: account.Email,
-                reason: $"Sai mật khẩu lần {account.FailedLoginAttempts}/{MaxFailedAttempts}.",
+                reason: $"Wrong password attempt {account.FailedLoginAttempts}/{MaxFailedAttempts}.",
                 metadata: new Dictionary<string, object?>
                 {
                     ["failedAttempts"] = account.FailedLoginAttempts,
@@ -166,17 +172,27 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             {
                 await PublishAudit(AuditActionEnum.AccountAutoLocked, account.Id, true,
                     targetEmail: account.Email,
-                    reason: $"Auto-lock {LockoutDurationMinutes} phút sau {MaxFailedAttempts} lần sai mật khẩu.",
+                    reason: $"Auto-locked for {LockoutDurationMinutes} minutes after {MaxFailedAttempts} failed password attempts.",
                     metadata: new Dictionary<string, object?>
                     {
                         ["lockoutMinutes"] = LockoutDurationMinutes,
                         ["lockoutEndAt"] = account.LockoutEndAt
                     },
                     cancellationToken: cancellationToken);
+
+                // GH-766 — tự khoá cũng là một chuyển đổi trạng thái, và là đường DỄ XẢY RA NHẤT
+                // (không cần admin thao tác). Không phát event ở đây thì Battery/Ticket vẫn coi
+                // tài khoản đang bị brute-force là bình thường. Outbox ⇒ nguyên tử với SaveChanges.
+                await _messageProducer.PublishAsync(new AccountStatusChangedEvent(
+                    account.Id,
+                    account.Email,
+                    (int)previousStatus,
+                    (int)AccountStatusEnum.Locked,
+                    $"Auto-locked after {MaxFailedAttempts} failed password attempts."), cancellationToken);
             }
 
             await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.WrongPassword,
-                note: $"Sai mật khẩu lần {account.FailedLoginAttempts}/{MaxFailedAttempts}." +
+                note: $"Wrong password attempt {account.FailedLoginAttempts}/{MaxFailedAttempts}." +
                       (wasJustLocked ? " Auto-locked." : ""),
                 cancellationToken: cancellationToken);
 
@@ -184,10 +200,10 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
             if (wasJustLocked)
                 return Fail(423,
-                    $"Sai mật khẩu quá {MaxFailedAttempts} lần. Tài khoản bị khóa {LockoutDurationMinutes} phút.");
+                    $"Incorrect password entered {MaxFailedAttempts} times. Account locked for {LockoutDurationMinutes} minutes.");
 
             var remaining = MaxFailedAttempts - account.FailedLoginAttempts;
-            return Fail(400, $"Email hoặc mật khẩu không chính xác. Còn {remaining} lần thử.");
+            return Fail(400, $"Incorrect email or password. {remaining} attempt(s) remaining.");
         }
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
@@ -235,7 +251,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                 {
                     IsSuccess = true,
                     StatusCode = 200,
-                    Message = "Đăng nhập thành công (thiết bị tin cậy).",
+                    Message = "Login successful (trusted device).",
                     Data = new LoginResultDto { Tokens = trustedTokens }
                 };
             }
@@ -258,7 +274,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Yêu cầu xác thực 2FA. Gửi mã TOTP hoặc backup code qua /api/auth/login/verify-2fa.",
+                Message = "2FA verification required. Send a TOTP code or backup code via /api/auth/login/verify-2fa.",
                 Data = new LoginResultDto
                 {
                     Challenge = new TwoFactorChallengeDto
@@ -295,7 +311,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đăng nhập thành công.",
+            Message = "Login successful.",
             Data = new LoginResultDto { Tokens = tokens }
         };
     }

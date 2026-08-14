@@ -22,10 +22,13 @@ public class ArchiveKbArticleCommandHandler : IRequestHandler<ArchiveKbArticleCo
     public async Task<CommonResponse<KbArticleActionDTO>> Handle(ArchiveKbArticleCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
+            .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
+
+        if (article.IsTemplate && !command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            return Fail(403, "Only Admin can archive templates.");
 
         article.Status = KbArticleStatusEnum.Archived;
         _uow.KnowledgeBaseArticles.UpdateAsync(article);
@@ -35,7 +38,7 @@ public class ArchiveKbArticleCommandHandler : IRequestHandler<ArchiveKbArticleCo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Bài viết đã được lưu trữ.",
+            Message = "Article has been archived.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),

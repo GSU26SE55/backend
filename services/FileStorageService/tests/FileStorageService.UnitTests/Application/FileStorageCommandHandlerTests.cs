@@ -15,6 +15,19 @@ namespace FileStorageService.UnitTests.Application;
 
 public class FileStorageCommandHandlerTests
 {
+    /// <summary>Magic bytes PNG — nội dung phải khớp đuôi file thì upload mới qua được validation.</summary>
+    private static readonly byte[] PngBytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D];
+
+    /// <summary>
+    /// Ảnh HEIC (ftyp box, brand <c>heic</c>) — đúng thứ iPhone sinh ra khi đặt tên file là <c>.JPEG</c>.
+    /// </summary>
+    private static readonly byte[] HeicBytes =
+    [
+        0x00, 0x00, 0x00, 0x18, (byte)'f', (byte)'t', (byte)'y', (byte)'p',
+        (byte)'h', (byte)'e', (byte)'i', (byte)'c', 0x00, 0x00, 0x00, 0x00,
+        (byte)'m', (byte)'i', (byte)'f', (byte)'1', (byte)'h', (byte)'e', (byte)'i', (byte)'c'
+    ];
+
     [Fact]
     public async Task UploadFile_NullFile_Returns400_AndDoesNotCallStorage()
     {
@@ -48,7 +61,7 @@ public class FileStorageCommandHandlerTests
                 It.IsAny<Stream>(),
                 "avatar.png",
                 "image/png",
-                4,
+                PngBytes.Length,
                 "avatars",
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new FileUploadResponse
@@ -56,7 +69,7 @@ public class FileStorageCommandHandlerTests
                 ObjectKey = "avatars/abc.png",
                 FileName = "avatar.png",
                 ContentType = "image/png",
-                Size = 4,
+                Size = PngBytes.Length,
                 PublicUrl = "http://localhost:9090/solar-battery-files/avatars/abc.png"
             });
 
@@ -68,7 +81,7 @@ public class FileStorageCommandHandlerTests
             .Callback<UploadedFile>(file => fileId = file.Id)
             .Returns(Task.CompletedTask);
 
-        await using var stream = new MemoryStream([1, 2, 3, 4]);
+        await using var stream = new MemoryStream(PngBytes);
         var formFile = new FormFile(stream, 0, stream.Length, "file", "avatar.png")
         {
             Headers = new HeaderDictionary(),
@@ -129,6 +142,122 @@ public class FileStorageCommandHandlerTests
                 It.IsAny<string>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task UploadFile_HeicContentNamedJpeg_Returns400_AndDoesNotCallStorage()
+    {
+        var storage = new Mock<IObjectStorageService>();
+        var (uow, _) = BuildFileStorageUnitOfWork();
+        var auth = BuildFileAuthorizationService();
+        await using var stream = new MemoryStream(HeicBytes);
+        var formFile = new FormFile(stream, 0, stream.Length, "file", "IMG_6945.JPEG")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "image/jpeg"
+        };
+
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+
+        var result = await handler.Handle(new UploadFileCommand
+        {
+            File = formFile,
+            FolderName = "kb-blog",
+            Purpose = FilePurposeEnum.KbImage
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        result.ListErrors.Should().Contain(error => error.Field == "file" && error.Detail.Contains("HEIC"));
+        storage.Verify(
+            x => x.UploadAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<long>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task UploadFile_DeclaredContentTypeWrong_StoresContentTypeDetectedFromBytes()
+    {
+        var storage = new Mock<IObjectStorageService>();
+        storage
+            .Setup(x => x.UploadAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<long>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FileUploadResponse { ObjectKey = "avatars/abc.png", FileName = "avatar.png" });
+
+        var (uow, _) = BuildFileStorageUnitOfWork();
+        var auth = BuildFileAuthorizationService();
+        await using var stream = new MemoryStream(PngBytes);
+        var formFile = new FormFile(stream, 0, stream.Length, "file", "avatar.png")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/octet-stream"
+        };
+
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+
+        var result = await handler.Handle(new UploadFileCommand
+        {
+            File = formFile,
+            FolderName = "avatars",
+            Purpose = FilePurposeEnum.Avatar
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        storage.Verify(
+            x => x.UploadAsync(
+                It.IsAny<Stream>(),
+                "avatar.png",
+                "image/png",
+                It.IsAny<long>(),
+                "avatars",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task UploadFile_ExtensionWithoutMagicBytes_SkipsContentCheck()
+    {
+        var storage = new Mock<IObjectStorageService>();
+        storage
+            .Setup(x => x.UploadAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<long>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FileUploadResponse { ObjectKey = "firmware/abc.bin", FileName = "firmware.bin" });
+
+        var (uow, _) = BuildFileStorageUnitOfWork();
+        var auth = BuildFileAuthorizationService();
+        await using var stream = new MemoryStream([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+        var formFile = new FormFile(stream, 0, stream.Length, "file", "firmware.bin")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/octet-stream"
+        };
+
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+
+        var result = await handler.Handle(new UploadFileCommand
+        {
+            File = formFile,
+            FolderName = "firmware",
+            Purpose = FilePurposeEnum.Firmware
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(201);
     }
 
     [Fact]
@@ -208,7 +337,7 @@ public class FileStorageCommandHandlerTests
                 It.IsAny<Stream>(),
                 "avatar.png",
                 "image/png",
-                4,
+                PngBytes.Length,
                 "avatars",
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new FileUploadResponse
@@ -216,7 +345,7 @@ public class FileStorageCommandHandlerTests
                 ObjectKey = "avatars/abc.png",
                 FileName = "avatar.png",
                 ContentType = "image/png",
-                Size = 4
+                Size = PngBytes.Length
             });
 
         var (uow, _) = BuildFileStorageUnitOfWork();
@@ -224,7 +353,7 @@ public class FileStorageCommandHandlerTests
         uow.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("db down"));
 
-        await using var stream = new MemoryStream([1, 2, 3, 4]);
+        await using var stream = new MemoryStream(PngBytes);
         var formFile = new FormFile(stream, 0, stream.Length, "file", "avatar.png")
         {
             Headers = new HeaderDictionary(),

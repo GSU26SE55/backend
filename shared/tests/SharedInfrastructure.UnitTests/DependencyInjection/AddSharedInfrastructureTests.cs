@@ -130,9 +130,10 @@ public class AddSharedInfrastructureTests
         // MediatR registered:
         services.Should().Contain(d => d.ServiceType == typeof(IMediator));
 
-        // CORS option AllowAll:
+        // CORS policy (#AUTH-05 đổi tên "AllowAll" -> AddCORS.PolicyName vì nay là whitelist,
+        // giữ tên cũ sẽ gây hiểu nhầm là vẫn mở cho mọi origin):
         var sp = services.BuildServiceProvider();
-        sp.GetRequiredService<IOptions<CorsOptions>>().Value.GetPolicy("AllowAll").Should().NotBeNull();
+        sp.GetRequiredService<IOptions<CorsOptions>>().Value.GetPolicy(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName).Should().NotBeNull();
 
         // Swagger với title "Test API":
         var swaggerOpts = sp.GetRequiredService<IOptions<SwaggerGeneratorOptions>>().Value;

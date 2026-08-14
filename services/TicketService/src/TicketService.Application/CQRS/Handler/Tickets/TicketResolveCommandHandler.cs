@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Enums;
@@ -19,21 +20,24 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
+    private readonly ITicketActivationService _slaTransitions;
 
     public TicketResolveCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
-        IPublisher publisher)
+        IIntegrationEventOutboxWriter producer,
+        IPublisher publisher,
+        ITicketActivationService slaTransitions)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
+        _slaTransitions = slaTransitions;
     }
 
     public async Task<TicketActionResponse> Handle(TicketResolveCommand request, CancellationToken ct)
@@ -44,18 +48,26 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         if (ticket == null)
             return Fail(404, "Ticket not found.");
 
-        if (ticket.EscalatedAt.HasValue && ticket.AssignedStaffId != request.StaffId)
-            return Fail(403, "Chỉ Staff đang được assign sau escalation mới có thể resolve.");
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (ticket.EscalatedAt.HasValue && ticket.PrimaryHandlerStaffId != request.StaffId)
+            return Fail(403, "Only the Staff assigned after escalation can resolve this ticket.");
 
         if (ticket.EscalationReason == EscalationReasonEnum.SkillGap)
         {
             var staff = await _uow.StaffAccounts.GetAllAsync()
                 .FirstOrDefaultAsync(s => s.AccountId == request.StaffId && !s.IsDeleted, ct);
             if (staff == null || (int)staff.SkillTier < 2)
-                return Fail(403, "Cần Staff Tier cao hơn hiện tại cho SkillGap escalation.");
+                return Fail(403, "A higher Staff Tier is required for SkillGap escalation.");
         }
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Resolved, ActorRoleEnum.Staff, request.StaffId);
+        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Completed, ActorRoleEnum.Staff, request.StaffId);
         if (!transitionResult.IsAllowed)
             return Fail(403, transitionResult.Reason ?? "Cannot resolve.");
 
@@ -67,25 +79,28 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         foreach (var log in activeLogs)
         {
             log.CompletedAt = DateTime.UtcNow;
-            if (string.IsNullOrEmpty(log.Summary) || log.Summary == "Đang thực hiện...")
+            if (string.IsNullOrEmpty(log.Summary) || log.Summary == "In progress...")
             {
                 log.Summary = request.ResolutionSummary;
             }
         }
 
         ticket.ResolutionSummary = request.ResolutionSummary;
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Resolved, new TransitionContext
+        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Completed, new TransitionContext
         {
             ActorUserId = request.StaffId,
             ActorRole = ActorRoleEnum.Staff,
-            ActorDisplayName = request.StaffName ?? "Staff",
+            ActorDisplayName = request.StaffName!,
             Payload = new Dictionary<string, object?> { { "ResolutionSummary", request.ResolutionSummary } }
         }, ct);
+
+        await _slaTransitions.CompleteSlaAsync(ticket, ct);
 
         var action = ticket.EscalatedAt.HasValue ? ActivityActionEnum.ResolvedByEscalatedStaff : ActivityActionEnum.Resolved;
         await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, action, newValue: request.ResolutionSummary);
 
-        await _producer.PublishAsync(new TicketResolvedEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary), ct);
+        await _outboxWriter.WriteAsync(
+            new TicketResolvedEvent(ticket.Id, ticket.Code, request.StaffId, request.ResolutionSummary, ticket.CustomerId), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketAuditTrailNotification.For(
@@ -97,7 +112,7 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Ticket resolved.",
+            Message = "Ticket completed and is awaiting Manager review.",
             Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),

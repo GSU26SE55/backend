@@ -31,7 +31,7 @@ public class GetBatteryAssetCascadeRiskQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy pin."
+                Message = "Battery not found."
             };
         }
 

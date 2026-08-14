@@ -13,4 +13,10 @@ public interface IPiiDetector
     /// để có thể un-mask sau (#559). Trả về (maskedText, maskKey) — maskKey là Redis key.
     /// </summary>
     Task<(string MaskedText, string MaskKey)> MaskAsync(string text, CancellationToken ct = default);
+
+    /// <summary>
+    /// Khôi phục PII từ placeholder bằng mask map đã lưu trong Redis.
+    /// Nếu maskKey rỗng hoặc map đã hết TTL, trả về text gốc không thay đổi.
+    /// </summary>
+    Task<string> UnmaskAsync(string text, string maskKey, CancellationToken ct = default);
 }

@@ -48,40 +48,31 @@ public class StaffTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Staff xác nhận bắt đầu xử lý ticket đã được assigned — chuyển Status từ Assigned → InProgress, set StartedAt; SLA timer chính thức bắt đầu đếm.
+    /// Snapshot KPI dashboard cho chính Staff đang đăng nhập (open/resolved, SLA risk near-breach ≤25%/breached/paused, count theo status, trend 7 ngày).
     /// </summary>
     /// <remarks>
-    /// - Ticket phải ở trạng thái <c>Assigned</c>.
-    /// - Chuyển trạng thái sang <c>InProgress</c>.
+    /// Scope theo AssignedStaffId từ Token — thay cho việc FE tự đếm trên 1 trang list (cap 100).
+    /// SLA risk is monitored only for non-Urgent <c>InProgress</c> tickets with a timer.
+    /// Snapshot hiện tại — KHÔNG nhận from/to. FE nên cache ~1 phút (staleTime).
     /// </remarks>
-    /// <param name="id">ID của Ticket.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <response code="200">Bắt đầu thành công.</response>
-    /// <response code="403">Sai trạng thái hoặc không có quyền.</response>
-    /// <response code="404">Không tìm thấy ticket.</response>
-    [HttpPost("{id}/start")]
+    /// <response code="200">Trả thống kê thành công.</response>
+    /// <response code="401">Chưa đăng nhập.</response>
+    [HttpGet("dashboard/stats")]
+    [ProducesResponseType(typeof(CommonResponse<StaffTicketDashboardStatsDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Start(Guid id, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMyDashboardStats(CancellationToken ct)
     {
-        var command = new TicketStartCommand
-        {
-            TicketId = id,
-            StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            StaffName = _currentUser.FullName ?? "Unknown"
-        };
-
-        var result = await _mediator.Send(command, ct);
+        var result = await _mediator.Send(new MyTicketDashboardStatsAsStaffQuery(), ct);
         return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>
-    /// Staff tạm dừng xử lý ticket vì lý do khách quan (chờ phụ tùng/Customer/Manager) — chuyển Status → OnHold, pause SLA timer; bắt buộc HoldReason + EstimatedResumeAt.
+    /// Primary Staff holds active work with a reason, note and future appointment.
     /// </summary>
     /// <remarks>
-    /// Tạm dừng tính SLA. Các lý do: WaitingCustomer, WaitingParts, WaitingOnsiteSchedule.
+    /// Moves <c>InProgress</c> to <c>Pending/Held</c> and pauses SLA.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
     /// <param name="command">Lý do và ghi chú.</param>
@@ -95,33 +86,31 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>
-    /// Staff tiếp tục xử lý ticket từ trạng thái tạm dừng — chuyển OnHold → InProgress, resume SLA timer (tính bù thời gian đã hold).
+    /// Primary Staff resumes a held ticket early with a required reason.
     /// </summary>
     /// <remarks>
     /// Trạng thái quay lại <c>InProgress</c>, tiếp tục tính SLA.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
+    /// <param name="command">Early-resume reason.</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Tiếp tục thành công.</response>
     [HttpPost("{id}/resume")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Resume(Guid id, CancellationToken ct)
+    public async Task<IActionResult> Resume(Guid id, [FromBody] TicketResumeCommand command, CancellationToken ct)
     {
-        var command = new TicketResumeCommand
-        {
-            TicketId = id,
-            StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            StaffName = _currentUser.FullName ?? "Unknown"
-        };
+        command.TicketId = id;
+        command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -131,7 +120,7 @@ public class StaffTicketsController : ControllerBase
     /// Staff báo cáo đã hoàn thành việc giải quyết sự cố/yêu cầu.
     /// </summary>
     /// <remarks>
-    /// - Chuyển trạng thái sang <c>Resolved</c>.
+    /// - Chuyển trạng thái sang <c>Completed</c>.
     /// - Chờ Manager phê duyệt kết quả.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
@@ -147,7 +136,7 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -172,7 +161,7 @@ public class StaffTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.StaffId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.StaffName = _currentUser.FullName ?? "Unknown";
+        command.StaffName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);

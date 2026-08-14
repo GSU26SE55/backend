@@ -17,7 +17,7 @@ public class ChatReactionsQueryHandlerTests
         Ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" },
         AuthorUserId = Guid.NewGuid(),
         AuthorRole = ActorRoleEnum.Customer,
-        Body = "Pin sạc rất chậm"
+        Body = "Battery charges very slowly"
     };
 
     [Fact]
@@ -76,7 +76,7 @@ public class ChatReactionsQueryHandlerTests
         var ticketId = Guid.NewGuid();
         var chat = MakeChat(ticketId, Guid.NewGuid());
         chat.Ticket!.CustomerId = Guid.NewGuid();
-        chat.Ticket!.AssignedStaffId = Guid.NewGuid();
+        chat.Ticket!.PrimaryHandlerStaffId = Guid.NewGuid();
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { chat.Ticket! });
         var chatsRepo = new Mock<IGenericRepository<TicketChat>>();

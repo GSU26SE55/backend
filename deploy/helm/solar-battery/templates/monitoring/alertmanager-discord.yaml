@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
       - name: relay
-        image: benjojo/alertmanager-discord:latest
+        image: {{ .Values.monitoring.alertmanagerDiscord.image }}
         ports:
         - { name: http, containerPort: 9094 }
         env:

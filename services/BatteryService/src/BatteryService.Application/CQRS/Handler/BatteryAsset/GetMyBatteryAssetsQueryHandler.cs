@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Services;
 
 namespace BatteryService.Application.CQRS.Handler.BatteryAsset;
@@ -27,7 +28,7 @@ public class GetMyBatteryAssetsQueryHandler : IRequestHandler<GetMyBatteryAssets
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Không xác định được người dùng hiện tại."
+                Message = "Could not identify the current user."
             };
         }
 
@@ -45,11 +46,9 @@ public class GetMyBatteryAssetsQueryHandler : IRequestHandler<GetMyBatteryAssets
             .Select(account => account.FullName)
             .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var page = await query
             .OrderByDescending(asset => asset.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(asset => asset.Id) // tie-breaker cố định — pagination ổn định
             .Select(asset => new BatteryAssetDto
             {
                 Id = asset.Id.ToString(),
@@ -71,19 +70,13 @@ public class GetMyBatteryAssetsQueryHandler : IRequestHandler<GetMyBatteryAssets
                 LastSensorReadingAt = asset.LastSensorReadingAt,
                 CreatedAt = asset.CreatedAt
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<BatteryAssetDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<BatteryAssetDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 }

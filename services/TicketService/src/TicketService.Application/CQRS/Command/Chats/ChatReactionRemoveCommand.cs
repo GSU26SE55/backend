@@ -39,22 +39,22 @@ public class ChatReactionRemoveCommand : IRequest<ChatReactionActionResponse>, I
         var response = new ChatReactionActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (ChatId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "ChatId", Detail = "ChatId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ChatId", Detail = "Invalid ChatId." });
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Invalid UserId." });
 
         if (!Enum.IsDefined(typeof(ReactionTypeEnum), ReactionType))
-            response.ListErrors.Add(new Errors { Field = "ReactionType", Detail = "ReactionType không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ReactionType", Detail = "Invalid ReactionType." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

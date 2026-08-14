@@ -13,6 +13,10 @@
 
     <ItemGroup>
       <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.0" />
+      <PackageReference Include="Google.Protobuf" Version="3.22.5" />
+      <PackageReference Include="Grpc.Core.Api" Version="2.63.0" />
+      <PackageReference Include="Grpc.Tools" Version="2.64.0"><PrivateAssets>all</PrivateAssets></PackageReference>
     </ItemGroup>
+    <ItemGroup><Protobuf Include="Protos\file_internal.proto" GrpcServices="Both" /></ItemGroup>
 
 </Project>

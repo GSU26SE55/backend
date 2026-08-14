@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using SharedContracts.Saga.AlertTicket;
 
@@ -17,7 +18,55 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
 
     public async Task Execute(BehaviorContext<AlertTicketSagaState> context, IBehavior<AlertTicketSagaState> next)
     {
-        var saga = context.Saga;
+        await PublishCreateTicketAsync(context, context.Saga);
+        await next.Execute(context).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// FIX saga-stuck: MassTransit gọi overload GENERIC này khi activity chạy trong behavior
+    /// có message data — chính là <c>Initially(When(AnomalyDetectedV1/V2))</c>. Trước đây nó chỉ
+    /// <c>next.Execute(context)</c> mà KHÔNG publish command → saga chuyển sang TicketRequested
+    /// nhưng CreateTicketFromAlertCommand không bao giờ được gửi → saga kẹt vĩnh viễn, không
+    /// ticket auto nào được tạo. Nay publish giống overload non-generic.
+    /// </summary>
+    public async Task Execute<T>(BehaviorContext<AlertTicketSagaState, T> context, IBehavior<AlertTicketSagaState, T> next)
+        where T : class
+    {
+        await PublishCreateTicketAsync(context, context.Saga);
+        await next.Execute(context).ConfigureAwait(false);
+    }
+
+    /// <summary>Build + publish <see cref="CreateTicketFromAlertCommand"/> từ state saga.</summary>
+    private static async Task PublishCreateTicketAsync(IPublishEndpoint publishEndpoint, AlertTicketSagaState saga)
+    {
+        // Mô tả tiếng Việt, nêu rõ thông số + nguyên nhân theo loại anomaly.
+        // Trước đây là câu tiếng Anh toàn số ("Anomaly detected at ... Value: ... Threshold: ...")
+        // → KHÔNG có token chung nào với mô tả Customer viết tiếng Việt ⇒ Jaccard = 0 ⇒ AI dò
+        // trùng không bao giờ phát hiện được cặp (ticket auto ↔ ticket thủ công) trên cùng pin.
+        var description =
+            $"{DescribeAnomaly(saga.AnomalyType)} " +
+            $"Measured value {saga.ActualValue} {saga.Unit}, exceeding the allowed threshold {saga.ThresholdValue} {saga.Unit}. " +
+            $"Detected at {saga.DetectedAt:HH:mm dd/MM/yyyy} (UTC) on device {saga.AssetSerialNumber}.";
+        // BE-AI — nếu AI có prescription (chỉ V2 từ SohPredictionBackgroundService), ghép vào
+        // Description để Manager thấy khuyến nghị ngay khi ticket vào hàng chờ. Nullable → không đổi
+        // ticket từ threshold engine (AiPrescription = null).
+        if (!string.IsNullOrWhiteSpace(saga.AiPrescription))
+            description += $"\n\n--- AI Prescription ---\n{saga.AiPrescription}";
+
+        // BE-AI structured — mở gói để forward sang TicketService (đích: `ticket_ai_suggestions`).
+        // Best-effort: JSON hỏng KHÔNG được làm chết việc tạo ticket — mất gợi ý còn hơn mất ticket.
+        AiSuggestionPayload? ai = null;
+        if (!string.IsNullOrWhiteSpace(saga.AiSuggestionJson))
+        {
+            try
+            {
+                ai = JsonSerializer.Deserialize<AiSuggestionPayload>(saga.AiSuggestionJson);
+            }
+            catch (JsonException)
+            {
+                ai = null;
+            }
+        }
 
         var command = new CreateTicketFromAlertCommand(
             CorrelationId: saga.CorrelationId,
@@ -33,16 +82,23 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
             DetectedAt: saga.DetectedAt,
             AnomalyCategory: MapAnomalyTypeToCategory(saga.AnomalyType),
             Title: $"[Auto] {saga.AssetSerialNumber ?? "Battery"} - {MapAnomalyTypeToTitle(saga.AnomalyType)}",
-            Description: $"Anomaly detected at {saga.DetectedAt:O}. Value: {saga.ActualValue} {saga.Unit}. Threshold: {saga.ThresholdValue} {saga.Unit}."
+            Description: description,
+            AiPrescription: saga.AiPrescription,
+            AiActionSteps: ai?.ActionSteps,
+            AiPpeRequired: ai?.PpeRequired,
+            AiSopReferences: ai?.SopReferences,
+            AiEscalationConditions: ai?.EscalationConditions,
+            AiSafetyWarnings: ai?.SafetyWarnings,
+            AiKbDocRefs: ai?.KbDocRefs,
+            AiHumanVerificationRequired: ai?.HumanVerificationRequired,
+            AiBlocked: ai?.Blocked,
+            AiEnriched: ai?.Enriched,
+            AiLlmProvider: ai?.LlmProvider,
+            AiPrescriptionId: ai?.PrescriptionId
         );
 
-        await context.Publish(command);
-        await next.Execute(context).ConfigureAwait(false);
+        await publishEndpoint.Publish(command);
     }
-
-    public Task Execute<T>(BehaviorContext<AlertTicketSagaState, T> context, IBehavior<AlertTicketSagaState, T> next)
-        where T : class
-        => next.Execute(context);
 
     public Task Faulted<TException>(BehaviorExceptionContext<AlertTicketSagaState, TException> context, IBehavior<AlertTicketSagaState> next)
         where TException : Exception
@@ -52,6 +108,30 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         where T : class
         where TException : Exception
         => next.Faulted(context);
+
+    /// <summary>
+    /// Câu mô tả nguyên nhân theo loại anomaly — tiếng Việt, dùng từ ngữ Customer thường gõ
+    /// (nóng/quá nhiệt, sụt áp, sạc, chai pin…) để AI dò trùng so được mô tả 2 nguồn ticket.
+    /// </summary>
+    private static string DescribeAnomaly(int anomalyType) => anomalyType switch
+    {
+        1 => "Battery overheating — the sensor recorded a battery temperature above the safe threshold.",
+        2 => "Battery overvoltage — the voltage exceeded the allowed threshold.",
+        3 => "Battery undervoltage — the voltage dropped below the safe threshold.",
+        4 => "Battery nearly empty — the state of charge (SOC) dropped very low.",
+        5 => "Abnormally rapid discharge — the discharge rate exceeded the threshold.",
+        6 => "Abnormal charging — the charging current exceeded the allowed threshold.",
+        7 => "Device offline — no sensor data has been received.",
+        8 => "Battery degradation, declining state of health (SOH) — performance dropped below the threshold.",
+        9 => "Abnormally high ambient temperature around the battery.",
+        10 => "Abnormally high humidity around the battery.",
+        11 => "Both temperature and humidity around the battery are abnormally high.",
+        12 => "Battery internal resistance has risen — a sign of degradation.",
+        13 => "Voltage imbalance between battery cells exceeded the threshold.",
+        14 => "An environmental incident at the site is affecting the battery.",
+        15 => "Sensor readings do not match — a sensor fault is suspected.",
+        _ => "An anomaly was detected on the battery."
+    };
 
     private static string MapAnomalyTypeToCategory(int anomalyType) => anomalyType switch
     {

@@ -8,7 +8,7 @@ namespace TicketService.Application.CQRS.Notification.Audit;
 /// Notification ghi 1 entry audit TicketService (Sprint audit #AUDIT-25/26). Hỗ trợ <c>CausationId</c> cho
 /// causation chain (#AUDIT-27 — ticket auto-tạo từ anomaly). Publish TRONG handler trước SaveChanges (atomic).
 /// </summary>
-public sealed record TicketAuditTrailNotification(
+public record TicketAuditTrailNotification(
     string ActionCode,
     string ActionCategory,
     string Severity,

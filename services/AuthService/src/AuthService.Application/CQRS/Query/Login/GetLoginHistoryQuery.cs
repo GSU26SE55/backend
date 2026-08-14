@@ -30,4 +30,13 @@ public class GetLoginHistoryQuery : PaginationRequest, IRequest<LoginAttemptList
 
     /// <summary>Đến thời điểm (UTC exclusive).</summary>
     public DateTime? ToUtc { get; set; }
+
+    /// <summary>
+    /// Cột sort. Whitelist: createdAt | result | method | ipAddress.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
 }

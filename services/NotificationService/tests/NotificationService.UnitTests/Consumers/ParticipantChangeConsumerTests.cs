@@ -24,7 +24,13 @@ public class ParticipantChangeConsumerTests
         inboxStore ??= MakeInboxStore();
 
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<ParticipantChangeConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<ParticipantChangeConsumer>();
+                // Timeout tường minh — mặc định inactivity 1s của MassTransit v8 làm test đỏ
+                // thất thường khi cả solution chạy song song. Xem ConsumerTestHarness.InactivityTimeout.
+                x.SetTestTimeouts(Helpers.ConsumerTestHarness.TestTimeout, Helpers.ConsumerTestHarness.InactivityTimeout);
+            })
             .AddSingleton(mediator)
             .AddSingleton(inboxStore.Object)
             .AddSingleton(NullLogger<ParticipantChangeConsumer>.Instance)
@@ -37,8 +43,8 @@ public class ParticipantChangeConsumerTests
     private static Mock<IInboxStore> MakeInboxStore()
     {
         var store = new Mock<IInboxStore>();
-        store.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(true);
+        store.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+             .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         return store;
     }
 
@@ -58,7 +64,12 @@ public class ParticipantChangeConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<ParticipantAddedEvent>()).Should().BeTrue();
 
-        captured.Should().ContainSingle();
+        // Sprint 6.3 NOTI3-01 (#701) — thêm row InApp để notification hiện trong feed (feed lọc Channel=InApp).
+        captured.Should().HaveCount(2);
+        captured.Select(c => c.Channel).Should().BeEquivalentTo(new[]
+        {
+            NotificationChannelEnum.InApp, NotificationChannelEnum.Push
+        });
         captured[0].UserId.Should().Be(participantUserId);
         captured[0].Type.Should().Be(NotificationTypeEnum.ParticipantAdded);
 
@@ -81,7 +92,12 @@ public class ParticipantChangeConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<ParticipantRemovedEvent>()).Should().BeTrue();
 
-        captured.Should().ContainSingle();
+        // Sprint 6.3 NOTI3-01 (#701) — thêm row InApp để notification hiện trong feed (feed lọc Channel=InApp).
+        captured.Should().HaveCount(2);
+        captured.Select(c => c.Channel).Should().BeEquivalentTo(new[]
+        {
+            NotificationChannelEnum.InApp, NotificationChannelEnum.Push
+        });
         captured[0].UserId.Should().Be(participantUserId);
         captured[0].Type.Should().Be(NotificationTypeEnum.ParticipantRemoved);
 
@@ -104,7 +120,12 @@ public class ParticipantChangeConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<ParticipantRoleChangedEvent>()).Should().BeTrue();
 
-        captured.Should().ContainSingle();
+        // Sprint 6.3 NOTI3-01 (#701) — thêm row InApp để notification hiện trong feed (feed lọc Channel=InApp).
+        captured.Should().HaveCount(2);
+        captured.Select(c => c.Channel).Should().BeEquivalentTo(new[]
+        {
+            NotificationChannelEnum.InApp, NotificationChannelEnum.Push
+        });
         captured[0].UserId.Should().Be(participantUserId);
         captured[0].Type.Should().Be(NotificationTypeEnum.ParticipantRoleChanged);
 
@@ -119,9 +140,9 @@ public class ParticipantChangeConsumerTests
             .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
 
         var inboxStore = new Mock<IInboxStore>();
-        inboxStore.SetupSequence(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true)
-            .ReturnsAsync(false);
+        inboxStore.SetupSequence(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var evt = new ParticipantAddedEvent(Guid.NewGuid(), Guid.NewGuid(), 3, 3, Guid.NewGuid());
         var harness = await StartHarness(mediator.Object, inboxStore);
@@ -129,7 +150,8 @@ public class ParticipantChangeConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<ParticipantAddedEvent>()).Should().BeTrue();
 
-        mediator.Verify(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()), Times.Once);
+        // Inbox dedup vẫn chặn xử lý lặp — 2 command là InApp + Push của MỘT lần xử lý.
+        mediator.Verify(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
         await harness.Stop();
     }
 }

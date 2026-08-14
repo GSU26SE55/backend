@@ -110,7 +110,9 @@ public static class BatteryMapper
         return new AlertDto
         {
             Id = alert.Id.ToString(),
-            BatteryAssetId = alert.BatteryAssetId.ToString(),
+            BatteryAssetId = alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
+            IotDeviceId = alert.IotDeviceId?.ToString(),
+            SiteId = alert.SiteId?.ToString(),                // Sprint Bonus NS-21 (#661)
             BatterySerialNumber = alert.BatteryAsset?.SerialNumber ?? string.Empty,
             AnomalyType = alert.AnomalyType,
             Severity = alert.Severity,
@@ -124,6 +126,7 @@ public static class BatteryMapper
             AcknowledgedAt = alert.AcknowledgedAt,
             ResolvedAt = alert.ResolvedAt,
             DedupWindowEndUtc = alert.DedupWindowEndUtc,
+            AiPrescriptionId = alert.AiPrescriptionId,
             CreatedAt = alert.CreatedAt
         };
     }

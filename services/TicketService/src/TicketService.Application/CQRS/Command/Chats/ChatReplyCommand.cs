@@ -40,24 +40,24 @@ public class ChatReplyCommand : IRequest<TicketActionResponse>, IValidatable<Tic
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (ParentChatId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "ParentChatId", Detail = "ParentChatId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ParentChatId", Detail = "Invalid ParentChatId." });
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Invalid UserId." });
 
         if (string.IsNullOrWhiteSpace(Body))
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Nội dung bình luận không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Comment content is required." });
         else if (Body.Length > 10000)
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Nội dung bình luận tối đa 10000 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Comment content must be at most 10000 characters." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

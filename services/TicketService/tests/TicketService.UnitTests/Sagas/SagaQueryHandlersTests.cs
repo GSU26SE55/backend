@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Handler.Sagas;
 using TicketService.Application.CQRS.Query.Sagas;
 using TicketService.Application.DTOs.Response.Saga;
@@ -57,7 +58,7 @@ public class SagaQueryHandlersTests
                 It.IsAny<string?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(),
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<bool?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((items, 2));
+            .ReturnsAsync(new PaginationResponse<AlertTicketSagaDTO> { Items = items.ToList(), TotalItems = 2, PageNumber = 1, PageSize = 50 });
 
         var handler = new GetAlertTicketSagasQueryHandler(svc.Object);
         var result = await handler.Handle(new GetAlertTicketSagasQuery { IsFailed = true }, default);
@@ -78,7 +79,7 @@ public class SagaQueryHandlersTests
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Callback<string?, Guid?, Guid?, Guid?, DateTime?, DateTime?, bool?, int, int, bool, CancellationToken>(
                 (_, _, _, _, _, _, _, _, ps, _, _) => captured = ps)
-            .ReturnsAsync((new List<AlertTicketSagaDTO>(), 0));
+            .ReturnsAsync(new PaginationResponse<AlertTicketSagaDTO> { Items = new List<AlertTicketSagaDTO>(), TotalItems = 0, PageNumber = 1, PageSize = 50 });
 
         var handler = new GetAlertTicketSagasQueryHandler(svc.Object);
         await handler.Handle(new GetAlertTicketSagasQuery { PageSize = 999, PageNumber = 0 }, default);

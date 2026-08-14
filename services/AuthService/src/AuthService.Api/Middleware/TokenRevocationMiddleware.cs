@@ -54,6 +54,6 @@ public class TokenRevocationMiddleware
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.ContentType = "application/json; charset=utf-8";
         await context.Response.WriteAsync(
-            "{\"isSuccess\":false,\"statusCode\":401,\"message\":\"Token đã bị thu hồi.\",\"data\":{\"errorCode\":\"" + errorCode + "\"}}");
+            "{\"isSuccess\":false,\"statusCode\":401,\"message\":\"Token has been revoked.\",\"data\":{\"errorCode\":\"" + errorCode + "\"}}");
     }
 }

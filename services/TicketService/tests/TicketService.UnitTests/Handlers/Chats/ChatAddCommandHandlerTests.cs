@@ -1,15 +1,17 @@
+using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Moq;
 using SharedContracts.Events.Chats;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Implements.Services;
@@ -19,6 +21,8 @@ namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatAddCommandHandlerTests
 {
+    // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
+    private readonly Mock<IPublisher> _publisher = new();
     private IReadOnlyList<string> NoMatches = Array.Empty<string>();
     private static readonly List<string> PublicCreatePermission = new() { ChatPermissionCodes.ChatCreatePublic };
     private static readonly List<string> InternalCreatePermission = new() { ChatPermissionCodes.ChatCreateInternal };
@@ -36,10 +40,19 @@ public class ChatAddCommandHandlerTests
 
     private readonly Mock<IChatCacheService> _chatCache = new();
     private readonly Mock<ISlaService> _slaService = new();
-    private readonly Mock<IChatTextAiClient> _aiClient = new();
+    private readonly Mock<ITicketStateMachine> _stateMachine = new();
+    private readonly Mock<IChatRecipientResolver> _recipientResolver = new();
 
     public ChatAddCommandHandlerTests()
     {
+        _spamDetector.Setup(x => x.TryAcquireLeaseAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SpamLease("test-spam-lease", "test-owner"));
+        _spamDetector.Setup(x => x.RenewLeaseAsync(It.IsAny<SpamLease>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _spamDetector.Setup(x => x.ReleaseLeaseAsync(It.IsAny<SpamLease>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _spamDetector.Setup(x => x.RecordAcceptedMessageAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
         _spamDetector.Setup(x => x.IsSpamAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _profanityFilter.Setup(x => x.ContainsProfanity(It.IsAny<string>(), out NoMatches)).Returns(false);
@@ -47,15 +60,16 @@ public class ChatAddCommandHandlerTests
         _groupMentionResolver
             .Setup(x => x.ResolveAsync(It.IsAny<GroupMentionInput>(), It.IsAny<List<TicketParticipant>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<(Guid, ActorRoleEnum, string?)>());
-        _aiClient.Setup(x => x.DetectLanguageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("vi");
+        _recipientResolver
+            .Setup(x => x.ResolveAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Guid>());
     }
 
     private ChatAddCommandHandler CreateHandler(Mock<ITicketUnitOfWork> uow) =>
         new(uow.Object, _activityLogger.Object, _realtimeNotifier.Object, _markdownRenderer.Object,
             new ChatAuthorizationService(uow.Object), _spamDetector.Object, _profanityFilter.Object, _piiDetector.Object,
             _chatOptions, _loggerMock.Object, _outboxWriter.Object, _groupMentionResolver.Object, _chatCache.Object,
-            _slaService.Object, _aiClient.Object);
+        _recipientResolver.Object, _publisher.Object);
 
     [Fact]
     public async Task Handle_ValidRequest_AddsChat()
@@ -97,6 +111,11 @@ public class ChatAddCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
+
+        // Sprint Chat DoD — chat.created phải sinh audit trail.
+        _publisher.Verify(x => x.Publish(
+            It.Is<TicketAuditTrailNotification>(nn => nn.ActionCode == nameof(TicketAuditActionEnum.ChatCreated)),
+            It.IsAny<CancellationToken>()), Times.Once);
         result.StatusCode.Should().Be(201);
 
         chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c =>
@@ -115,7 +134,7 @@ public class ChatAddCommandHandlerTests
             "Staff User",
             ActivityActionEnum.Chatted,
             null,
-            "[Công khai]",
+            "[Public]",
             It.IsAny<string>()), Times.Once);
 
         _realtimeNotifier.Verify(x => x.NotifyChatAddedAsync(
@@ -202,7 +221,7 @@ public class ChatAddCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ClosedPendingRate_CustomerAllowedToAdd()
+    public async Task Handle_Closed_CustomerIsBlockedFromAddingChat()
     {
         // #517 — Customer được miễn block khi ticket ClosedPendingRate (để feedback/rating).
         var ticketId = Guid.NewGuid();
@@ -212,7 +231,7 @@ public class ChatAddCommandHandlerTests
             Code = "TKT-001",
             Title = "Test Ticket",
             Description = "Test Description",
-            Status = TicketStatusEnum.ClosedPendingRate
+            Status = TicketStatusEnum.Closed
         };
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -233,8 +252,9 @@ public class ChatAddCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        chats.Verify(x => x.AddAsync(It.IsAny<TicketChat>()), Times.Once);
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        chats.Verify(x => x.AddAsync(It.IsAny<TicketChat>()), Times.Never);
     }
 
     [Fact]
@@ -247,7 +267,7 @@ public class ChatAddCommandHandlerTests
             Code = "TKT-001",
             Title = "Test Ticket",
             Description = "Test Description",
-            Status = TicketStatusEnum.ClosedPendingRate
+            Status = TicketStatusEnum.Closed
         };
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -345,7 +365,7 @@ public class ChatAddCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SpamDetected_ReturnsBadRequestAndLogsFlagged()
+    public async Task Handle_SpamDetected_ReturnsStableDuplicateErrorWithoutRecordingAttempt()
     {
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
@@ -384,7 +404,7 @@ public class ChatAddCommandHandlerTests
 
         _activityLogger.Verify(x => x.LogAsync(
             ticketId, userId, ActorRoleEnum.Customer, "Customer",
-            ActivityActionEnum.ChatFlagged, null, null, It.IsAny<string>()), Times.Once);
+            ActivityActionEnum.ChatFlagged, null, null, It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -629,8 +649,7 @@ public class ChatAddCommandHandlerTests
         mentionsRepo.Verify(r => r.AddAsync(It.Is<TicketChatMention>(m =>
             m.MentionedUserId == managerId &&
             m.MentionedUserRole == ActorRoleEnum.Manager &&
-            m.MentionedDisplayName == "Manager A" &&
-            m.IsAcknowledged == false)), Times.Once);
+            m.MentionedDisplayName == "Manager A")), Times.Once);
 
         _outboxWriter.Verify(x => x.WriteAsync(
             It.Is<ChatMentionedEvent>(e =>
@@ -788,7 +807,7 @@ public class ChatAddCommandHandlerTests
     // ─── SLA integration tests (#563) ────────────────────────────────────────
 
     [Fact]
-    public async Task Handle_StaffWithRequestCustomerInfo_PausesSla()
+    public async Task Handle_StaffWithRequestCustomerInfo_DoesNotPauseSlaFromChat()
     {
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
@@ -812,13 +831,13 @@ public class ChatAddCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _slaService.Verify(s => s.PauseForCustomerInfoAsync(
-            ticketId, It.IsAny<Guid>(), userId, It.IsAny<CancellationToken>()), Times.Once);
+            ticketId, It.IsAny<Guid>(), userId, It.IsAny<CancellationToken>()), Times.Never);
         _slaService.Verify(s => s.ResumeOnCustomerReplyAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task Handle_CustomerReply_ResumesSla()
+    public async Task Handle_CustomerReply_DoesNotResumeSlaFromChat()
     {
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
@@ -841,7 +860,7 @@ public class ChatAddCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _slaService.Verify(s => s.ResumeOnCustomerReplyAsync(
-            ticketId, userId, It.IsAny<CancellationToken>()), Times.Once);
+            ticketId, userId, It.IsAny<CancellationToken>()), Times.Never);
         _slaService.Verify(s => s.PauseForCustomerInfoAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }

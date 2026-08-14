@@ -1,12 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using TicketService.Application.Common.Utils;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -24,13 +25,13 @@ public class ChatRepliesQueryHandler : IRequestHandler<ChatRepliesQuery, CommonR
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (ticket is null)
             return Fail(404, "Ticket not found");
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles))
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles))
             return Fail(403, "Forbidden");
 
         // Parent có thể đã bị soft-delete — vẫn cho xem replies của nó (đánh dấu "đã xoá" ở FE).
@@ -39,7 +40,7 @@ public class ChatRepliesQueryHandler : IRequestHandler<ChatRepliesQuery, CommonR
             .AnyAsync(c => c.Id == request.ParentChatId && c.TicketId == request.TicketId, cancellationToken);
 
         if (!parentExists)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
 
@@ -50,12 +51,12 @@ public class ChatRepliesQueryHandler : IRequestHandler<ChatRepliesQuery, CommonR
         if (!canViewInternalChats)
             query = query.Where(c => !c.IsInternal);
 
-        var total = await query.CountAsync(cancellationToken);
-        var rawReplies = await query
+        // Phân trang trên entity: sau đó còn nạp dữ liệu con (mention/reaction) theo lô rồi mới dựng DTO.
+        var page = await query
             .OrderBy(c => c.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(cancellationToken);
+            .ThenBy(c => c.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
+        var rawReplies = page.Items;
 
         var chatIds = rawReplies.Select(c => c.Id).ToList();
         var mentionsByChat = await ChatChildDataLoader.LoadMentionsAsync(_unitOfWork, chatIds, cancellationToken);
@@ -85,13 +86,7 @@ public class ChatRepliesQueryHandler : IRequestHandler<ChatRepliesQuery, CommonR
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<TicketChatDTO>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.WithItems(items)
         };
     }
 

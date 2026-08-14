@@ -16,6 +16,8 @@ public class TicketActivityConfiguration : IEntityTypeConfiguration<TicketActivi
 
         builder.Property(e => e.TicketId)
             .HasColumnName("ticket_id");
+        builder.Property(e => e.SourceTicketId)
+            .HasColumnName("source_ticket_id");
 
         builder.Property(e => e.ActorUserId)
             .HasColumnName("actor_user_id");
@@ -46,6 +48,7 @@ public class TicketActivityConfiguration : IEntityTypeConfiguration<TicketActivi
 
         builder.HasIndex(e => e.TicketId);
         builder.HasIndex(e => e.ActorUserId);
+        builder.HasIndex(e => e.SourceTicketId);
 
         builder.HasOne(e => e.Ticket)
             .WithMany(e => e.Activities)

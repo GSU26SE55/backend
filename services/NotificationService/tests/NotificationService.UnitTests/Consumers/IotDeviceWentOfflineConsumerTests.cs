@@ -1,12 +1,6 @@
 using MassTransit;
 using MassTransit.Testing;
-using MediatR;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using NotificationService.Application.Consumers;
-using NotificationService.Application.CQRS.Command.Notification;
-using NotificationService.Application.DTOs.Response.Notification;
-using NotificationService.Application.Services;
 using NotificationService.Domain.Enums;
 using NotificationService.UnitTests.Helpers;
 using SharedContracts.Events;
@@ -20,24 +14,6 @@ namespace NotificationService.UnitTests.Consumers;
 /// </summary>
 public class IotDeviceWentOfflineConsumerTests
 {
-    private static async Task<ITestHarness> StartHarness(IMediator mediator, IReadOnlyList<Guid>? recipients = null, ICacheService? cache = null)
-    {
-        var resolver = new Mock<IRecipientResolver>();
-        resolver.Setup(x => x.GetActiveByRoleAsync(It.IsAny<CancellationToken>(), It.IsAny<string[]>()))
-            .ReturnsAsync(recipients ?? new[] { Guid.NewGuid() });
-
-        var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<IotDeviceWentOfflineConsumer>())
-            .AddSingleton(mediator)
-            .AddSingleton(resolver.Object)
-            .AddSingleton(cache ?? ConsumerTestHarness.ProceedCache())
-            .AddSingleton(NullLogger<IotDeviceWentOfflineConsumer>.Instance)
-            .BuildServiceProvider(true);
-        var harness = provider.GetRequiredService<ITestHarness>();
-        await harness.Start();
-        return harness;
-    }
-
     private static IotDeviceWentOfflineEvent MakeEvent() => new(
         IotDeviceId: Guid.NewGuid(),
         DeviceCode: "DEV-01",
@@ -50,29 +26,20 @@ public class IotDeviceWentOfflineConsumerTests
         AffectedBatteryCount: 3,
         AlertId: Guid.NewGuid());
 
-    private static Mock<IMediator> CaptureMediator(List<CreateNotificationCommand> sink)
-    {
-        var mediator = new Mock<IMediator>();
-        mediator.Setup(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()))
-            .Callback<IRequest<NotificationActionResponse>, CancellationToken>((c, _) => sink.Add((CreateNotificationCommand)c))
-            .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
-        return mediator;
-    }
-
     [Fact]
     public async Task Consume_ShouldDispatch_PushAndInApp()
     {
-        var calls = new List<CreateNotificationCommand>();
-        var harness = await StartHarness(CaptureMediator(calls).Object);
+        var (harness, written, _) =
+            await ConsumerTestHarness.StartAsync<IotDeviceWentOfflineConsumer>();
 
         var evt = MakeEvent();
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<IotDeviceWentOfflineEvent>()).Should().BeTrue();
 
-        calls.Should().HaveCount(2);
-        calls.Should().Contain(c => c.Channel == NotificationChannelEnum.Push);
-        calls.Should().Contain(c => c.Channel == NotificationChannelEnum.InApp);
-        calls.Should().AllSatisfy(c =>
+        written.Should().HaveCount(2);
+        written.Should().Contain(c => c.Channel == NotificationChannelEnum.Push);
+        written.Should().Contain(c => c.Channel == NotificationChannelEnum.InApp);
+        written.Should().AllSatisfy(c =>
         {
             c.Type.Should().Be(NotificationTypeEnum.IotDeviceWentOffline);
             c.EntityType.Should().Be("IotDevice");
@@ -85,13 +52,54 @@ public class IotDeviceWentOfflineConsumerTests
     [Fact]
     public async Task Consume_NoRecipientResolved_ShouldSkip()
     {
-        var calls = new List<CreateNotificationCommand>();
-        var harness = await StartHarness(CaptureMediator(calls).Object, Array.Empty<Guid>());
+        var (harness, written, _) =
+            await ConsumerTestHarness.StartAsync<IotDeviceWentOfflineConsumer>(Array.Empty<Guid>());
 
         await harness.Bus.Publish(MakeEvent());
         (await harness.Consumed.Any<IotDeviceWentOfflineEvent>()).Should().BeTrue();
 
-        calls.Should().BeEmpty();
+        written.Should().BeEmpty();
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task Consume_IncludesSiteCustomer_AndDeduplicatesRecipients()
+    {
+        var operationsUser = Guid.NewGuid();
+        var customer = Guid.NewGuid();
+        var (harness, written, _) =
+            await ConsumerTestHarness.StartAsync<IotDeviceWentOfflineConsumer>(
+                new[] { operationsUser, customer });
+
+        await harness.Bus.Publish(MakeEvent() with { CustomerId = customer });
+        (await harness.Consumed.Any<IotDeviceWentOfflineEvent>()).Should().BeTrue();
+
+        written.Should().HaveCount(4, "two distinct recipients each receive InApp and Push");
+        written.Select(c => c.UserId).Distinct().Should().BeEquivalentTo(new[] { operationsUser, customer });
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task Consume_DifferentMessagesForSameIncident_WritesOnlyOnce()
+    {
+        var keys = new HashSet<string>();
+        var cache = new Mock<ICacheService>();
+        cache.Setup(c => c.TrySetIfNotExistsAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, string _, TimeSpan _, CancellationToken _) => keys.Add(key));
+        cache.Setup(c => c.TryRefreshLeaseAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var (harness, written, _) =
+            await ConsumerTestHarness.StartAsync<IotDeviceWentOfflineConsumer>(cache: cache.Object);
+        var evt = MakeEvent();
+
+        await harness.Bus.Publish(evt, x => x.MessageId = Guid.NewGuid());
+        await harness.Bus.Publish(evt, x => x.MessageId = Guid.NewGuid());
+
+        (await harness.Consumed.SelectAsync<IotDeviceWentOfflineEvent>().Count()).Should().Be(2);
+        written.Should().HaveCount(2, "business dedupe uses AlertId, not only broker MessageId");
         await harness.Stop();
     }
 }

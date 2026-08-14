@@ -1,10 +1,11 @@
 using NotificationService.Domain.Enums;
 using SharedKernels.Domain;
+using SharedKernels.Interfaces;
 
 namespace NotificationService.Domain.Entities;
 
 /// <summary>Outbox riêng cho audit pipeline NotificationService (Sprint audit #AUDIT-34). Pattern giống AuthService #AUDIT-07.</summary>
-public class NotificationAuditOutbox : AuditableEntity
+public class NotificationAuditOutbox : AuditableEntity, IAuditOutboxMessage
 {
     public Guid EventId { get; set; }
     public string EventType { get; set; } = "AuditCreatedEventV1";

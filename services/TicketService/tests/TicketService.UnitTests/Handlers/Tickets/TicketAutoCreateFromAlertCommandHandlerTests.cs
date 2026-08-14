@@ -2,9 +2,12 @@ using FluentAssertions;
 using Moq;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using SharedContracts.Saga.AlertTicket;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
+using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Utils;
 
@@ -15,7 +18,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
     private readonly Mock<ITicketCodeGenerator> _codeGen = new();
     private readonly Mock<IPriorityCalculator> _priorityCalc = new();
     private readonly Mock<IActivityLogger> _logger = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     [Theory]
     [InlineData("EnvironmentalIncident", ImpactScopeEnum.Site, UrgencyLevelEnum.High, TicketPriorityEnum.P1Critical)]
@@ -39,7 +42,7 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
 
         var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
 
-        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -55,6 +58,111 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
             t.UrgencyLevel == expectedUrgency &&
             t.Priority == expectedPriority)), Times.Once);
 
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ===== BE-AI structured — ghi ticket_ai_suggestions =====
+
+    private TicketAutoCreateFromAlertCommandHandler BuildHandler(Mock<ITicketUnitOfWork> uow)
+    {
+        _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-AUTO-001");
+        _priorityCalc
+            .Setup(x => x.Calculate(It.IsAny<ImpactScopeEnum>(), It.IsAny<UrgencyLevelEnum>()))
+            .Returns(TicketPriorityEnum.P3Normal);
+
+        return new TicketAutoCreateFromAlertCommandHandler(
+            uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object,
+            _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
+    }
+
+    private static TicketAutoCreateFromAlertCommand BaseCommand() => new()
+    {
+        AnomalyCategory = "SohDegradation",
+        OriginAlertId = Guid.NewGuid(),
+        BatteryAssetId = Guid.NewGuid(),
+        CustomerId = Guid.NewGuid(),
+        Title = "Alert",
+        Description = "Desc"
+    };
+
+    [Fact]
+    public async Task Handle_WithAiSuggestion_PersistsStructuredData()
+    {
+        var command = BaseCommand();
+        command.AiPrescriptionText = "Replace the BMS module";
+        command.AiSuggestion = new AiSuggestionPayload(
+            ActionSteps: new[] { "Disconnect the load", "Measure cell voltage" },
+            PpeRequired: new[] { "Insulating gloves" },
+            SopReferences: new[] { "SOP-BMS-01" },
+            KbDocRefs: new[] { "maintenance/bms_warning_codes.md" },
+            HumanVerificationRequired: true,
+            Enriched: true,
+            LlmProvider: "deepseek",
+            PrescriptionId: "presc-abc-123");
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build();
+        var aiRepo = MockTicketUnitOfWork.AiSuggestionsOf(uow);
+
+        var result = await BuildHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        aiRepo.Verify(x => x.AddAsync(It.Is<TicketAiSuggestion>(s =>
+            s.Prescription == "Replace the BMS module" &&
+            s.ActionSteps.Count == 2 &&
+            s.SopReferences.Contains("SOP-BMS-01") &&
+            s.KbDocRefs.Contains("maintenance/bms_warning_codes.md") &&
+            s.HumanVerificationRequired &&
+            s.Enriched &&
+            s.LlmProvider == "deepseek" &&
+            s.PrescriptionId == "presc-abc-123")), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_WithoutAiSuggestion_DoesNotPersistAnything()
+    {
+        // Ticket từ threshold engine — không gọi AI, không được tạo bản ghi trắng.
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build();
+        var aiRepo = MockTicketUnitOfWork.AiSuggestionsOf(uow);
+
+        var result = await BuildHandler(uow).Handle(BaseCommand(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        aiRepo.Verify(x => x.AddAsync(It.IsAny<TicketAiSuggestion>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_WithEmptyAiPayload_DoesNotPersistAnything()
+    {
+        // Payload dựng từ command của saga cũ (mọi field null) — IsEmpty phải chặn lại.
+        var command = BaseCommand();
+        command.AiSuggestion = new AiSuggestionPayload();
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build();
+        var aiRepo = MockTicketUnitOfWork.AiSuggestionsOf(uow);
+
+        var result = await BuildHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        aiRepo.Verify(x => x.AddAsync(It.IsAny<TicketAiSuggestion>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_WhenAiSuggestionWriteThrows_StillCreatesTicket()
+    {
+        // Best-effort: hỏng chỗ ghi gợi ý KHÔNG được làm chết việc tạo ticket.
+        var command = BaseCommand();
+        command.AiSuggestion = new AiSuggestionPayload(ActionSteps: new[] { "Disconnect the load" });
+
+        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
+        MockTicketUnitOfWork.AiSuggestionsOf(uow)
+            .Setup(x => x.AddAsync(It.IsAny<TicketAiSuggestion>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var result = await BuildHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        tickets.Verify(x => x.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Once);
+        _outboxWriter.Verify(
+            x => x.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SharedKernels.Domain;
 using TicketService.Domain.Enums;
 
@@ -12,10 +13,7 @@ public class KbArticleVersion : AuditableEntity
 
     // Content snapshot
     public string Title { get; set; } = string.Empty;
-    public string Symptoms { get; set; } = string.Empty;
-    public string DiagnosisSteps { get; set; } = string.Empty;
-    public string SolutionSteps { get; set; } = string.Empty;
-    public List<string>? RecommendedParts { get; set; }
+    public JsonDocument Content { get; set; } = JsonDocument.Parse("{}");
     public List<string> Tags { get; set; } = new();
 
     // Metadata

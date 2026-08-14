@@ -20,20 +20,20 @@ public class ChatAttachmentRemoveCommandHandler : IRequestHandler<ChatAttachment
     {
         var attachment = await _uow.TicketAttachments.GetByIdAsync(request.AttachmentId);
         if (attachment == null || attachment.IsDeleted || attachment.ChatId != request.ChatId || attachment.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy đính kèm.");
+            return Fail(404, "Attachment not found.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var isAuthor = chat.AuthorUserId == request.UserId;
         var isManagerOrAdmin = request.UserRole == ActorRoleEnum.Manager || request.UserRole == ActorRoleEnum.Admin;
         if (!isAuthor && !isManagerOrAdmin)
-            return Fail(403, "Không có quyền xóa đính kèm này.");
+            return Fail(403, "You do not have permission to delete this attachment.");
 
         attachment.IsDeleted = true;
         attachment.DeletedAt = DateTime.UtcNow;
@@ -45,7 +45,7 @@ public class ChatAttachmentRemoveCommandHandler : IRequestHandler<ChatAttachment
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa đính kèm thành công.",
+            Message = "Attachment deleted successfully.",
             Data = new TicketActionDTO
             {
                 Id = attachment.Id.ToString(),

@@ -43,10 +43,10 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
             return Forbidden();
 
         if (file.Status == FileStatusEnum.Quarantined)
-            return Conflict("File đang bị cách ly và không thể tải.");
+            return Conflict("File is quarantined and cannot be downloaded.");
 
         if (file.Status == FileStatusEnum.Processing)
-            return Conflict("File đang được xử lý, vui lòng thử lại sau.");
+            return Conflict("File is being processed, please try again later.");
 
         var result = await _objectStorageService.DownloadAsync(objectKey, cancellationToken);
 
@@ -54,7 +54,7 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Download file thành công.",
+            Message = "File downloaded successfully.",
             Data = result
         };
     }
@@ -68,14 +68,14 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
     {
         IsSuccess = false,
         StatusCode = 404,
-        Message = "Không tìm thấy file."
+        Message = "File not found."
     };
 
     private static CommonResponse<FileDownloadResponse> Forbidden() => new()
     {
         IsSuccess = false,
         StatusCode = 403,
-        Message = "Không có quyền tải file này."
+        Message = "You do not have permission to download this file."
     };
 
     private static CommonResponse<FileDownloadResponse> Conflict(string message) => new()

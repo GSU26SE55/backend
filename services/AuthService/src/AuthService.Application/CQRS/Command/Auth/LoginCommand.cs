@@ -26,7 +26,7 @@ public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
             response.ListErrors.Add(new Errors
             {
                 Field = "Email",
-                Detail = "Email không được để trống."
+                Detail = "Email is required."
             });
         }
         else
@@ -38,7 +38,7 @@ public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
                 response.ListErrors.Add(new Errors
                 {
                     Field = "Email",
-                    Detail = $"Email không được vượt quá {EmailMaxLength} ký tự."
+                    Detail = $"Email must not exceed {EmailMaxLength} characters."
                 });
             }
             else if (!EmailRegex.IsMatch(trimmed))
@@ -46,7 +46,7 @@ public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
                 response.ListErrors.Add(new Errors
                 {
                     Field = "Email",
-                    Detail = "Email không đúng định dạng."
+                    Detail = "Invalid email format."
                 });
             }
         }
@@ -56,7 +56,7 @@ public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
             response.ListErrors.Add(new Errors
             {
                 Field = "Password",
-                Detail = "Mật khẩu không được để trống."
+                Detail = "Password is required."
             });
         }
 
@@ -64,7 +64,7 @@ public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

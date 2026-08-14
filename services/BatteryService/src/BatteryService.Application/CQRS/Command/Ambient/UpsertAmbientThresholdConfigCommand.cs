@@ -33,7 +33,7 @@ public class UpsertAmbientThresholdConfigCommand
         var response = new AmbientThresholdConfigResponse();
 
         if (SiteId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(SiteId), Detail = "SiteId bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = nameof(SiteId), Detail = "SiteId is required." });
 
         if (HighAmbientTempWarning.HasValue && HighAmbientTempCritical.HasValue
             && HighAmbientTempCritical.Value < HighAmbientTempWarning.Value)
@@ -41,7 +41,7 @@ public class UpsertAmbientThresholdConfigCommand
             response.ListErrors.Add(new Errors
             {
                 Field = nameof(HighAmbientTempCritical),
-                Detail = "Critical phải >= Warning."
+                Detail = "Critical must be >= Warning."
             });
         }
 
@@ -51,7 +51,7 @@ public class UpsertAmbientThresholdConfigCommand
             response.ListErrors.Add(new Errors
             {
                 Field = nameof(HighHumidityCritical),
-                Detail = "Critical phải >= Warning."
+                Detail = "Critical must be >= Warning."
             });
         }
 
@@ -59,7 +59,7 @@ public class UpsertAmbientThresholdConfigCommand
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Threshold config không hợp lệ.";
+            response.Message = "Invalid threshold config.";
         }
         return Task.FromResult(response);
     }

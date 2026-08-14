@@ -16,8 +16,8 @@ public class GoogleAuthCommand : IRequest<LoginResponse>, IValidatable<LoginResp
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "IdToken không được để trống.";
-            response.ListErrors.Add(new Errors { Field = "IdToken", Detail = "IdToken không được để trống." });
+            response.Message = "IdToken is required.";
+            response.ListErrors.Add(new Errors { Field = "IdToken", Detail = "IdToken is required." });
         }
         return Task.FromResult(response);
     }

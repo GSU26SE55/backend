@@ -45,7 +45,7 @@ public class VerifyOtpCommandHandlerTests
 
         response.IsSuccess.Should().BeTrue();
         response.StatusCode.Should().Be(200);
-        response.Message.Should().Contain("kích hoạt");
+        response.Message.Should().Contain("active");
 
         account.Status.Should().Be(AccountStatusEnum.Active);
         account.EmailConfirmed.Should().BeTrue();
@@ -133,7 +133,7 @@ public class VerifyOtpCommandHandlerTests
         }, CancellationToken.None);
 
         response.StatusCode.Should().Be(401);
-        response.Message.Should().Contain("hết hạn");
+        response.Message.Should().Contain("expired");
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public class VerifyOtpCommandHandlerTests
         }, CancellationToken.None);
 
         response.StatusCode.Should().Be(409);
-        response.Message.Should().Contain("xác thực");
+        response.Message.Should().Contain("verified");
     }
 
     [Fact]

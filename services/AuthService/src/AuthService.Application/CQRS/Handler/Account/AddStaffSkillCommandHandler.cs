@@ -5,16 +5,20 @@ using AuthService.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
 public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
+    private readonly IMessageProducerService _messageProducer;
 
-    public AddStaffSkillCommandHandler(IAuthUnitOfWork unitOfWork)
+    public AddStaffSkillCommandHandler(IAuthUnitOfWork unitOfWork, IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
+        _messageProducer = messageProducer;
     }
 
     public async Task<AccountActionResponse> Handle(AddStaffSkillCommand request, CancellationToken cancellationToken)
@@ -26,7 +30,7 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
             .AnyAsync(a => a.Id == request.StaffAccountId && !a.IsDeleted, cancellationToken);
 
         if (!accountExists)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         var staffProfile = await _unitOfWork.StaffProfiles
             .GetAllAsync()
@@ -73,13 +77,34 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
 
         if (!createdSkill)
             _unitOfWork.StaffSkills.UpdateAsync(skill);
+
+        // GH-770 — TicketService có sẵn consumer StaffSkillsUpdatedEvent nhưng KHÔNG NƠI NÀO phát,
+        // nên định tuyến/giao việc theo kỹ năng dùng dữ liệu cũ vĩnh viễn.
+        //
+        // Phát TOÀN BỘ tập kỹ năng sau thay đổi, không phát "vừa thêm mã X": một event rơi giữa
+        // chừng thì tập đầy đủ ở lần sau vẫn tự chữa được, còn danh sách gia giảm thì lệch mãi.
+        //
+        // Tự hợp nhất trong bộ nhớ vì thay đổi CHƯA được lưu — truy vấn lúc này còn thấy trạng
+        // thái cũ. Chỉ chiếu SkillCode nên không dính identity map của EF.
+        var skillCodes = await _unitOfWork.StaffSkills
+            .GetAllAsync()
+            .Where(s => s.StaffAccountId == request.StaffAccountId && !s.IsDeleted)
+            .Select(s => s.SkillCode)
+            .ToListAsync(cancellationToken);
+        if (!skillCodes.Contains(skillCode, StringComparer.Ordinal))
+            skillCodes.Add(skillCode);
+
+        // Outbox: publish TRƯỚC SaveChangesAsync ⇒ nguyên tử với chính thay đổi vừa làm.
+        await _messageProducer.PublishAsync(
+            new StaffSkillsUpdatedEvent(request.StaffAccountId, skillCodes), cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AccountActionResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật staff skill thành công.",
+            Message = "Staff skill updated successfully.",
             Data = request.StaffAccountId
         };
     }

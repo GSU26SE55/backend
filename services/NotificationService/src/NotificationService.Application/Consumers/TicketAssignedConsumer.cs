@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
@@ -10,7 +9,11 @@ namespace NotificationService.Application.Consumers;
 
 /// <summary>
 /// GH-107 — Ticket được assign/reassign Staff → notify chính Staff đó (StaffId có sẵn trong event).
-/// Ghi notification trực tiếp qua UnitOfWork (InApp + Push).
+///
+/// Sprint 6.2 NOTI-05 (#676) — event nay mang thêm <c>CustomerId</c> nên notify được CẢ Customer
+/// ("Staff đang xử lý sự cố của bạn") đúng spec §3.4. Trước đó phần Customer bị bỏ trống với comment
+/// "deferred (event lacks CustomerId)" (reviewnotification.md §4.1).
+/// Staff nhận InApp+Push+Email (kèm SLA); Customer nhận InApp+Push+Email.
 /// </summary>
 public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
 {
@@ -30,30 +33,23 @@ public class TicketAssignedConsumer : IConsumer<TicketAssignedEvent>
 
     public async Task Consume(ConsumeContext<TicketAssignedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "TicketAssigned", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate TicketAssigned message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            await TicketSchedulingNotificationWriter.WriteAssignmentAsync(
+                _unitOfWork, evt.TicketId, evt.Code, evt.CustomerId,
+                evt.PrimaryHandlerStaffId, evt.Priority, evt.ScheduledStartAtUtc,
+                evt.ScheduleVersion, evt.WorkStartsImmediately, context.CancellationToken);
 
-        var recipientIds = new[] { evt.StaffId };
-
-        var title = $"Bạn được phân công ticket {evt.Code}";
-        var body = $"Ticket {evt.Code} (ưu tiên {evt.Priority}) đã được giao cho bạn.";
-        var payload = JsonSerializer.Serialize(new
-        {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            staffId = evt.StaffId,
-            priority = evt.Priority,
-            screen = "TicketDetail"
+            if (evt.CustomerId == Guid.Empty)
+            {
+                _logger.LogWarning(
+                    "TicketAssigned ticket={TicketId}: CustomerId rỗng — bỏ qua notification cho Customer.", evt.TicketId);
+            }
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.TicketAssigned, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }

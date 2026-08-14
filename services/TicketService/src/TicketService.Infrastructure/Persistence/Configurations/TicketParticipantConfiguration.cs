@@ -68,6 +68,11 @@ public class TicketParticipantConfiguration : IEntityTypeConfiguration<TicketPar
             .HasDatabaseName("ix_ticket_participants_ticket_active")
             .HasFilter("removed_at IS NULL");
 
+        builder.HasIndex(e => new { e.TicketId, e.UserId })
+            .HasDatabaseName("ux_ticket_participants_active_user")
+            .IsUnique()
+            .HasFilter("removed_at IS NULL AND is_deleted = false");
+
         builder.HasOne(e => e.Ticket)
             .WithMany(e => e.Participants)
             .HasForeignKey(e => e.TicketId)

@@ -14,7 +14,7 @@ public class HandlebarsTemplateRendererTests
             SiteName = "Site Hà Nội",
             IncidentType = "SmokeDetected",
             Severity = "Critical",
-            Description = "Phát hiện khói bất thường",
+            Description = "Abnormal smoke detected",
             DetectedAt = "21/06/2026 14:30:00",
             IncidentId = "abc-123"
         });
@@ -23,7 +23,7 @@ public class HandlebarsTemplateRendererTests
         html.Should().Contain("Site Hà Nội");
         html.Should().Contain("SmokeDetected");
         html.Should().Contain("Critical");
-        html.Should().Contain("Phát hiện khói bất thường");
+        html.Should().Contain("Abnormal smoke detected");
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public class HandlebarsTemplateRendererTests
         var html = _renderer.Render("sla-breach", new
         {
             Code = "2026-001",
-            Title = "Pin B0005 bị Overheat",
+            Title = "Battery B0005 is Overheating",
             Priority = "P1 Critical",
             BreachedAt = "21/06/2026 10:00:00"
         });
@@ -77,7 +77,7 @@ public class HandlebarsTemplateRendererTests
         html.Should().Contain("<html");
         html.Should().Contain("123456");
         html.Should().Contain("Nguyễn Văn A");
-        html.Should().Contain("Đặt lại mật khẩu");
+        html.Should().Contain("Reset your password");
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class HandlebarsTemplateRendererTests
         var act = () => _renderer.Render("non-existent-template", new { });
 
         act.Should().Throw<InvalidOperationException>()
-           .WithMessage("*non-existent-template.hbs*");
+           .WithMessage("*non-existent-template.html*");
     }
 
     [Fact]

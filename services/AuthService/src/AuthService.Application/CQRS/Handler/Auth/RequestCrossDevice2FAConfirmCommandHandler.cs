@@ -52,10 +52,10 @@ public class RequestCrossDevice2FAConfirmCommandHandler
             .Where(a => !a.IsDeleted)
             .FirstOrDefaultAsync(a => a.Id == request.AccountId, cancellationToken);
         if (account == null)
-            return Fail(404, "Không tìm thấy tài khoản.");
+            return Fail(404, "Account not found.");
 
         if (account.TwoFactorEnabled && !string.IsNullOrEmpty(account.TwoFactorSecret))
-            return Fail(409, "2FA đã được bật. Hãy disable trước khi enroll lại.");
+            return Fail(409, "2FA is already enabled. Please disable it before enrolling again.");
 
         // Sinh secret base32 + confirm token cryptographic random 32 bytes (256 bits).
         var secret = _totp.GenerateSecret();
@@ -93,7 +93,7 @@ public class RequestCrossDevice2FAConfirmCommandHandler
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Link xác nhận đã được gửi tới email. Mở email trên thiết bị thứ 2 (Phone) để hoàn tất.",
+            Message = "A confirmation link has been sent to your email. Open the email on your second device (phone) to complete setup.",
             Data = new RequestCrossDevice2FAConfirmResponseDto
             {
                 ConfirmToken = confirmToken,

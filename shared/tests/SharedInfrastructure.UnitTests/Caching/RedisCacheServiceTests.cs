@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 using SharedInfrastructure.Caching;
+using StackExchange.Redis;
 
 namespace SharedInfrastructure.UnitTests.Caching;
 
@@ -102,5 +103,107 @@ public class RedisCacheServiceTests
         await Sut().RemoveAsync("k");
 
         _cache.Verify();
+    }
+
+    [Fact]
+    public async Task GetCounterAsync_PlainString_ReturnsCounter()
+    {
+        _cache.Setup(c => c.GetAsync("counter", It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Encoding.UTF8.GetBytes("42"));
+
+        var result = await Sut().GetCounterAsync("counter");
+
+        result.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task GetCounterAsync_WithRedis_ReadsRawStringInsteadOfDistributedCache()
+    {
+        var database = new Mock<IDatabase>();
+        database.Setup(d => d.StringGetAsync((RedisKey)"counter", CommandFlags.None))
+                .ReturnsAsync((RedisValue)"84");
+        var redis = new Mock<IConnectionMultiplexer>();
+        redis.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))
+             .Returns(database.Object);
+        var sut = new RedisCacheService(_cache.Object, redis.Object);
+
+        var result = await sut.GetCounterAsync("counter");
+
+        result.Should().Be(84);
+        _cache.Verify(c => c.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetCounterAsync_MissingOrInvalidValue_ReturnsNull()
+    {
+        _cache.SetupSequence(c => c.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync((byte[]?)null)
+              .ReturnsAsync(Encoding.UTF8.GetBytes("not-a-number"));
+
+        (await Sut().GetCounterAsync("missing")).Should().BeNull();
+        (await Sut().GetCounterAsync("invalid")).Should().BeNull();
+    }
+
+    // ════════ Sprint 6.3 NOTI3-09 (#709) — TrySetIfNotExistsAsync ════════
+    //
+    // Không có Redis thật trong unit test nên phần này kiểm nhánh FALLBACK (host chưa đăng ký
+    // IConnectionMultiplexer). Nhánh atomic thật dùng StringSetAsync(..., When.NotExists) của
+    // StackExchange.Redis — đúng API mà RedisInboxStore đã dùng và đã chạy production.
+
+    /// <summary>IDistributedCache in-memory tối giản, đủ cho nhánh fallback.</summary>
+    private sealed class FakeDistributedCache : IDistributedCache
+    {
+        private readonly Dictionary<string, byte[]> _store = new();
+
+        public byte[]? Get(string key) => _store.TryGetValue(key, out var v) ? v : null;
+        public Task<byte[]?> GetAsync(string key, CancellationToken token = default) => Task.FromResult(Get(key));
+        public void Refresh(string key) { }
+        public Task RefreshAsync(string key, CancellationToken token = default) => Task.CompletedTask;
+        public void Remove(string key) => _store.Remove(key);
+        public Task RemoveAsync(string key, CancellationToken token = default) { Remove(key); return Task.CompletedTask; }
+        public void Set(string key, byte[] value, DistributedCacheEntryOptions options) => _store[key] = value;
+        public Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options, CancellationToken token = default)
+        { Set(key, value, options); return Task.CompletedTask; }
+    }
+
+    private static RedisCacheService SutWithRealStore() => new(new FakeDistributedCache());
+
+    [Fact]
+    public async Task TrySetIfNotExists_FirstCall_ReturnsTrue()
+    {
+        (await SutWithRealStore().TrySetIfNotExistsAsync("k1", "v", TimeSpan.FromMinutes(5)))
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TrySetIfNotExists_SecondCall_ReturnsFalse_AndKeepsOriginalValue()
+    {
+        var sut = SutWithRealStore();
+
+        await sut.TrySetIfNotExistsAsync("k1", "first", TimeSpan.FromMinutes(5));
+        var second = await sut.TrySetIfNotExistsAsync("k1", "second", TimeSpan.FromMinutes(5));
+
+        second.Should().BeFalse("chỉ lần đầu được chiếm key — đây là điều kiện để debounce đúng");
+    }
+
+    [Fact]
+    public async Task TrySetIfNotExists_DifferentKeys_BothSucceed()
+    {
+        var sut = SutWithRealStore();
+
+        (await sut.TrySetIfNotExistsAsync("a", "1", TimeSpan.FromMinutes(5))).Should().BeTrue();
+        (await sut.TrySetIfNotExistsAsync("b", "1", TimeSpan.FromMinutes(5))).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TrySetIfNotExists_AfterRemove_CanBeClaimedAgain()
+    {
+        var sut = SutWithRealStore();
+
+        await sut.TrySetIfNotExistsAsync("k", "1", TimeSpan.FromMinutes(5));
+        await sut.RemoveAsync("k");
+
+        (await sut.TrySetIfNotExistsAsync("k", "2", TimeSpan.FromMinutes(5)))
+            .Should().BeTrue("hết TTL / bị xoá thì cửa sổ debounce mới được phép mở lại");
     }
 }

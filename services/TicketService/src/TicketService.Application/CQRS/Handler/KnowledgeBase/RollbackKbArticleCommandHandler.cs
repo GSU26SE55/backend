@@ -22,25 +22,25 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
     public async Task<CommonResponse<KbArticleActionDTO>> Handle(RollbackKbArticleCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
+            .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
+
+        if (article.IsTemplate && !command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            return Fail(403, "Only Admin can roll back a template version.");
 
         var version = await _uow.KbArticleVersions.GetAllAsync()
             .FirstOrDefaultAsync(v => v.Id == command.ToVersionId, ct);
 
         if (version == null)
-            return Fail(404, "Không tìm thấy phiên bản yêu cầu.");
+            return Fail(404, "Requested version not found.");
 
         var nextMajor = article.Version + 1;
 
         // Copy content to article
         article.Title = version.Title;
-        article.Symptoms = version.Symptoms;
-        article.DiagnosisSteps = version.DiagnosisSteps;
-        article.SolutionSteps = version.SolutionSteps;
-        article.RecommendedParts = version.RecommendedParts;
+        article.Content = version.Content;
         article.Tags = version.Tags.ToList();
         article.Version = nextMajor;
 
@@ -60,15 +60,16 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
             MinorVersion = 0,
             Status = KbVersionStatusEnum.Approved,
             Title = article.Title,
-            Symptoms = article.Symptoms,
-            DiagnosisSteps = article.DiagnosisSteps,
-            SolutionSteps = article.SolutionSteps,
-            RecommendedParts = article.RecommendedParts,
+            Content = article.Content,
             Tags = article.Tags.ToList(),
-            ChangeDescription = $"Khôi phục từ phiên bản v{version.MajorVersion}.{version.MinorVersion}",
+            ChangeDescription = $"Restored from version v{version.MajorVersion}.{version.MinorVersion}",
             ChangedBy = command.CurrentUserId
         };
-        await _uow.KbArticleVersions.AddAsync(restoredVersion);
+        // Ô (nextMajor, 0) có thể đã bị chiếm bởi bản Pending sinh lúc khởi tạo bài viết (article.Version
+        // vẫn là 0 trong khi row 1.0 đã tồn tại) — xem KbArticleVersionSlot. AddAsync thẳng là 23505 → 500.
+        await KbArticleVersionSlot.UpsertAsync(_uow, restoredVersion, ct);
+        await KbArticleVersionSlot.RejectOtherPendingAsync(
+            _uow, article.Id, nextMajor, 0, "Article has been rolled back to a different version.", ct);
 
         await _uow.SaveChangesAsync(ct);
 
@@ -76,7 +77,7 @@ public class RollbackKbArticleCommandHandler : IRequestHandler<RollbackKbArticle
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Bài viết đã được hoàn tác về phiên bản v{version.MajorVersion}.{version.MinorVersion}.",
+            Message = $"Article has been rolled back to version v{version.MajorVersion}.{version.MinorVersion}.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),

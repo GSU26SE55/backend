@@ -35,7 +35,7 @@ public class CreateGatewayDeviceCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "DeviceCode đã tồn tại.",
+                Message = "DeviceCode already exists.",
                 Data = new CreateGatewayDeviceResponseDto(Guid.Empty, deviceCode, string.Empty)
             };
 

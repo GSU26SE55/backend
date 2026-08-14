@@ -1,5 +1,7 @@
+using BatteryService.Application.Common;
 using BatteryService.Application.CQRS.Query.Site;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using BatteryService.Domain.Enums;
 using MediatR;
@@ -11,18 +13,40 @@ namespace BatteryService.Application.CQRS.Handler.Site;
 public class GetSiteDashboardQueryHandler : IRequestHandler<GetSiteDashboardQuery, CommonResponse<SiteDashboardDto>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IBatteryCurrentUserService _currentUserService;
 
-    public GetSiteDashboardQueryHandler(IBatteryUnitOfWork unitOfWork)
+    public GetSiteDashboardQueryHandler(IBatteryUnitOfWork unitOfWork, IBatteryCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<SiteDashboardDto>> Handle(GetSiteDashboardQuery request, CancellationToken cancellationToken)
     {
-        var site = await _unitOfWork.Sites
+        // GH-722 — Customer chỉ xem được dashboard của site thuộc mình.
+        var scope = BatteryTenantScopeHelper.Resolve(_currentUserService.UserId, _currentUserService.Roles);
+        if (scope.IsDenied)
+        {
+            return new CommonResponse<SiteDashboardDto>
+            {
+                IsSuccess = false,
+                StatusCode = 401,
+                Message = "Could not identify the current user."
+            };
+        }
+
+        var siteQuery = _unitOfWork.Sites
             .GetAllAsync()
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Id == request.Id && !item.IsDeleted, cancellationToken);
+            .Where(item => item.Id == request.Id && !item.IsDeleted);
+
+        // 404 thay vì 403: không tiết lộ rằng site của tenant khác có tồn tại.
+        if (scope.IsCustomerScoped)
+        {
+            siteQuery = siteQuery.Where(item => item.CustomerId == scope.CustomerId);
+        }
+
+        var site = await siteQuery.FirstOrDefaultAsync(cancellationToken);
 
         if (site is null)
         {
@@ -30,7 +54,7 @@ public class GetSiteDashboardQueryHandler : IRequestHandler<GetSiteDashboardQuer
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy site."
+                Message = "Site not found."
             };
         }
 
@@ -70,9 +94,7 @@ public class GetSiteDashboardQueryHandler : IRequestHandler<GetSiteDashboardQuer
 
         var totalAssets = assets.Count;
         var activeAssets = assets.Count(asset => asset.Status == BatteryStatusEnum.Active);
-        var inactivePenalty = totalAssets == 0 ? 0 : (totalAssets - activeAssets) * 5;
-        var alertPenalty = activeAlertAssetIds.Count * 10;
-        var healthScore = Math.Clamp(100 - inactivePenalty - alertPenalty, 0, 100);
+        var healthScore = SiteHealthCalculator.Compute(totalAssets, activeAssets, activeAlertAssetIds.Count);
 
         return new CommonResponse<SiteDashboardDto>
         {

@@ -17,6 +17,8 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
 
         builder.Property(e => e.TicketId)
             .HasColumnName("ticket_id");
+        builder.Property(e => e.SourceTicketId)
+            .HasColumnName("source_ticket_id");
 
         builder.Property(e => e.UploadedByUserId)
             .HasColumnName("uploaded_by_user_id");
@@ -46,6 +48,10 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
             .HasColumnName("thumbnail_url")
             .HasMaxLength(1000);
 
+        builder.Property(e => e.Url)
+            .HasColumnName("url")
+            .HasMaxLength(2000);
+
         builder.Property(e => e.IsInline)
             .HasColumnName("is_inline")
             .HasDefaultValue(false);
@@ -58,6 +64,15 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
             .HasColumnName("virus_scan_status")
             .HasConversion<int>()
             .HasDefaultValue(VirusScanStatusEnum.Pending);
+
+        // GH-790 — theo đúng quy ước snake_case của bảng này. Không khai tên cột thì EF sinh
+        // "VirusScanAttempts" viết hoa, lệch hẳn với mọi cột còn lại.
+        builder.Property(e => e.VirusScanAttempts)
+            .HasColumnName("virus_scan_attempts")
+            .HasDefaultValue(0);
+
+        builder.Property(e => e.VirusScanLastAttemptAt)
+            .HasColumnName("virus_scan_last_attempt_at");
 
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
@@ -77,6 +92,7 @@ public class TicketAttachmentConfiguration : IEntityTypeConfiguration<TicketAtta
         builder.HasIndex(e => e.TicketId);
         builder.HasIndex(e => e.FileId);
         builder.HasIndex(e => e.ChatId);
+        builder.HasIndex(e => e.SourceTicketId);
 
         builder.HasOne(e => e.Ticket)
             .WithMany(e => e.Attachments)

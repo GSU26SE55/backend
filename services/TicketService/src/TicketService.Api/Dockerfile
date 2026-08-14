@@ -20,9 +20,18 @@ RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
-COPY --from=build /app/publish .
+
+# ffmpeg — chuẩn hóa voice message (.webm từ web) về m4a để iOS phát được (FFMpegCore gọi binary này)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build --chown=10001:10001 /app/publish .
 
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
+ENV DOTNET_EnableDiagnostics=0
+
+USER 10001:10001
 
 ENTRYPOINT ["dotnet", "TicketService.Api.dll"]

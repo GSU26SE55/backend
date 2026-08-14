@@ -77,8 +77,12 @@ rabbitmq:
 minio:
   storage: 20Gi
   ingress:
-    enabled: true   # files.capstonegsu26se55.mooo.com → S3 API
-                    # minio.capstonegsu26se55.mooo.com → Console
+    enabled: true   # files.capstonegsu26se55.mooo.com → S3 API (presigned URL cần host này)
+  # GH-788 — KHÔNG mở console ra Internet, kể cả staging: staging dùng chung root credential và
+  # chứa dữ liệu thật do team upload khi thử. Vào console bằng
+  # `kubectl port-forward svc/minio 9001:9001`.
+  consoleIngress:
+    enabled: false
 
 # Monitoring stack for VPS staging. Resource requests stay low so the stack
 # can fit on the current single-node k3s VPS while preserving sane limits.

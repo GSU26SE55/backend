@@ -16,7 +16,7 @@ public class TicketReopenCommandHandlerTests
 {
     private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
-    private readonly Mock<IMessageProducerService> _producer = new();
+    private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
 
     [Fact]
     public async Task Handle_ValidReopen_ReopensTicket()
@@ -30,9 +30,10 @@ public class TicketReopenCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Test",
-            Status = TicketStatusEnum.ClosedPendingRate,
+            Status = TicketStatusEnum.Closed,
             CustomerId = customerId,
-            ApprovedAt = DateTime.UtcNow.AddDays(-3)
+            ApprovedAt = DateTime.UtcNow.AddDays(-3),
+            ClosedAt = DateTime.UtcNow.AddDays(-3)
         };
 
         var command = new TicketReopenCommand
@@ -40,12 +41,12 @@ public class TicketReopenCommandHandlerTests
             TicketId = ticketId,
             CustomerId = customerId,
             CustomerName = "Customer A",
-            ReopenReason = "Vấn đề vẫn chưa được giải quyết triệt để."
+            ReopenReason = "The issue has still not been fully resolved."
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -55,7 +56,7 @@ public class TicketReopenCommandHandlerTests
         result.Data!.Status.Should().Be(TicketStatusEnum.Open);
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Open, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketReopenedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketReopenedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -71,9 +72,10 @@ public class TicketReopenCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Test",
-            Status = TicketStatusEnum.ClosedPendingRate,
+            Status = TicketStatusEnum.Closed,
             CustomerId = customerId,
             ApprovedAt = DateTime.UtcNow.AddDays(-1),
+            ClosedAt = DateTime.UtcNow.AddDays(-1),
             ReopenCount = 1 // Already reopened once
         };
 
@@ -90,25 +92,23 @@ public class TicketReopenCommandHandlerTests
         {
             TicketId = ticketId,
             CustomerId = customerId,
-            ReopenReason = "Vẫn còn lỗi."
+            ReopenReason = "Still faulty."
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        ticket.Status.Should().Be(TicketStatusEnum.Escalated);
+        ticket.Status.Should().Be(TicketStatusEnum.Open);
         ticket.ReopenCount.Should().Be(2);
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Open, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Escalated, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketReopenedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
-        _producer.Verify(x => x.PublishAsync(It.IsAny<TicketEscalatedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketReopenedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -124,9 +124,10 @@ public class TicketReopenCommandHandlerTests
             Code = "TKT-001",
             Title = "Test",
             Description = "Test",
-            Status = TicketStatusEnum.ClosedPendingRate,
+            Status = TicketStatusEnum.Closed,
             CustomerId = customerId,
-            ApprovedAt = DateTime.UtcNow.AddDays(-8)
+            ApprovedAt = DateTime.UtcNow.AddDays(-8),
+            ClosedAt = DateTime.UtcNow.AddDays(-8)
         };
 
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, customerId))
@@ -136,19 +137,19 @@ public class TicketReopenCommandHandlerTests
         {
             TicketId = ticketId,
             CustomerId = customerId,
-            ReopenReason = "Lâu quá rồi."
+            ReopenReason = "It has taken far too long."
         };
 
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
 
-        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _producer.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketReopenCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
-        result.Message.Should().Contain("7 days");
+        result.StatusCode.Should().Be(409);
+        result.Message.Should().Contain("seven-day");
     }
 }

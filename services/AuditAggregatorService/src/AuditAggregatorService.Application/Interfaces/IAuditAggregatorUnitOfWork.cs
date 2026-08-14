@@ -10,4 +10,7 @@ namespace AuditAggregatorService.Application.Interfaces;
 public interface IAuditAggregatorUnitOfWork : IUnitOfWork
 {
     IGenericRepository<AuditAggregate> AuditAggregates { get; }
+
+    /// <summary>GH-728 — job replay audit từ source-of-truth.</summary>
+    IGenericRepository<AuditReplayJob> AuditReplayJobs { get; }
 }

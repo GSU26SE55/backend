@@ -22,18 +22,21 @@ public class RejectReviewCommandHandler : IRequestHandler<RejectReviewCommand, C
     public async Task<CommonResponse<KbArticleActionDTO>> Handle(RejectReviewCommand command, CancellationToken ct)
     {
         var article = await _uow.KnowledgeBaseArticles.GetAllAsync()
-            .FirstOrDefaultAsync(a => a.Id == command.ArticleId, ct);
+            .FirstOrDefaultAsync(a => a.Id == command.ArticleId && !a.IsDeleted, ct);
 
         if (article == null)
-            return Fail(404, "Không tìm thấy bài viết.");
+            return Fail(404, "Article not found.");
+
+        if (article.IsTemplate)
+            return Fail(400, "Templates do not have an approval flow. Use the publish endpoint to publish templates.");
 
         if (article.Status != KbArticleStatusEnum.PendingReview)
-            return Fail(409, "Bài viết không ở trạng thái Chờ phê duyệt.");
+            return Fail(409, "Article is not in Pending Review status.");
 
         // Find pending versions and reject them
         var nextMajor = article.Version + 1;
         var pendingVersions = await _uow.KbArticleVersions.GetAllAsync()
-            .Where(v => v.ArticleId == article.Id && v.MajorVersion == nextMajor && v.Status == KbVersionStatusEnum.Pending)
+            .Where(v => !v.IsDeleted && v.ArticleId == article.Id && v.MajorVersion == nextMajor && v.Status == KbVersionStatusEnum.Pending)
             .ToListAsync(ct);
 
         foreach (var v in pendingVersions)
@@ -59,7 +62,7 @@ public class RejectReviewCommandHandler : IRequestHandler<RejectReviewCommand, C
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Yêu cầu thay đổi đã bị từ chối.",
+            Message = "Change request has been rejected.",
             Data = new KbArticleActionDTO
             {
                 Id = article.Id.ToString(),

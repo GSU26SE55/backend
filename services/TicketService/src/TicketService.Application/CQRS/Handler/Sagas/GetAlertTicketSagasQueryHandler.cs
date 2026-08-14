@@ -20,7 +20,7 @@ public class GetAlertTicketSagasQueryHandler : IRequestHandler<GetAlertTicketSag
         var pageSize = request.PageSize is < 1 or > 200 ? 50 : request.PageSize;
         var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
 
-        var (items, total) = await _sagaQuery.QueryAsync(
+        var page = await _sagaQuery.QueryAsync(
             request.State,
             request.AlertId,
             request.BatteryAssetId,
@@ -37,13 +37,7 @@ public class GetAlertTicketSagasQueryHandler : IRequestHandler<GetAlertTicketSag
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AlertTicketSagaDTO>
-            {
-                Items = items.ToList(),
-                TotalItems = total,
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            }
+            Data = page
         };
     }
 }

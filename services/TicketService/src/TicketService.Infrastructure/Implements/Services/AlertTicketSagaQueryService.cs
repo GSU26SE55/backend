@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using TicketService.Application.DTOs.Response.Saga;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Infrastructure.Persistence;
@@ -29,7 +31,7 @@ public class AlertTicketSagaQueryService : IAlertTicketSagaQueryService
         return saga is null ? null : Map(saga);
     }
 
-    public async Task<(IReadOnlyList<AlertTicketSagaDTO> Items, int Total)> QueryAsync(
+    public async Task<PaginationResponse<AlertTicketSagaDTO>> QueryAsync(
         string? state, Guid? alertId, Guid? batteryAssetId, Guid? customerId,
         DateTime? startedFrom, DateTime? startedTo, bool? isFailed,
         int pageNumber, int pageSize, bool isDescending,
@@ -60,18 +62,16 @@ public class AlertTicketSagaQueryService : IAlertTicketSagaQueryService
         else if (isFailed == false)
             query = query.Where(s => s.CurrentState != "Failed");
 
-        var total = await query.CountAsync(cancellationToken);
-
+        // .ThenBy(CorrelationId) ở cả hai nhánh: tie-breaker cố định — pagination ổn định.
+        // Saga không kế thừa AuditableEntity; khoá chính là CorrelationId (xem AlertTicketSagaStateConfiguration).
         query = isDescending
-            ? query.OrderByDescending(s => s.StartedAt)
-            : query.OrderBy(s => s.StartedAt);
+            ? query.OrderByDescending(s => s.StartedAt).ThenBy(s => s.CorrelationId)
+            : query.OrderBy(s => s.StartedAt).ThenBy(s => s.CorrelationId);
 
-        var rows = await query
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken);
+        // Map là method call → EF không dịch sang SQL, phân trang trên entity trước.
+        var page = await query.ToPagedEntityListAsync(pageNumber, pageSize, cancellationToken);
 
-        return (rows.Select(Map).ToList(), total);
+        return page.Map(Map);
     }
 
     public async Task<bool> ResetFailedStateAsync(Guid alertId, CancellationToken cancellationToken)

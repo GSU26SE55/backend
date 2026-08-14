@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using AuthService.Api.Extensions;
+using AuthService.Application.Common.Options;
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Helpers;
@@ -395,7 +396,7 @@ public class AuthController : ControllerBase
     {
         var userId = GetCurrentUserId();
         if (userId is null)
-            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
 
         command.AccountId = userId.Value;
         var result = await _mediator.Send(command, cancellationToken);
@@ -460,7 +461,7 @@ public class AuthController : ControllerBase
     {
         var callerId = GetCurrentUserId();
         if (callerId == null)
-            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Chưa đăng nhập." });
+            return Unauthorized(new CommonResponse<string> { IsSuccess = false, StatusCode = 401, Message = "Not logged in." });
         command.CallerAccountId = callerId.Value;
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
@@ -471,9 +472,15 @@ public class AuthController : ControllerBase
     /// access token + check revocation. Trả {active: true/false} + metadata cơ bản.
     /// </summary>
     [HttpPost("introspect")]
+    [EnableRateLimiting(RateLimitingExtensions.PolicyIntrospect)]
     [ProducesResponseType(typeof(CommonResponse<AuthService.Application.CQRS.Command.Auth.TokenIntrospectionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Introspect([FromBody] IntrospectTokenCommand command, CancellationToken cancellationToken)
     {
+        // GH-776 — khoá resource server lấy từ HEADER, không phải body: field trên command có
+        // [JsonIgnore]+[BindNever] nên client không tự đặt được. Cùng khuôn với CallerAccountId ở trên.
+        command.PresentedApiKey = Request.Headers[IntrospectionOptions.HeaderName].ToString();
         var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
@@ -635,20 +642,20 @@ public class AuthController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    ///// <summary>
-    ///// Đăng nhập / đăng ký bằng Google ID token. Auto-link nếu email đã tồn tại + EmailConfirmed=true,
-    ///// auto-create nếu email chưa tồn tại (gán role Customer, EmailConfirmed=true ngay).
-    ///// </summary>
-    //[HttpPost("google")]
-    //[ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    //[ProducesResponseType(typeof(LoginResponse), StatusCodes.Status401Unauthorized)]
-    //[ProducesResponseType(typeof(LoginResponse), StatusCodes.Status403Forbidden)]
-    //[ProducesResponseType(typeof(LoginResponse), StatusCodes.Status409Conflict)]
-    //public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthCommand command, CancellationToken cancellationToken)
-    //{
-    //    var result = await _mediator.Send(command, cancellationToken);
-    //    return StatusCode(result.StatusCode, result);
-    //}
+    /// <summary>
+    /// Đăng nhập / đăng ký bằng Google ID token. Auto-link nếu email đã tồn tại + EmailConfirmed=true,
+    /// auto-create nếu email chưa tồn tại (gán role Customer, EmailConfirmed=true ngay).
+    /// </summary>
+    [HttpPost("google")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
 
     /// <summary>
     /// Bắt đầu luồng đăng nhập Google OAuth bằng cách redirect người dùng sang Google.
@@ -678,7 +685,7 @@ public class AuthController : ControllerBase
     {
         var redirectUri = ResolveJsonRedirectUri();
         if (string.IsNullOrWhiteSpace(redirectUri))
-            return StatusCode(500, new { isSuccess = false, message = "GoogleOAuth:RedirectUri chưa được cấu hình." });
+            return StatusCode(500, new { isSuccess = false, message = "GoogleOAuth:RedirectUri is not configured." });
         return BuildLoginRedirect(redirectUri);
     }
 
@@ -729,7 +736,7 @@ public class AuthController : ControllerBase
     {
         var redirectUri = ResolveJsonRedirectUri();
         if (string.IsNullOrWhiteSpace(redirectUri))
-            return StatusCode(500, new { isSuccess = false, message = "GoogleOAuth:RedirectUri chưa được cấu hình." });
+            return StatusCode(500, new { isSuccess = false, message = "GoogleOAuth:RedirectUri is not configured." });
 
         var (response, statusCode) = await ProcessCallbackAsync(code, state, error, redirectUri, cancellationToken);
         return StatusCode(statusCode, response);

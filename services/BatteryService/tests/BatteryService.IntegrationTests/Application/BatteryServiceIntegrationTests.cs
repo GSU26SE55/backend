@@ -27,7 +27,7 @@ public class BatteryServiceIntegrationTests
         await using var dbContext = CreateDbContext();
         var unitOfWork = new UnitOfWork(dbContext);
         var inboxStore = new InMemoryInboxStore();
-        var consumer = new AccountActivatedConsumer(unitOfWork, inboxStore);
+        var consumer = new BatteryAccountActivatedConsumer(unitOfWork, inboxStore);
         var customerId = Guid.NewGuid();
         var evt = new AccountActivatedEvent(
             customerId,
@@ -126,6 +126,7 @@ public class BatteryServiceIntegrationTests
             new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(),
             new BatteryService.UnitTests.Helpers.NoopIotCalibrationCache(),
             new BatteryService.UnitTests.Helpers.NoopTelemetryPublisher(),
+            new BatteryService.UnitTests.Helpers.NoopTelemetryStatsService(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance);
         var firstReadingAt = new DateTime(2026, 1, 15, 1, 0, 0, DateTimeKind.Utc);
         var latestReadingAt = new DateTime(2026, 1, 15, 1, 5, 0, DateTimeKind.Utc);
@@ -263,7 +264,7 @@ public class BatteryServiceIntegrationTests
     public async Task AccountActivatedConsumer_NonCustomerRole_Skipped()
     {
         await using var dbContext = CreateDbContext();
-        var consumer = new AccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
+        var consumer = new BatteryAccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
         var evt = new AccountActivatedEvent(Guid.NewGuid(), "x@x", "n", null, "Admin", "test");
         var ctx = new Mock<ConsumeContext<AccountActivatedEvent>>();
         ctx.SetupGet(c => c.Message).Returns(evt);
@@ -281,7 +282,7 @@ public class BatteryServiceIntegrationTests
         dbContext.CustomerAccounts.Add(CreateCustomer(customerId, isActive: false));
         await dbContext.SaveChangesAsync();
 
-        var consumer = new AccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
+        var consumer = new BatteryAccountActivatedConsumer(new UnitOfWork(dbContext), new InMemoryInboxStore());
         var evt = new AccountActivatedEvent(customerId, "NEW@X.COM", " Name ", " 0901 ", "Customer", "test");
         var ctx = new Mock<ConsumeContext<AccountActivatedEvent>>();
         ctx.SetupGet(c => c.Message).Returns(evt);
@@ -349,16 +350,44 @@ public class BatteryServiceIntegrationTests
         };
     }
 
+    /// <summary>
+    /// GH-764 — bám đúng vòng đời ba bước: giữ chỗ → chốt khi xong → nhả khi lỗi.
+    /// Bản giả mà chốt ngay từ lúc xin chỗ sẽ che mất chính lỗi mà issue nói tới.
+    /// </summary>
     private sealed class InMemoryInboxStore : IInboxStore
     {
-        private readonly ConcurrentDictionary<string, byte> _processedMessages = new();
+        private readonly ConcurrentDictionary<string, (bool Completed, string Token)> _entries = new();
 
-        public Task<bool> TryMarkProcessedAsync(
+        private static string Key(Guid messageId, string consumerName) => $"{consumerName}:{messageId}";
+
+        public Task<InboxClaim> TryBeginAsync(
             Guid messageId,
             string consumerName,
             CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(_processedMessages.TryAdd($"{consumerName}:{messageId}", 0));
+            var token = Guid.NewGuid().ToString("N");
+            if (_entries.TryAdd(Key(messageId, consumerName), (false, token)))
+                return Task.FromResult(new InboxClaim(InboxClaimStatus.Claimed, token));
+
+            return Task.FromResult(_entries[Key(messageId, consumerName)].Completed
+                ? InboxClaim.Completed
+                : InboxClaim.Busy);
+        }
+
+        public Task CompleteAsync(Guid messageId, string consumerName, string token, CancellationToken cancellationToken = default)
+        {
+            var key = Key(messageId, consumerName);
+            if (_entries.TryGetValue(key, out var e) && e.Token == token)
+                _entries[key] = (true, token);
+            return Task.CompletedTask;
+        }
+
+        public Task ReleaseAsync(Guid messageId, string consumerName, string token, CancellationToken cancellationToken = default)
+        {
+            var key = Key(messageId, consumerName);
+            if (_entries.TryGetValue(key, out var e) && e.Token == token && !e.Completed)
+                _entries.TryRemove(key, out _);
+            return Task.CompletedTask;
         }
     }
 }

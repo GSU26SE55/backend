@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Saga.AlertTicket;
 using TicketService.Application.CQRS.Command.Tickets;
+using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
@@ -16,7 +17,7 @@ namespace TicketService.Infrastructure.Consumers;
 /// thì reuse (response IsReused=true). Nếu OriginAlertId đã có Ticket (redelivery)
 /// thì cũng reuse.
 ///
-/// Sprint 5B #238 — thay direct <c>BatteryAnomalyDetectedConsumer</c> (xem overall.md §53.7).
+/// Sprint 5B #238 — thay direct <c>TicketBatteryAnomalyDetectedConsumer</c> (xem overall.md §53.7).
 /// </summary>
 public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertCommand>
 {
@@ -24,15 +25,15 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
     private readonly ITicketUnitOfWork _uow;
     private readonly ILogger<CreateTicketFromAlertConsumer> _logger;
 
+    // PHẢI khớp index ux_tickets_active_auto_per_asset_category (status NOT IN 8,10,11,12).
+    // Lệch danh sách này với index → idempotency check cho qua rồi INSERT vỡ 23505.
     private static readonly TicketStatusEnum[] ActiveStatuses =
     {
-        TicketStatusEnum.New,
         TicketStatusEnum.Open,
-        TicketStatusEnum.Assigned,
+        TicketStatusEnum.Pending,
         TicketStatusEnum.InProgress,
-        TicketStatusEnum.WaitingCustomer,
-        TicketStatusEnum.WaitingParts,
-        TicketStatusEnum.WaitingOnsiteSchedule
+        TicketStatusEnum.Request,
+        TicketStatusEnum.ReAssign
     };
 
     public CreateTicketFromAlertConsumer(
@@ -43,6 +44,21 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
         _mediator = mediator;
         _uow = uow;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Postgres 23505 = unique_violation. Tùy đường chạy, EF có thể ném thẳng
+    /// <see cref="Npgsql.PostgresException"/> hoặc bọc trong <see cref="DbUpdateException"/>
+    /// → check cả 2 (và cả inner lồng nhau).
+    /// </summary>
+    private static bool IsUniqueViolation(Exception ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is Npgsql.PostgresException { SqlState: "23505" })
+                return true;
+        }
+        return false;
     }
 
     public async Task Consume(ConsumeContext<CreateTicketFromAlertCommand> context)
@@ -67,8 +83,10 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
         }
 
         // Idempotency #2: reuse active Ticket cùng (BatteryAssetId, AnomalyCategory).
-        if (!Enum.TryParse<TicketCategoryEnum>(msg.AnomalyCategory, ignoreCase: true, out var category))
-            category = TicketCategoryEnum.Other;
+        // Dùng CHUNG map với handler — trước đây Enum.TryParse("SohDegradation") fail →
+        // fallback Other, trong khi handler tạo ticket với category khác ⇒ check lệch,
+        // không tìm thấy ticket đã có ⇒ tạo trùng rồi vỡ unique index.
+        var category = TicketAutoCreateFromAlertCommandHandler.MapAnomalyToCategory(msg.AnomalyCategory);
 
         var existingActive = await _uow.Tickets.GetAllAsync()
             .Where(t =>
@@ -99,10 +117,64 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
             CustomerId = msg.CustomerId,
             AnomalyCategory = msg.AnomalyCategory,
             Title = msg.Title,
-            Description = msg.Description
+            Description = msg.Description,
+            DetectedAt = msg.DetectedAt,
+            BatterySerialNumber = msg.AssetSerialNumber,
+            // BE-AI structured — gói lại để handler ghi `ticket_ai_suggestions`. Null với
+            // ticket từ threshold engine (không gọi AI) và với command do saga cũ publish.
+            AiPrescriptionText = msg.AiPrescription,
+            AiSuggestion = new AiSuggestionPayload(
+                ActionSteps: msg.AiActionSteps,
+                PpeRequired: msg.AiPpeRequired,
+                SopReferences: msg.AiSopReferences,
+                EscalationConditions: msg.AiEscalationConditions,
+                SafetyWarnings: msg.AiSafetyWarnings,
+                KbDocRefs: msg.AiKbDocRefs,
+                HumanVerificationRequired: msg.AiHumanVerificationRequired,
+                Blocked: msg.AiBlocked,
+                Enriched: msg.AiEnriched,
+                LlmProvider: msg.AiLlmProvider,
+                PrescriptionId: msg.AiPrescriptionId)
         };
 
-        var result = await _mediator.Send(createCmd, context.CancellationToken);
+        TicketService.Application.DTOs.Response.Tickets.TicketActionResponse result;
+        try
+        {
+            result = await _mediator.Send(createCmd, context.CancellationToken);
+        }
+        catch (Exception ex) when (IsUniqueViolation(ex))
+        {
+            // FIX race-condition: 2 alert cùng pin/category sinh gần như đồng thời → 2 saga →
+            // 2 command chạy song song, cả hai qua được idempotency check rồi cùng INSERT.
+            // Constraint ux_tickets_active_auto_per_asset_category (hoặc IX_tickets_code) bắn 23505.
+            // Người thắng đã tạo ticket → đọc lại và reuse thay vì fault vào error queue.
+            // Tìm ticket auto active của cùng pin — KHÔNG lọc theo `category` parse từ message
+            // vì handler set Category = Repair cố định, lệch với AnomalyCategory.
+            var winner = await _uow.Tickets.GetAllAsync()
+                .AsNoTracking()
+                .Where(t =>
+                    t.BatteryAssetId == msg.BatteryAssetId &&
+                    t.OriginAlertId != null &&
+                    ActiveStatuses.Contains(t.Status) &&
+                    !t.IsDeleted)
+                .OrderByDescending(t => t.CreatedAt)
+                .Select(t => new { t.Id, t.Code })
+                .FirstOrDefaultAsync(context.CancellationToken);
+
+            if (winner is not null)
+            {
+                _logger.LogInformation(
+                    "Saga {Correlation}: Ticket đã được message song song tạo ({Code}) — reuse.",
+                    msg.CorrelationId, winner.Code);
+
+                await context.Publish(new TicketCreatedFromAlertResponse(
+                    msg.CorrelationId, msg.AlertId, winner.Id, winner.Code, IsReused: true));
+                return;
+            }
+
+            // Không tìm được ticket "người thắng" → để MassTransit retry.
+            throw;
+        }
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -118,10 +190,16 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
             return;
         }
 
+        // FIX null-ticket-id: TicketActionDTO có cả Id (luôn set) lẫn TicketId (nullable).
+        // TicketAutoCreateFromAlertCommandHandler chỉ set Id → Guid.Parse(TicketId) ném
+        // ArgumentNullException SAU KHI ticket đã được tạo → saga không nhận response,
+        // phải chờ retry rồi mới đi nhánh reuse. Ưu tiên TicketId, fallback Id.
+        var createdTicketId = result.Data.TicketId ?? result.Data.Id;
+
         await context.Publish(new TicketCreatedFromAlertResponse(
             msg.CorrelationId,
             msg.AlertId,
-            Guid.Parse(result.Data.TicketId),
+            Guid.Parse(createdTicketId),
             result.Data.Code,
             IsReused: false));
     }

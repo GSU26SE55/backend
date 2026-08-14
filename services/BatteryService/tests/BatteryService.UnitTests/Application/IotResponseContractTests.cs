@@ -40,7 +40,7 @@ public class IotResponseContractTests
     {
         var device = DisabledDevice();
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
-        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled(), new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new ProvisionIotDeviceCommand
         {
@@ -72,7 +72,7 @@ public class IotResponseContractTests
             HeartbeatIntervalSeconds = 60
         };
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
-        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled(), new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new ProvisionIotDeviceCommand
         {
@@ -90,7 +90,7 @@ public class IotResponseContractTests
     public async Task Provision_Returns404_WhenDeviceMissing()
     {
         var uow = new MockUnitOfWorkBuilder();
-        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled(), new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new ProvisionIotDeviceCommand
         {
@@ -110,7 +110,7 @@ public class IotResponseContractTests
         var device = DisabledDevice();
         device.Status = IotDeviceStatusEnum.Pending;
         var uow = new MockUnitOfWorkBuilder().WithIotDevices(device);
-        var handler = new ProvisionIotDeviceCommandHandler(uow.Build());
+        var handler = new ProvisionIotDeviceCommandHandler(uow.Build(), TestMqttBrokerEndpointProvider.Enabled(), new IotApiKeyService(uow.Build()), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new ProvisionIotDeviceCommand
         {
@@ -250,7 +250,7 @@ public class IotResponseContractTests
                ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault
            });
         var apiKeyService = new IotApiKeyService(uow.Build());
-        var handler = new CreateIotDeviceCommandHandler(uow.Build(), apiKeyService);
+        var handler = new CreateIotDeviceCommandHandler(uow.Build(), apiKeyService, TestMqttBrokerEndpointProvider.Enabled(), NoopMqttPasswordFileSync.Instance());
 
         var result = await handler.Handle(new CreateIotDeviceCommand
         {

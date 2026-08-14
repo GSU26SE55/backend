@@ -1,9 +1,13 @@
+using System.Security.Claims;
 using System.Text.Json;
 using BatteryService.Application.CQRS.Command.IotDevice;
 using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Services;
+using BatteryService.Domain.Entities;
+using BatteryService.Domain.Enums;
+using BatteryService.Infrastructure.Mqtt;   // IOT3-14: MqttTopicMap — dựng topic đúng dạng đã publish
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -66,7 +70,7 @@ public class AdminIotDevicesController : ControllerBase
     ///
     /// Lưu ý:
     /// <list type="bullet">
-    ///   <item><description><b>RawApiKey không bao giờ xuất hiện trong list</b> — chỉ trả về 1 lần khi create/rotate-key.</description></item>
+    ///   <item><description><b>Full API key không xuất hiện trong list</b> — chỉ có <c>ApiKeyLastFour</c>. Xem full plaintext key qua <c>GET /api/admin/iot-devices/{id}</c> (field <c>apiKey</c>).</description></item>
     ///   <item><description><c>ApiKeyLastFour</c> hiển thị 4 ký tự cuối để Admin nhận diện key đang dùng mà không lộ key gốc.</description></item>
     /// </list>
     /// </remarks>
@@ -87,7 +91,7 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy chi tiết 1 IoT device theo Id — bao gồm Site/TargetFirmwareRelease + ApiKeyLastFour + LastSeenAt + heartbeat stats. KHÔNG trả raw API key (chỉ 1 lần lúc create).
+    /// Lấy chi tiết 1 IoT device theo Id — bao gồm Site/TargetFirmwareRelease + LastSeenAt + heartbeat stats, kèm <b>full plaintext <c>apiKey</c></b> để Admin xem lại và flash vào ESP32.
     /// </summary>
     /// <remarks>
     /// Route parameter:
@@ -99,6 +103,14 @@ public class AdminIotDevicesController : ControllerBase
     /// <list type="bullet">
     ///   <item><description>Include <c>Site</c> + <c>TargetFirmwareRelease</c> để DTO có <c>SiteName</c>, <c>TargetFirmwareVersion</c>.</description></item>
     ///   <item><description>404 nếu Id không khớp hoặc device đã soft-delete.</description></item>
+    ///   <item><description>Trả <see cref="IotDeviceDetailDto"/> — giống <see cref="IotDeviceDto"/> nhưng có thêm field <c>apiKey</c> (plaintext đầy đủ).</description></item>
+    /// </list>
+    ///
+    /// Về <c>apiKey</c> (khác các endpoint khác):
+    /// <list type="bullet">
+    ///   <item><description>Đây là endpoint <b>duy nhất</b> trả full plaintext key ngoài lúc create/rotate — endpoint <c>list</c> chỉ trả <c>apiKeyLastFour</c>.</description></item>
+    ///   <item><description><c>apiKey = null</c> nếu device được tạo <b>trước</b> khi bật lưu plaintext (không backfill được vì DB cũ chỉ giữ hash). Gọi <c>POST /{id}/rotate-key</c> để sinh key mới + lưu plaintext.</description></item>
+    ///   <item><description>Chỉ role <c>Admin</c> gọi được (đã có <c>[Authorize(Roles = "Admin")]</c> ở controller).</description></item>
     /// </list>
     ///
     /// Lưu ý:
@@ -109,16 +121,16 @@ public class AdminIotDevicesController : ControllerBase
     /// </remarks>
     /// <param name="id">Id IoT device.</param>
     /// <param name="ct">Token hủy request.</param>
-    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="IotDeviceDto"/>.</returns>
-    /// <response code="200">Trả device.</response>
+    /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="IotDeviceDetailDto"/> (kèm full <c>apiKey</c>).</returns>
+    /// <response code="200">Trả device kèm full plaintext <c>apiKey</c> (hoặc <c>null</c> nếu device cũ chưa có).</response>
     /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy device.</response>
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(typeof(CommonResponse<IotDeviceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceDetailDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<IotDeviceDto>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceDetailDto>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetIotDeviceByIdQuery { Id = id }, ct);
@@ -126,7 +138,9 @@ public class AdminIotDevicesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo IoT device mới + sinh API key per-device + MQTT credential — response trả raw key + raw MQTT password ĐÚNG 1 LẦN, sau đó chỉ giữ hash trong DB.
+    /// Tạo IoT device mới + sinh API key per-device + MQTT credential. Response trả raw API key
+    /// và raw MQTT password. <b>MQTT password chỉ trả 1 lần</b> (DB chỉ giữ hash);
+    /// <b>API key thì đọc lại được</b> qua <c>GET /{id}</c> (GH-724 — có chủ ý).
     /// </summary>
     /// <remarks>
     /// Body request:
@@ -135,7 +149,7 @@ public class AdminIotDevicesController : ControllerBase
     ///   <item><description><c>DisplayName</c>: bắt buộc, ≤ 200 ký tự.</description></item>
     ///   <item><description><c>SiteId</c>: bắt buộc, phải tồn tại + chưa xóa.</description></item>
     ///   <item><description><c>HardwareRevision</c>: tùy chọn, ≤ 64 ký tự (vd <c>"v1.0-S3-MAX485"</c>) — dùng để OTA pipeline khớp firmware.</description></item>
-    ///   <item><description><c>ApiKeyScopes</c>: bitmask <see cref="BatteryService.Domain.Enums.IotApiKeyScopeEnum"/>. Default <c>EdgeDeviceDefault = SensorIngest | DeviceHeartbeat | FirmwareCheck = 11</c>.</description></item>
+    ///   <item><description><c>ApiKeyScopes</c>: bitmask <see cref="BatteryService.Domain.Enums.IotApiKeyScopeEnum"/>. Default <c>EdgeDeviceDefault = SensorIngest | DeviceHeartbeat | EnvironmentalIngest | FirmwareCheck = 15</c>.</description></item>
     ///   <item><description><c>HeartbeatIntervalSeconds</c>: [10, 3600]. Default 60.</description></item>
     ///   <item><description><c>Notes</c>: tùy chọn, ≤ 1000 ký tự.</description></item>
     /// </list>
@@ -150,7 +164,7 @@ public class AdminIotDevicesController : ControllerBase
     ///
     /// Lưu ý:
     /// <list type="bullet">
-    ///   <item><description><b>RawApiKey chỉ trả về 1 lần</b>. Sau khi response trả về, hệ thống chỉ giữ hash. Mất key → rotate (không phải reset).</description></item>
+    ///   <item><description>GH-724 — <b>RawApiKey KHÔNG phải "chỉ 1 lần"</b>: hệ thống giữ cả hash lẫn plaintext, Admin đọc lại được qua <c>GET /{id}</c>. Mất key vẫn có thể rotate. Ngược lại, <b>raw MQTT password đúng là chỉ 1 lần</b> — DB chỉ giữ <c>MqttPasswordHash</c>.</description></item>
     ///   <item><description>Endpoint không gửi <c>RawApiKey</c> qua log/audit/event — chỉ trong response body. Đảm bảo client không log nó.</description></item>
     ///   <item><description>Sau khi tạo, gắn calibration profile (<c>iot_device_calibrations</c>) cho từng channel nếu BMS có offset/scale riêng — endpoint riêng (Sprint IoT-2).</description></item>
     /// </list>
@@ -277,9 +291,9 @@ public class AdminIotDevicesController : ControllerBase
     /// Endpoint dành riêng cho rotate vì là hành động nghiệp vụ đặc biệt:
     /// <list type="bullet">
     ///   <item><description>Sinh raw key 256-bit mới (prefix <c>iotk_</c>).</description></item>
-    ///   <item><description>Replace <c>ApiKeyHash</c> + <c>ApiKeyLastFour</c> trong DB.</description></item>
+    ///   <item><description>Replace <c>ApiKeyHash</c> + <c>ApiKeyLastFour</c> + <c>ApiKeyPlaintext</c> trong DB (GH-724 — plaintext được lưu lại có chủ ý).</description></item>
     ///   <item><description>Reset <c>ApiKeyIssuedAt = UtcNow</c>, set <c>ApiKeyRevokedAt = null</c> (cho phép device dùng lại sau khi từng revoke).</description></item>
-    ///   <item><description>Trả <see cref="IotDeviceCreatedDto"/> với <c>RawApiKey</c> mới — chỉ 1 lần.</description></item>
+    ///   <item><description>Trả <see cref="IotDeviceCreatedDto"/> với <c>RawApiKey</c> mới (đọc lại được sau đó qua <c>GET /{id}</c> — GH-724).</description></item>
     /// </list>
     ///
     /// Use case:
@@ -311,6 +325,45 @@ public class AdminIotDevicesController : ControllerBase
     public async Task<IActionResult> RotateKey(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new RotateIotDeviceApiKeyCommand { Id = id }, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// IOT3-32 — xoay RIÊNG thông tin đăng nhập MQTT. Thiết bị tự lấy lại, KHÔNG cần ra hiện trường.
+    /// </summary>
+    /// <remarks>
+    /// Khác <c>/rotate-key</c> ở điểm quyết định:
+    /// <list type="bullet">
+    ///   <item><description>
+    ///     <c>/rotate-key</c> đổi cả <c>apiKey</c> ⇒ thiết bị mất CẢ HAI đường; HTTPS trả 401 nên
+    ///     nó không provision lại được. <b>Không tự lành</b> — phải mang laptop/điện thoại tới nạp lại.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>/rotate-mqtt</c> chỉ đổi mật khẩu MQTT ⇒ broker từ chối (<c>state=4</c>), thiết bị đếm
+    ///     đủ ngưỡng thì tự gọi <c>/provision</c> bằng apiKey cũ còn hiệu lực và nhận mật khẩu mới.
+    ///     <b>Tự lành trong vài phút.</b>
+    ///   </description></item>
+    /// </list>
+    /// <para>
+    /// ⇒ Nghi ngờ lộ credential MQTT thì dùng endpoint NÀY. Chỉ dùng <c>/rotate-key</c> khi chính
+    /// <c>apiKey</c> bị lộ, và khi đó đã chấp nhận phải ra hiện trường.
+    /// </para>
+    /// <para>
+    /// Response trả <c>rawApiKey</c> là khoá <b>đang dùng</b> (không đổi) để admin khỏi tưởng bị mất.
+    /// </para>
+    /// </remarks>
+    /// <response code="200">Xoay thành công; thiết bị sẽ tự re-provision.</response>
+    /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
+    /// <response code="403">Không có role Admin.</response>
+    /// <response code="404">Không tìm thấy device.</response>
+    [HttpPost("{id:guid}/rotate-mqtt")]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceCreatedDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(CommonResponse<IotDeviceCreatedDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RotateMqttCredential(Guid id, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RotateIotDeviceMqttCredentialCommand { Id = id }, ct);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -379,8 +432,8 @@ public class AdminIotDevicesController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = 400,
-                Message = "Body command không hợp lệ.",
-                ListErrors = new() { new() { Field = nameof(body.Type), Detail = "Type là bắt buộc." } }
+                Message = "Invalid command body.",
+                ListErrors = new() { new() { Field = nameof(body.Type), Detail = "Type is required." } }
             });
         }
 
@@ -392,17 +445,47 @@ public class AdminIotDevicesController : ControllerBase
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy device."
+                Message = "Device not found."
             });
         }
 
         var cmdId = string.IsNullOrWhiteSpace(body.CmdId) ? Guid.NewGuid().ToString("N") : body.CmdId;
+        if (await _unitOfWork.IotDeviceCommands.GetAllAsync()
+                .AnyAsync(command => command.CmdId == cmdId && !command.IsDeleted, ct))
+        {
+            return Conflict(new CommonResponse<object>
+            {
+                IsSuccess = false,
+                StatusCode = 409,
+                Message = "CmdId đã tồn tại."
+            });
+        }
+
+        Guid? issuedBy = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId)
+            ? accountId
+            : null;
+        var now = DateTime.UtcNow;
+        var command = new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            CmdId = cmdId,
+            Type = body.Type,
+            ParamsJson = JsonSerializer.Serialize(body.Params ?? new { }),
+            Status = IotDeviceCommandStatusEnum.Pending,
+            IssuedByAccountId = issuedBy,
+            CreatedBy = issuedBy,
+            CreatedAt = now
+        };
+        await _unitOfWork.IotDeviceCommands.AddAsync(command);
+        await _unitOfWork.SaveChangesAsync(ct);
+
         var payload = JsonSerializer.Serialize(new
         {
             cmdId,
             type = body.Type,
             @params = body.Params,
-            issuedAt = DateTime.UtcNow
+            issuedAt = now
         });
 
         try
@@ -411,11 +494,16 @@ public class AdminIotDevicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            command.Status = IotDeviceCommandStatusEnum.Failed;
+            command.AckError = $"MQTT bridge không khả dụng: {ex.Message}";
+            command.AckedAt = DateTime.UtcNow;
+            _unitOfWork.IotDeviceCommands.UpdateAsync(command);
+            await _unitOfWork.SaveChangesAsync(ct);
             return StatusCode(503, new CommonResponse<object>
             {
                 IsSuccess = false,
                 StatusCode = 503,
-                Message = $"MQTT bridge không khả dụng: {ex.Message}"
+                Message = $"MQTT bridge is unavailable: {ex.Message}"
             });
         }
 
@@ -423,12 +511,16 @@ public class AdminIotDevicesController : ControllerBase
         {
             IsSuccess = true,
             StatusCode = 202,
-            Message = "Command đã enqueue xuống MQTT.",
+            Message = "Command has been enqueued to MQTT.",
             Data = new IotDeviceCommandAcceptedDto
             {
                 CmdId = cmdId,
                 DeviceCode = device.DeviceCode,
-                Topic = $"solar/{device.DeviceCode}/cmd"
+                // IOT3-14 — phải là topic THẬT đã publish, không phải chuỗi dựng lại tay.
+                // Trước đây chỗ này nội suy `device.DeviceCode` (UPPERCASE) trong khi
+                // MqttBridgeBackgroundService publish qua MqttTopicMap.Command() — nay đã
+                // chuẩn hoá chữ thường. Hai chuỗi lệch nhau làm admin debug sai hướng.
+                Topic = MqttTopicMap.Command(device.DeviceCode)
             }
         });
     }

@@ -6,6 +6,7 @@ using BatteryService.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.Ambient;
 
@@ -116,24 +117,18 @@ public class ListAmbientThresholdsQueryHandler
         var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
 
         var query = _uow.AmbientThresholdConfigs.GetAllAsync().Where(c => !c.IsDeleted);
-        var total = await query.CountAsync(cancellationToken);
 
-        var items = await query
+        // Map là method call → EF không dịch sang SQL được, nên phân trang trên entity rồi mới đổi kiểu.
+        var page = await query
             .OrderByDescending(c => c.CreatedAt)
-            .Skip((pageNumber - 1) * pageSize).Take(pageSize)
-            .ToListAsync(cancellationToken);
+            .ThenBy(c => c.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(pageNumber, pageSize, cancellationToken);
 
         return new AmbientThresholdConfigListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AmbientThresholdConfigDto>
-            {
-                Items = items.Select(UpsertAmbientThresholdConfigCommandHandler.Map).ToList(),
-                TotalItems = total,
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            }
+            Data = page.Map(UpsertAmbientThresholdConfigCommandHandler.Map)
         };
     }
 }

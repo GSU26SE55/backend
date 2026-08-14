@@ -4,32 +4,38 @@ using Prometheus;
 using SharedInfrastructure.DependencyInjection.Extensions;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Middleware;
+using SharedInfrastructure.RateLimiting;
 
 EnvFileLoader.LoadIfExists();
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.SetIsOriginAllowed(_ => true)
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
-    });
-});
+// #AUTH-05 — dùng CHUNG policy với 7 service phía sau thay vì tự khai `AllowAll` tại chỗ.
+//
+// Gateway là CỬA TRƯỚC của hệ thống: nó mà mở cho mọi origin thì việc siết whitelist ở downstream
+// gần như vô nghĩa với trình duyệt. Trước đây khối này đăng ký policy tên "AllowAll" trong khi
+// `app.UseCors(...)` bên dưới lại yêu cầu policy tên "AppCors" — tên không khớp thì
+// `CorsMiddleware` ném `InvalidOperationException: The CORS policy 'AppCors' was not found`
+// trên MỌI request. Gọi `AddCorsExtentions` khép lại cả hai vấn đề: đúng tên, đúng whitelist.
+//
+// ApiGateway KHÔNG gọi `AddSharedInfrastructure` (không cần MediatR/EF/Swagger dùng chung) nên
+// phải gọi thẳng ở đây — bỏ dòng này là gateway chết ngay request đầu tiên.
+builder.Services.AddCorsExtentions(builder.Configuration, builder.Environment);
 
 // Sprint 7 #115 — validate JWT tại gateway (cùng JwtSettings với downstream) + forward claim.
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddAuthorization();
 
-// Sprint 7 #115 — rate limiting (fixed-window theo userId/IP).
-builder.Services.AddGatewayRateLimiting(builder.Configuration);
+// Hạn mức nền dùng chung với mọi service: chưa đăng nhập 60 req/30s theo IP,
+// đã đăng nhập 500 req/30s theo từng người dùng. Xem SharedInfrastructure.RateLimiting.
+builder.Services.AddStandardRateLimiting(builder.Configuration);
 
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
-    .AddGatewayClaimForwarding();
+    .AddGatewayClaimForwarding()
+    // Gửi IP thật xuống upstream — nếu không, hạn mức ẩn danh của mỗi service sẽ gom
+    // toàn bộ traffic vào một bộ đếm mang IP của gateway.
+    .AddGatewayClientIpForwarding();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -44,7 +50,7 @@ builder.Services.AddSwaggerGen(c =>
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "Nhập token theo định dạng: Bearer {token}",
+        Description = "Enter your token in the format: Bearer {token}",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
@@ -72,6 +78,10 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Chống giả mạo: bỏ X-Client-Ip do client tự gắn TRƯỚC mọi thứ khác. Gateway dùng header này để chọn
+// bộ đếm hạn mức, nên tin giá trị client gửi lên là mở đường bypass — xem UseClientIpHeaderSanitizer.
+app.UseClientIpHeaderSanitizer();
+
 // SecurityHeaders + CorrelationId + RequestLogging — đặt sớm nhất để mọi route đều có.
 // Gateway forward Correlation ID xuống upstream service qua YARP (header pass-through tự nhiên).
 app.UseMiddleware<SecurityHeadersMiddleware>();
@@ -80,6 +90,12 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 
 // Prometheus HTTP metrics — track latency, status code, route distribution at gateway layer.
 app.UseHttpMetrics();
+
+// GH-800 — PHẢI đứng ngay SAU UseHttpMetrics, tức nằm BÊN TRONG nó.
+// `http_requests_received_total` đọc Response.StatusCode sau khi phần còn lại của pipeline chạy
+// xong; đặt ở đây thì trạng thái đã được chuẩn hoá trước lúc bộ đếm nhìn vào. Đặt trước
+// UseHttpMetrics là bộ đếm vẫn ghi 502 và dashboard vẫn báo 5xx giả mỗi lần client đóng luồng SSE.
+app.UseMiddleware<ClientDisconnectStatusMiddleware>();
 
 // Bật Swagger UI cho mọi non-Production environment (Development, Docker, Staging...).
 // Production thực sự nên tắt để giảm attack surface.
@@ -111,14 +127,16 @@ if (!app.Environment.IsEnvironment("Docker")
 // để middleware pipeline chấp nhận upgrade từ Connection: Upgrade + Upgrade: websocket.
 app.UseWebSockets();
 
-app.UseCors("AllowAll");
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 
 // Sprint 7 #115 — validate JWT (populate HttpContext.User cho claim forwarding + rate-limit partition).
 // KHÔNG RequireAuthorization trên proxy route → request ẩn danh vẫn pass (downstream tự authorize);
 // gateway chỉ parse token nếu có để forward claim.
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
+// PHẢI đứng sau hai dòng trên: chỉ khi User đã được gán mới phân biệt được bậc 500 req/30s
+// (đã đăng nhập) với bậc 60 req/30s (ẩn danh).
+app.UseStandardRateLimiter();
 
 // Bọc mọi response status-only (404/401/403/405/...) thành CommonResponse để client luôn parse cùng schema.
 // Phải đặt TRƯỚC MapReverseProxy/MapMetrics để bắt được cả 404 do YARP không match route lẫn 404 do controller.

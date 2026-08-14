@@ -29,4 +29,10 @@ public class ChatTranslateCommand : IRequest<ChatTranslateResponse>
     /// </summary>
     [JsonIgnore]
     public string TargetLanguage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Roles của người dùng hiện tại — dùng để kiểm tra quyền truy cập ticket và nội bộ chat.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> CurrentUserRoles { get; set; } = [];
 }

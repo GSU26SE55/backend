@@ -1,7 +1,9 @@
+using BatteryService.Application.Common;          // IOT3-33: SensorSource.Primary
 using BatteryService.Application.CQRS.Command.IotDevice;
 using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
+using BatteryService.Application.Services;
 using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +22,26 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
     private const double ClockSkewWarnThresholdSeconds = 300; // 5 phút (§247).
 
     private readonly IBatteryUnitOfWork _unitOfWork;
-    public ProvisionIotDeviceCommandHandler(IBatteryUnitOfWork uow) => _unitOfWork = uow;
+    private readonly IMqttBrokerEndpointProvider _brokerEndpoint;   // IOT3-27
+    private readonly IIotApiKeyService _apiKeyService;              // IOT3-28
+    private readonly IMqttPasswordFileSync _passwordFileSync;       // IOT3-29
+    private readonly IIotDeviceAvailabilityService _availability;
+
+    public ProvisionIotDeviceCommandHandler(
+        IBatteryUnitOfWork uow,
+        IMqttBrokerEndpointProvider brokerEndpoint,
+        IIotApiKeyService apiKeyService,
+        IMqttPasswordFileSync passwordFileSync,
+        IIotDeviceAvailabilityService? availability = null)
+    {
+        _unitOfWork = uow;
+        _brokerEndpoint = brokerEndpoint;
+        _apiKeyService = apiKeyService;
+        _passwordFileSync = passwordFileSync;
+        _availability = availability ?? new IotDeviceAvailabilityService(
+            uow,
+            new IntegrationEventOutboxWriter(uow));
+    }
 
     public async Task<CommonResponse<IotDeviceProvisionResultDto>> Handle(ProvisionIotDeviceCommand request, CancellationToken ct)
     {
@@ -28,14 +49,14 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
             .Include(d => d.TargetFirmwareRelease)
             .FirstOrDefaultAsync(d => d.Id == request.DeviceId && !d.IsDeleted, ct);
         if (device is null)
-            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 404, Message = "Device không tồn tại." };
+            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         if (!string.Equals(device.DeviceCode, request.DeviceCode, StringComparison.Ordinal))
-            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 403, Message = "DeviceCode không khớp với API key." };
+            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 403, Message = "Device code does not match the API key." };
 
         // 409: state conflict — device đang ở trạng thái không cho phép provision.
         if (device.Status == IotDeviceStatusEnum.Disabled || device.Status == IotDeviceStatusEnum.Decommissioned)
-            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 409, Message = "Device đang ở trạng thái Disabled/Decommissioned, không thể provision." };
+            return new CommonResponse<IotDeviceProvisionResultDto> { IsSuccess = false, StatusCode = 409, Message = "Device is in Disabled/Decommissioned status and cannot be provisioned." };
 
         var now = DateTime.UtcNow;
         var skew = Math.Abs((request.DeviceTimestamp.ToUniversalTime() - now).TotalSeconds);
@@ -46,44 +67,73 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
             {
                 IsSuccess = false,
                 StatusCode = 422,
-                Message = $"Clock skew {skew:F0}s vượt ngưỡng {ClockSkewWarnThresholdSeconds}s. Đồng bộ NTP trước khi provision."
+                Message = $"Clock skew {skew:F0}s exceeds the threshold of {ClockSkewWarnThresholdSeconds}s. Sync NTP before provisioning."
             };
+        }
+
+        // IOT3-28 — tự vá thiết bị chưa có thông tin đăng nhập MQTT.
+        //
+        // Ba nhóm rơi vào đây: (a) tạo trước #IoT2-26 nên chưa từng có username/hash;
+        // (b) tạo sau #IoT2-26 nhưng trước IOT3-25 nên có hash mà KHÔNG có plaintext —
+        // hash là PBKDF2 một chiều, không dựng lại mật khẩu được; (c) dữ liệu lỗi.
+        //
+        // Vá tại đây thay vì viết script backfill: thiết bị không bao giờ boot thì cũng
+        // không cần thông tin đăng nhập, và cách này tự đúng cho cả thiết bị mới lẫn cũ.
+        var mqttCredentialRegenerated = false;
+        if (string.IsNullOrWhiteSpace(device.MqttUsername)
+            || string.IsNullOrWhiteSpace(device.MqttPasswordHash)
+            || string.IsNullOrWhiteSpace(device.MqttPasswordPlaintext))
+        {
+            var cred = _apiKeyService.GenerateMqttCredential(device.DeviceCode);
+            device.MqttUsername = cred.Username;
+            device.MqttPasswordHash = cred.PasswordHash;
+            device.MqttPasswordPlaintext = cred.RawPassword;
+            mqttCredentialRegenerated = true;
         }
 
         device.CurrentFirmwareVersion = request.FirmwareVersion.Trim();
         if (!string.IsNullOrWhiteSpace(request.HardwareRevision))
             device.HardwareRevision = request.HardwareRevision.Trim();
-        device.Status = IotDeviceStatusEnum.Active;
         device.LastProvisionedAt = now;
-        device.LastSeenAt = now;
         device.LastClockSkewSeconds = skew;
+        await _availability.RecordHealthySignalAsync(
+            device, now, forceActivation: true, cancellationToken: ct);
 
         _unitOfWork.IotDevices.UpdateAsync(device);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        // Sprint IoT-2 #IoT2-09 — populate configJson: batteryMappings cho site +
-        // calibration profile để device map serial → unitId Modbus + sensorSourceCode.
-        var batteryMappings = await _unitOfWork.BatteryAssets.GetAllAsync()
+        // IOT3-29 — đẩy thông tin đăng nhập xuống broker NGAY khi vừa sinh mới, đừng đợi vòng
+        // quét 60s. Thiết bị nhận mật khẩu trong chính response này và nối broker sau vài giây.
+        //
+        // Bọc try-catch: hạ tầng đồng bộ hỏng KHÔNG được làm provision thất bại — thiết bị vẫn
+        // dùng được đường HTTPS, và vòng quét nền sẽ thử lại.
+        if (mqttCredentialRegenerated)
+        {
+            try
+            { await _passwordFileSync.SyncOnceAsync(ct); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch { /* vòng quét nền sẽ bù */ }
+        }
+
+        // MVP provisioning: một gateway quản tối đa 8 pin trong cùng site. Thứ tự serial ổn định
+        // giúp mỗi lần đồng bộ vẫn nhận cùng Modbus unitId (pin đầu tiên = 1). Khi có UI gán pin
+        // riêng cho từng gateway, thay đoạn này bằng bảng IotDeviceBatteryMapping.
+        var batterySerials = await _unitOfWork.BatteryAssets.GetAllAsync()
             .Where(a => !a.IsDeleted && a.SiteId == device.SiteId)
-            .Select(a => new BatteryMappingEntry
-            {
-                BatteryAssetSerial = a.SerialNumber
-            })
+            .OrderBy(a => a.SerialNumber)
+            .Select(a => a.SerialNumber)
+            .Take(8)
             .ToListAsync(ct);
 
-        // SensorSourceCode lấy từ calibration nếu có.
-        var calibrations = await _unitOfWork.IotDeviceCalibrations.GetAllAsync()
-            .Where(c => !c.IsDeleted && c.IotDeviceId == device.Id)
-            .ToListAsync(ct);
-        foreach (var m in batteryMappings)
-        {
-            var asset = await _unitOfWork.BatteryAssets.GetAllAsync()
-                .FirstOrDefaultAsync(a => a.SerialNumber == m.BatteryAssetSerial && a.SiteId == device.SiteId, ct);
-            if (asset is null)
-                continue;
-            var cal = calibrations.FirstOrDefault(c => c.BatteryAssetId == asset.Id);
-            m.SensorSourceCode = cal?.Channel ?? "primary";
-        }
+        var batteryMappings = batterySerials
+            .Select((serial, index) => new BatteryMappingEntry
+            {
+                BatteryAssetSerial = serial,
+                UnitId = index + 1,
+                // Calibration mô tả kênh đo; nguồn BMS chính luôn dùng nhãn "primary".
+                SensorSourceCode = SensorSource.Primary
+            })
+            .ToList();
 
         // Scope-driven supported sensors.
         var supported = new List<string> { "voltage", "current", "temperature", "soc" };
@@ -95,11 +145,14 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
             supported.Add("water-leak");
         }
 
+        // IOT3-27 — điểm kết nối broker. Trả Disabled khi Mqtt:Enabled=false hoặc thiếu Host.
+        var broker = _brokerEndpoint.Resolve(device.DeviceCode);
+
         return new CommonResponse<IotDeviceProvisionResultDto>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Provision thành công.",
+            Message = "Provisioning successful.",
             Data = new IotDeviceProvisionResultDto
             {
                 DeviceId = device.Id.ToString(),
@@ -108,10 +161,20 @@ public class ProvisionIotDeviceCommandHandler : IRequestHandler<ProvisionIotDevi
                 HeartbeatIntervalSeconds = device.HeartbeatIntervalSeconds,
                 ApiKeyScopes = device.ApiKeyScopes,
                 TargetFirmwareVersion = device.TargetFirmwareRelease?.Version,
-                PollingIntervalSeconds = 10,
+                // IOT3-78 — đọc từ DB thay vì số cứng 10. Admin đổi được qua web (biên [1,600]).
+                PollingIntervalSeconds = device.PollingIntervalSeconds,
                 NtpServer = "time.google.com",
                 BatteryMappings = batteryMappings,
-                SupportedSensors = supported
+                SupportedSensors = supported,
+
+                // IOT3-27 — cấu hình MQTT. Cả sáu trường ĐỒNG THỜI có hoặc ĐỒNG THỜI null:
+                // broker tắt ⇒ thiết bị chạy HTTPS-only, không thử nối rồi thất bại vòng lặp.
+                MqttBrokerHost = broker.Host,
+                MqttBrokerPort = broker.Host is null ? null : broker.Port,
+                MqttUseTls = broker.Host is null ? null : broker.UseTls,
+                MqttTopicPrefix = broker.Host is null ? null : broker.TopicPrefix,
+                MqttUsername = broker.Host is null ? null : device.MqttUsername,
+                MqttPassword = broker.Host is null ? null : device.MqttPasswordPlaintext
             }
         };
     }
@@ -127,10 +190,18 @@ public class IotDeviceHeartbeatCommandHandler : IRequestHandler<IotDeviceHeartbe
 
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IIotMetricsRecorder _metrics;
-    public IotDeviceHeartbeatCommandHandler(IBatteryUnitOfWork uow, IIotMetricsRecorder metrics)
+    private readonly IIotDeviceAvailabilityService _availability;
+
+    public IotDeviceHeartbeatCommandHandler(
+        IBatteryUnitOfWork uow,
+        IIotMetricsRecorder metrics,
+        IIotDeviceAvailabilityService? availability = null)
     {
         _unitOfWork = uow;
         _metrics = metrics;
+        _availability = availability ?? new IotDeviceAvailabilityService(
+            uow,
+            new IntegrationEventOutboxWriter(uow));
     }
 
     public async Task<CommonResponse<IotHeartbeatAckDto>> Handle(IotDeviceHeartbeatCommand request, CancellationToken ct)
@@ -139,11 +210,11 @@ public class IotDeviceHeartbeatCommandHandler : IRequestHandler<IotDeviceHeartbe
             .Include(d => d.TargetFirmwareRelease)
             .FirstOrDefaultAsync(d => d.Id == request.DeviceId && !d.IsDeleted, ct);
         if (device is null)
-            return new CommonResponse<IotHeartbeatAckDto> { IsSuccess = false, StatusCode = 404, Message = "Device không tồn tại." };
+            return new CommonResponse<IotHeartbeatAckDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         // 409: state conflict — device hiện không cho phép heartbeat.
         if (device.ApiKeyRevokedAt.HasValue || device.Status == IotDeviceStatusEnum.Disabled || device.Status == IotDeviceStatusEnum.Decommissioned)
-            return new CommonResponse<IotHeartbeatAckDto> { IsSuccess = false, StatusCode = 409, Message = "Device đang ở trạng thái Disabled/Decommissioned hoặc API key đã bị revoke." };
+            return new CommonResponse<IotHeartbeatAckDto> { IsSuccess = false, StatusCode = 409, Message = "Device is in Disabled/Decommissioned status or the API key has been revoked." };
 
         var now = DateTime.UtcNow;
         var deviceTs = request.DeviceTimestamp.Kind == DateTimeKind.Unspecified
@@ -165,12 +236,11 @@ public class IotDeviceHeartbeatCommandHandler : IRequestHandler<IotDeviceHeartbe
         };
         await _unitOfWork.IotDeviceHeartbeats.AddAsync(heartbeat);
 
-        device.LastSeenAt = now;
         device.LastClockSkewSeconds = skew;
         if (!string.IsNullOrWhiteSpace(request.FirmwareVersion))
             device.CurrentFirmwareVersion = request.FirmwareVersion.Trim();
-        if (device.Status == IotDeviceStatusEnum.Offline || device.Status == IotDeviceStatusEnum.Pending)
-            device.Status = IotDeviceStatusEnum.Active;
+        await _availability.RecordHealthySignalAsync(
+            device, now, forceActivation: false, cancellationToken: ct);
 
         _unitOfWork.IotDevices.UpdateAsync(device);
         await _unitOfWork.SaveChangesAsync(ct);
@@ -209,7 +279,7 @@ public class CheckIotFirmwareUpdateQueryHandler : IRequestHandler<CheckIotFirmwa
             .Include(d => d.TargetFirmwareRelease)
             .FirstOrDefaultAsync(d => d.Id == request.DeviceId && !d.IsDeleted, ct);
         if (device is null)
-            return new CommonResponse<IotFirmwareCheckDto> { IsSuccess = false, StatusCode = 404, Message = "Device không tồn tại." };
+            return new CommonResponse<IotFirmwareCheckDto> { IsSuccess = false, StatusCode = 404, Message = "Device not found." };
 
         var target = device.TargetFirmwareRelease;
         if (target is null || target.IsArchived || !target.IsPublished
@@ -273,7 +343,7 @@ public class UpdateIotFirmwareUpdateLogCommandHandler : IRequestHandler<UpdateIo
         var log = await _unitOfWork.IotFirmwareUpdateLogs.GetAllAsync()
             .FirstOrDefaultAsync(l => l.Id == request.LogId && l.IotDeviceId == request.DeviceId && !l.IsDeleted, ct);
         if (log is null)
-            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Update log không tồn tại." };
+            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Update log not found." };
 
         log.Status = request.Status;
         if (request.BytesDownloaded.HasValue)
@@ -307,6 +377,6 @@ public class UpdateIotFirmwareUpdateLogCommandHandler : IRequestHandler<UpdateIo
             log.ToVersion ?? "unknown",
             request.Status.ToString().ToLowerInvariant());
 
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã cập nhật log." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Log updated." };
     }
 }

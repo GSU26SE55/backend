@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
+using SharedInfrastructure.RateLimiting;
 using TicketService.Api.Extensions;
+using TicketService.Api.Middleware;
 using TicketService.Application.DependencyInjection;
 using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.DependencyInjection;
@@ -37,7 +39,9 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddTicketServiceApplication(builder.Configuration);
 builder.Services.AddTicketServiceInfrastructure(builder.Configuration);
-builder.Services.AddHostedService<AutoCloseBackgroundService>();
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
+// Policy chặt hơn cho chat write — chạy chồng lên hạn mức nền.
 builder.Services.AddChatRateLimiting();
 
 var signalRBuilder = builder.Services.AddSignalR(options =>
@@ -127,6 +131,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseSharedInfrastructure();
+app.UseMiddleware<TicketConcurrencyExceptionMiddleware>();
 
 // UseHttpMetrics
 app.UseHttpMetrics();
@@ -143,10 +148,11 @@ if (!app.Environment.IsProduction())
 if (!app.Environment.IsEnvironment("Docker"))
     app.UseHttpsRedirection();
 
-app.UseCors("AllowAll");
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
+// PHẢI đứng sau hai dòng trên — xem StandardRateLimitingExtensions.UseStandardRateLimiter.
+app.UseStandardRateLimiter();
 
 app.MapControllers();
 app.MapHub<TicketChatHub>("/hubs/ticket-chats").RequireAuthorization();

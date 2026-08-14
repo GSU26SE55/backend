@@ -34,33 +34,39 @@ public class TicketCreatedConsumer : IConsumer<TicketCreatedEvent>
 
     public async Task Consume(ConsumeContext<TicketCreatedEvent> context)
     {
-        var messageId = context.MessageId ?? Guid.Empty;
-        if (messageId != Guid.Empty && !await NotificationDebounce.TryBeginByMessageAsync(_cache, messageId, context.CancellationToken))
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "TicketCreated", _logger, async () =>
         {
-            _logger.LogInformation("Debounce: skip duplicate TicketCreated message={MessageId}", messageId);
-            return;
-        }
+            var evt = context.Message;
 
-        var evt = context.Message;
+            var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
+            if (recipientIds.Count == 0)
+            {
+                _logger.LogWarning("No Manager recipient resolved for TicketCreated ticket={TicketId} — skip.", evt.TicketId);
+                return;
+            }
 
-        var recipientIds = await _recipientResolver.GetActiveByRoleAsync(context.CancellationToken, "Manager");
-        if (recipientIds.Count == 0)
-        {
-            _logger.LogWarning("No Manager recipient resolved for TicketCreated ticket={TicketId} — skip.", evt.TicketId);
-            return;
-        }
+            // Sprint 6.2 NOTI-05 (#676) — payload nay có Priority nên Manager biết ngay ticket ưu tiên gì.
+            var title = string.IsNullOrWhiteSpace(evt.Priority)
+                ? $"New ticket: {evt.Code}"
+                : $"New ticket: {evt.Code} (priority {evt.Priority})";
+            var body = string.IsNullOrWhiteSpace(evt.Priority)
+                ? $"Ticket {evt.Code} has just been created and is awaiting triage."
+                : $"Ticket {evt.Code} (priority {evt.Priority}) has just been created and is awaiting assignment.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                ticketId = evt.TicketId,
+                code = evt.Code,
+                customerId = evt.CustomerId,
+                priority = evt.Priority,
+                screen = "TicketDetail"
+            });
 
-        var title = $"Ticket mới: {evt.Code}";
-        var body = $"Ticket {evt.Code} vừa được tạo và đang chờ phân công.";
-        var payload = JsonSerializer.Serialize(new
-        {
-            ticketId = evt.TicketId,
-            code = evt.Code,
-            screen = "TicketDetail"
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.TicketCreated, NotificationWriter.InAppPush,
+                title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
         });
-
-        await NotificationWriter.WriteAsync(
-            _unitOfWork, recipientIds, NotificationTypeEnum.TicketCreated, NotificationWriter.InAppPush,
-            title, body, payload, "Ticket", evt.TicketId, context.CancellationToken);
     }
 }

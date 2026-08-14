@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -34,24 +35,34 @@ public class ChatReactionConsumer : IConsumer<ChatReactedEvent>
             if (evt.IsRemoved || evt.ChatAuthorUserId == evt.ActorUserId || evt.ChatAuthorUserId == Guid.Empty)
                 return;
 
-            var cmd = new CreateNotificationCommand
+            // Sprint 6.3 NOTI3-01 (#701) — ghi thêm row InApp: feed nay lọc Channel=InApp,
+            // nếu chỉ có Push thì reaction biến mất khỏi danh sách thông báo (R-40).
+            foreach (var channel in new[] { NotificationChannelEnum.InApp, NotificationChannelEnum.Push })
             {
-                UserId = evt.ChatAuthorUserId,
-                Type = NotificationTypeEnum.ChatReacted,
-                Channel = NotificationChannelEnum.Push,
-                Title = "Chat của bạn có reaction mới",
-                Body = "Một chat của bạn vừa nhận được reaction.",
-                PayloadJson = $"{{\"chatId\":\"{evt.ChatId}\",\"ticketId\":\"{evt.TicketId}\",\"reactionType\":{evt.ReactionType}}}",
-                EntityType = "Chat",
-                EntityId = evt.ChatId
-            };
+                var cmd = new CreateNotificationCommand
+                {
+                    UserId = evt.ChatAuthorUserId,
+                    Type = NotificationTypeEnum.ChatReacted,
+                    Channel = channel,
+                    Title = "Your chat has a new reaction",
+                    Body = "One of your chats just received a reaction.",
+                    PayloadJson = JsonSerializer.Serialize(new
+                    {
+                        chatId = evt.ChatId,
+                        ticketId = evt.TicketId,
+                        reactionType = evt.ReactionType,
+                    }),
+                    EntityType = "Chat",
+                    EntityId = evt.ChatId
+                };
 
-            var result = await _mediator.Send(cmd, context.CancellationToken);
-            if (!result.IsSuccess)
-            {
-                _logger.LogWarning(
-                    "Failed to create ChatReacted notification for ChatId={ChatId}: {Message}",
-                    evt.ChatId, result.Message);
+                var result = await _mediator.Send(cmd, context.CancellationToken);
+                if (!result.IsSuccess)
+                {
+                    _logger.LogWarning(
+                        "Failed to create ChatReacted {Channel} notification for ChatId={ChatId}: {Message}",
+                        channel, evt.ChatId, result.Message);
+                }
             }
         });
     }

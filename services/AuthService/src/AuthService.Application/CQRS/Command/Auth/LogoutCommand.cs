@@ -19,16 +19,16 @@ public class LogoutCommand : IRequest<CommonResponse<string>>, IValidatable<Comm
         {
             response.IsSuccess = false;
             response.StatusCode = 401;
-            response.Message = "Chưa đăng nhập.";
-            response.ListErrors.Add(new Errors { Field = nameof(AccountId), Detail = "Account không hợp lệ." });
+            response.Message = "Not logged in.";
+            response.ListErrors.Add(new Errors { Field = nameof(AccountId), Detail = "Invalid AccountId." });
         }
 
         if (string.IsNullOrWhiteSpace(RefreshToken))
         {
             response.IsSuccess = false;
             response.StatusCode = response.StatusCode == 0 ? 400 : response.StatusCode;
-            response.Message = "Refresh token không được để trống.";
-            response.ListErrors.Add(new Errors { Field = "RefreshToken", Detail = "Refresh token không được để trống." });
+            response.Message = "Refresh token is required.";
+            response.ListErrors.Add(new Errors { Field = "RefreshToken", Detail = "Refresh token is required." });
         }
         return Task.FromResult(response);
     }

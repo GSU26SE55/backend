@@ -8,33 +8,46 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Account;
 
 /// <summary>
 /// Đổi role của account sang role mới. Quan hệ 1-N: mỗi account chỉ có 1 role.
 /// Nếu role mới trùng role hiện tại → 200 OK nhưng không phát sinh thay đổi.
+///
+/// 02/08/2026 — phát thêm <see cref="AccountSyncSnapshotEvent"/>. Trước đó handler này không phát
+/// event tích hợp nào, nên read-model account bên NotificationService giữ role CŨ vĩnh viễn; mà
+/// <c>RecipientResolver</c> lại resolve người nhận theo đúng trường role đó, nên đổi role xong là
+/// thông báo nhóm gửi sai người cho tới khi có ai đó đối soát thủ công.
 /// </summary>
 public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRoleCommand, AccountActionResponse>
 {
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPublisher _publisher;
+    private readonly IMessageProducerService _messageProducer;
     private readonly IHttpContextAccessor? _httpContextAccessor;
 
     public ChangeAccountRoleCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IPublisher publisher,
+        IMessageProducerService messageProducer,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
         _publisher = publisher;
+        _messageProducer = messageProducer;
         _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<AccountActionResponse> Handle(ChangeAccountRoleCommand request, CancellationToken cancellationToken)
     {
+        // GH-769 — Include(Role) để biết TÊN role cũ. Consumer bên Battery/Ticket cần cả vế cũ
+        // lẫn vế mới: chỉ có role mới thì không suy ra được bản sao NÀO phải dọn.
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
         if (account == null)
@@ -43,7 +56,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy tài khoản."
+                Message = "Account not found."
             };
         }
 
@@ -57,11 +70,14 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Role không tồn tại hoặc đã bị vô hiệu hóa."
+                Message = "Role does not exist or has been deactivated."
             };
         }
 
         var previousRoleId = account.RoleId;
+        // Chụp TÊN role cũ ngay đây — sau khi gán RoleId mới thì navigation Role có thể đã đổi.
+        // Role rỗng là hợp lệ: account Google OAuth chưa onboard chưa có role nào.
+        var previousRoleName = account.Role?.Name ?? string.Empty;
 
         if (previousRoleId == request.RoleId)
         {
@@ -69,7 +85,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Role không thay đổi.",
+                Message = "Role unchanged.",
                 Data = account.Id
             };
         }
@@ -79,7 +95,12 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
 
         // #AUTH-34: retry trên DbUpdateConcurrencyException — race với ChangePassword / Disable / admin khác.
         var auditPublished = false;
+        var snapshotPublished = false;
         var accountInvalidAfterReload = false;
+
+        // Tính MỘT LẦN ngoài vòng retry: mốc này là khoá chống-về-trễ ở consumer, retry mà đổi mốc
+        // thì hai lần thử của cùng một thao tác sẽ trông như hai thao tác khác nhau.
+        var snapshotAtUtc = DateTime.UtcNow;
 
         await ConcurrencyRetryHelper.ExecuteAsync<bool>(
             operation: async (attempt, ct) =>
@@ -116,6 +137,37 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
                     auditPublished = true;
                 }
 
+                if (!snapshotPublished)
+                {
+                    // Outbox: INSERT vào OutboxMessages của cùng DbContext → atomic với việc đổi role
+                    // ở SaveChangesAsync bên dưới. Role vừa gán là role.Name (đã kiểm tra Active).
+                    await _messageProducer.PublishAsync(new AccountSyncSnapshotEvent(
+                        account.Id,
+                        account.Email,
+                        account.FullName,
+                        account.PhoneNumber,
+                        role.Name,
+                        IsActive: account.Status.IsNotifiable(),
+                        IsDeleted: false,
+                        SnapshotAtUtc: snapshotAtUtc,
+                        Reason: "RoleChanged"), ct);
+
+                    // GH-769 — Battery và Ticket KHÔNG nghe AccountSyncSnapshotEvent (chỉ
+                    // NotificationService nghe), nên trước đây đổi role xong bản sao ở hai service
+                    // đó giữ nguyên role cũ: thiếu StaffAccount thì không giao ticket được, thừa
+                    // CustomerAccount thì vẫn giữ quyền nghiệp vụ cũ.
+                    await _messageProducer.PublishAsync(new AccountRoleChangedEvent(
+                        account.Id,
+                        account.Email,
+                        account.FullName,
+                        account.PhoneNumber,
+                        OldRole: previousRoleName,
+                        NewRole: role.Name,
+                        ChangedAtUtc: snapshotAtUtc), ct);
+
+                    snapshotPublished = true;
+                }
+
                 await _unitOfWork.SaveChangesAsync(ct);
                 return true;
             },
@@ -128,7 +180,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Tài khoản đã bị thay đổi bởi tiến trình khác. Vui lòng thử lại."
+                Message = "The account was modified by another process. Please try again."
             };
         }
 
@@ -136,7 +188,7 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = $"Đã đổi role sang {role.Name}.",
+            Message = $"Role changed to {role.Name}.",
             Data = account.Id
         };
     }

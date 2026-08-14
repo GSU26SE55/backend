@@ -24,7 +24,9 @@ spec:
       app.kubernetes.io/component: apigateway
   ingress:
   - from:
-    - namespaceSelector: {}             # mọi namespace (Traefik thường ở kube-system)
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
     ports:
     - { protocol: TCP, port: 8080 }
 ---
@@ -39,7 +41,9 @@ spec:
       app.kubernetes.io/component: minio
   ingress:
   - from:
-    - namespaceSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
     ports:
     - { protocol: TCP, port: 9000 }
     - { protocol: TCP, port: 9001 }
@@ -55,7 +59,9 @@ spec:
       app.kubernetes.io/component: rabbitmq
   ingress:
   - from:
-    - namespaceSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
     ports:
     - { protocol: TCP, port: 15672 }
 ---
@@ -67,7 +73,7 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-    - { key: app.kubernetes.io/component, operator: In, values: [authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice] }
+    - { key: app.kubernetes.io/component, operator: In, values: [authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice, auditaggregatorservice] }
   ingress:
   - from:
     - podSelector:
@@ -89,7 +95,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/component, operator: In, values: [authservice, filestorageservice, batteryservice, ticketservice, notificationservice, smsservice, postgres-database-init, postgres-backup] }
+        - { key: app.kubernetes.io/component, operator: In, values: [authservice, filestorageservice, batteryservice, ticketservice, notificationservice, smsservice, auditaggregatorservice, postgres-database-init, postgres-backup] }
     ports:
     - { protocol: TCP, port: 5432 }
 ---
@@ -106,7 +112,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice] }
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice, auditaggregatorservice] }
     ports:
     - { protocol: TCP, port: 6379 }
 ---
@@ -123,7 +129,7 @@ spec:
   - from:
     - podSelector:
         matchExpressions:
-        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice] }
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice, auditaggregatorservice] }
     ports:
     - { protocol: TCP, port: 5672 }
     - { protocol: TCP, port: 15672 }
@@ -156,12 +162,11 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-    - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice, cadvisor] }
+    - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice, auditaggregatorservice, cadvisor] }
   ingress:
   # Prometheus pod (kube-prometheus-stack)
   - from:
-    - namespaceSelector: {}
-      podSelector:
+    - podSelector:
         matchLabels:
           app.kubernetes.io/name: prometheus
     ports:
@@ -170,6 +175,58 @@ spec:
   - from: []
     ports:
     - { protocol: TCP, port: 8080 }
+---
+# TicketService calls FileStorageService over its internal HTTP/2 gRPC listener.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ticket-to-filestorage-grpc
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: filestorageservice
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: ticketservice
+    ports:
+    - { protocol: TCP, port: 8081 }
+---
+# Application services export traces to Tempo through OTLP gRPC/HTTP.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ticket-to-battery-grpc
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: batteryservice
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: ticketservice
+    ports:
+    - { protocol: TCP, port: 8081 }
+---
+# Application services export traces to Tempo through OTLP gRPC/HTTP.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-services-to-tempo
+spec:
+  podSelector:
+    matchLabels:
+      app: tempo
+  ingress:
+  - from:
+    - podSelector:
+        matchExpressions:
+        - { key: app.kubernetes.io/component, operator: In, values: [apigateway, authservice, emailservice, smsservice, filestorageservice, batteryservice, ticketservice, notificationservice, auditaggregatorservice] }
+    ports:
+    - { protocol: TCP, port: 4317 }
+    - { protocol: TCP, port: 4318 }
 ---
 # Monitoring internal traffic:
 # - Prometheus scrapes app, infra, exporter, Loki, Promtail, cAdvisor metrics.
@@ -184,8 +241,7 @@ spec:
   podSelector: {}
   ingress:
   - from:
-    - namespaceSelector: {}
-      podSelector:
+    - podSelector:
         matchLabels:
           app.kubernetes.io/name: prometheus
     ports:
@@ -197,17 +253,15 @@ spec:
     - { protocol: TCP, port: 9100 }
     - { protocol: TCP, port: 3100 }
     - { protocol: TCP, port: 3101 }
+    - { protocol: TCP, port: 9115 }
   - from:
-    - namespaceSelector: {}
-      podSelector:
+    - podSelector:
         matchLabels:
           app.kubernetes.io/name: grafana
-    - namespaceSelector: {}
-      podSelector:
+    - podSelector:
         matchLabels:
           app.kubernetes.io/name: promtail
-    - namespaceSelector: {}
-      podSelector:
+    - podSelector:
         matchLabels:
           app.kubernetes.io/name: alertmanager
     ports:
@@ -226,7 +280,9 @@ spec:
       app.kubernetes.io/name: grafana
   ingress:
   - from:
-    - namespaceSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
     ports:
     - { protocol: TCP, port: 3000 }
 ---
@@ -241,7 +297,11 @@ spec:
     matchLabels:
       acme.cert-manager.io/http01-solver: "true"
   ingress:
-  - ports:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
     - { protocol: TCP, port: 8089 }
   policyTypes: [Ingress]
 ---
@@ -256,15 +316,21 @@ spec:
   egress:
   # DNS (CoreDNS)
   - to:
-    - namespaceSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
     ports:
     - { protocol: UDP, port: 53 }
     - { protocol: TCP, port: 53 }
   # Cluster-internal (Postgres, Redis, RabbitMQ, Minio, services)
   - to:
-    - namespaceSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
   # Internet egress (HTTPS) — Mailjet, Google OAuth, ghcr.io
   - to: []
     ports:
     - { protocol: TCP, port: 443 }
     - { protocol: TCP, port: 80 }
+    # BatteryService -> same-VPS Mosquitto public TLS listener.
+    - { protocol: TCP, port: 8883 }

@@ -34,17 +34,17 @@ public class ChatAttachmentRemoveCommand : IRequest<TicketActionResponse>, IVali
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
         if (ChatId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "ChatId", Detail = "ChatId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "ChatId", Detail = "Invalid ChatId." });
         if (AttachmentId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "AttachmentId", Detail = "AttachmentId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "AttachmentId", Detail = "Invalid AttachmentId." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

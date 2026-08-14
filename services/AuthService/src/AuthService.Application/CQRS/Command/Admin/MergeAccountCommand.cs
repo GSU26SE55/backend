@@ -47,23 +47,23 @@ public class MergeAccountCommand : IRequest<AccountActionResponse>, IValidatable
     {
         var response = new AccountActionResponse();
         if (PrimaryAccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "PrimaryAccountId", Detail = "PrimaryAccountId là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "PrimaryAccountId", Detail = "PrimaryAccountId is required." });
         if (SecondaryAccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "SecondaryAccountId", Detail = "SecondaryAccountId là bắt buộc." });
+            response.ListErrors.Add(new Errors { Field = "SecondaryAccountId", Detail = "SecondaryAccountId is required." });
         if (PrimaryAccountId == SecondaryAccountId)
-            response.ListErrors.Add(new Errors { Field = "SecondaryAccountId", Detail = "Không thể merge account vào chính nó." });
+            response.ListErrors.Add(new Errors { Field = "SecondaryAccountId", Detail = "Cannot merge an account into itself." });
         if (string.IsNullOrWhiteSpace(Reason))
-            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Reason là bắt buộc — bắt buộc audit." });
+            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Reason is required — needed for audit." });
         else if (Reason.Length > 1000)
-            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Reason tối đa 1000 ký tự." });
+            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Reason must not exceed 1000 characters." });
         if (PerformedBy == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "PerformedBy", Detail = "Phải có admin actor." });
+            response.ListErrors.Add(new Errors { Field = "PerformedBy", Detail = "An admin actor is required." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu không hợp lệ.";
+            response.Message = "Invalid data.";
         }
         return Task.FromResult(response);
     }

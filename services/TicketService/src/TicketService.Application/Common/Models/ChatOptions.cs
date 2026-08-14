@@ -41,13 +41,7 @@ public class ChatOptions
     /// <summary>ClamAV virus scan config (#514).</summary>
     public VirusScanSection VirusScan { get; set; } = new();
 
-    /// <summary>
-    /// Provider cho AI text/suggestion clients: "Gemini" (default) hoặc "DeepSeek".
-    /// Voice transcription luôn dùng Gemini — DeepSeek không hỗ trợ audio.
-    /// </summary>
-    public string Provider { get; set; } = "Gemini";
-
-    /// <summary>Cấu hình AI suggest endpoint (#559).</summary>
+    /// <summary>Cấu hình Gemini API key (voice transcription) + DeepSeek operational params.</summary>
     public AiSection Ai { get; set; } = new();
 
     /// <summary>Cấu hình DeepSeek Chat Completions API.</summary>
@@ -73,37 +67,49 @@ public class ChatOptions
         public int IntervalSeconds { get; set; } = 30;
 
         /// <summary>Base URL của FileStorageService để download file trước khi scan.</summary>
+        /// <remarks>
+        /// GH-790 — KHÔNG còn dùng để tải file. Endpoint REST đó có <c>[Authorize]</c> nên gọi không
+        /// token luôn nhận 401; việc tải đã chuyển sang kênh gRPC nội bộ
+        /// (<c>Chat:Voice:FileStorageGrpcAddress</c> / <c>FILE_STORAGE_GRPC_CLIENT_ADDRESS</c>).
+        /// Giữ khoá cấu hình để bản triển khai cũ không vỡ khi đọc file settings.
+        /// </remarks>
         public string FileStorageBaseUrl { get; set; } = "http://filestorageservice:8080";
+
+        /// <summary>
+        /// GH-790 — số lần thử tối đa trước khi coi là hỏng hẳn (<c>Failed</c>).
+        /// </summary>
+        /// <remarks>
+        /// Trước đây một lần hỏng là <c>Failed</c> ngay và không bao giờ được thử lại. Ba lần đủ để
+        /// vượt qua sự cố thoáng qua (service khởi động lại, ClamAV nghẽn) mà không quét lại vô hạn
+        /// một file thật sự có vấn đề.
+        /// </remarks>
+        public int MaxAttempts { get; set; } = 3;
+
+        /// <summary>Giãn cách trước lần thử lại đầu tiên (giây); các lần sau nhân đôi.</summary>
+        public int RetryBackoffSeconds { get; set; } = 60;
+
+        /// <summary>
+        /// GH-790 — bản ghi ở <c>Scanning</c> quá bao lâu thì coi là lượt quét bị bỏ dở và thu hồi
+        /// về <c>Pending</c> (giây).
+        /// </summary>
+        /// <remarks>
+        /// Phải LỚN hơn hẳn một lượt quét chậm nhất (tải file + ClamAV). Đặt ngắn quá là thu hồi một
+        /// lượt vẫn đang chạy, và lúc đó hai worker cùng quét một đính kèm.
+        /// </remarks>
+        public int ScanTimeoutSeconds { get; set; } = 600;
     }
 
     public class AiSection
     {
-        /// <summary>Gemini API key.</summary>
+        /// <summary>Gemini API key — dùng cho voice transcription (GeminiVoiceTranscriptionService).</summary>
         public string ApiKey { get; set; } = string.Empty;
-
-        /// <summary>Tên model Gemini — ví dụ: "gemini-2.0-flash-lite", "gemini-2.5-flash". Code tự build URL.</summary>
-        public string ModelName { get; set; } = "gemini-2.0-flash-lite";
-
-        /// <summary>Full generateContent endpoint được tính từ ModelName.</summary>
-        public string SuggestModelEndpoint =>
-            $"https://generativelanguage.googleapis.com/v1beta/models/{ModelName}:generateContent";
 
         public int MaxSuggestionsPerCall { get; set; } = 3;
 
-        /// <summary>Timeout gọi LLM API (giây).</summary>
-        public int TimeoutSeconds { get; set; } = 15;
-
-        /// <summary>TTL cache mask map PII trong Redis (giờ).</summary>
-        public int PiiMaskTtlHours { get; set; } = 1;
-
-        /// <summary>Ngưỡng sentiment score để alert Manager (#560). Âm = tiêu cực; default -0.7.</summary>
-        public double SentimentAlertThreshold { get; set; } = -0.7;
 
         /// <summary>Số dòng tóm tắt cho summarize endpoint (#560).</summary>
         public int SummarizeLinesCount { get; set; } = 5;
 
-        /// <summary>Số chat Customer gần nhất để phân tích sentiment (#560).</summary>
-        public int SentimentAnalysisMaxChats { get; set; } = 20;
     }
 
     public class DeepSeekSection
@@ -135,8 +141,8 @@ public class ChatOptions
         /// <summary>Tên model Gemini multimodal cho audio — ví dụ: "gemini-2.5-flash".</summary>
         public string ModelName { get; set; } = "gemini-1.5-flash";
 
-        /// <summary>FileStorageService upload URL — dùng để upload audio sau khi transcribe.</summary>
-        public string FileStorageUploadUrl { get; set; } = "http://file-storage-service/api/files/upload";
+        /// <summary>Private HTTP/2 endpoint exposed by FileStorageService for transcription workers.</summary>
+        public string FileStorageGrpcAddress { get; set; } = string.Empty;
 
         public int TranscribeTimeoutSeconds { get; set; } = 30;
     }

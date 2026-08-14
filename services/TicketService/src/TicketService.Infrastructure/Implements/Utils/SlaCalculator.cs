@@ -17,14 +17,17 @@ public class SlaCalculator : ISlaCalculator
         return ticket.CreatedAt.AddHours(slaHours);
     }
 
-    private static int GetSlaHours(TicketPriorityEnum priority)
+    public DateTime CalculateDueDate(DateTime startedAt, TicketPriorityEnum priority)
+        => startedAt.AddHours(GetSlaHours(priority));
+
+    public int GetSlaHours(TicketPriorityEnum priority)
     {
         return priority switch
         {
             TicketPriorityEnum.P1Critical => 4,
             TicketPriorityEnum.P2High => 24,
             TicketPriorityEnum.P3Normal => 72,
-            _ => throw new ArgumentOutOfRangeException(nameof(priority), $"Giá trị Priority {priority} không được hỗ trợ để tính SLA.")
+            _ => throw new ArgumentOutOfRangeException(nameof(priority), $"Priority value {priority} is not supported for SLA calculation.")
         };
     }
 }

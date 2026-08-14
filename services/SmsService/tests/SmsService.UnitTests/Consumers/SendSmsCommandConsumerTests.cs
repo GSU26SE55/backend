@@ -25,13 +25,19 @@ public class SendSmsCommandConsumerTests : IAsyncLifetime
             .ReturnsAsync(new CommonResponse<Guid> { IsSuccess = true, Data = Guid.NewGuid() });
 
         _inbox = new Mock<IInboxStore>();
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(true);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
 
         var services = new ServiceCollection();
         services.AddSingleton(_mediator.Object);
         services.AddSingleton(_inbox.Object);
-        services.AddMassTransitTestHarness(x => x.AddConsumer<SendSmsCommandConsumer>());
+        services.AddMassTransitTestHarness(x =>
+        {
+            x.AddConsumer<SendSmsCommandConsumer>();
+            // Flaky guard 2026-07-31: inactivity mặc định của MassTransit v8 = 1s ⇒ Consumed.Any<T>()
+            // trả false khi cả solution chạy song song. Khuôn: NotificationService/Helpers/ConsumerTestHarness.cs
+            x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
+        });
 
         _provider = services.BuildServiceProvider(true);
         _harness = _provider.GetRequiredService<ITestHarness>();
@@ -70,8 +76,8 @@ public class SendSmsCommandConsumerTests : IAsyncLifetime
     [Fact]
     public async Task Consume_Duplicate_InboxBlocks_NoForward()
     {
-        _inbox.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), nameof(SendSmsCommandConsumer), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(false);
+        _inbox.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), nameof(SendSmsCommandConsumer), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(InboxClaim.Completed);
 
         await _harness.Bus.Publish(new SendSmsCommand(
             "0901234567", "Hi", "auth", Guid.NewGuid()));

@@ -6,6 +6,7 @@ using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
 using SharedInfrastructure.Extensions;
 using SharedInfrastructure.Idempotency;
+using SharedInfrastructure.RateLimiting;
 using SmsService.Api.Swagger;
 using SmsService.Application.Interfaces.Repositories;
 using SmsService.Application.Interfaces.Services;
@@ -37,6 +38,13 @@ var connectionString = builder.Configuration.GetConnectionString("SmsDb")
 builder.Services.AddDbContext<SmsDbContext>(opt => opt.UseNpgsql(connectionString));
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<SmsDbContext>());
 builder.Services.AddScoped<ISmsUnitOfWork, SmsUnitOfWork>();
+// GH-794 — giành quyền publish từng dòng outbox, chặn hai replica cùng gửi một tin nhắn.
+builder.Services.AddScoped<SmsService.Application.Interfaces.Services.IOutboxClaimService,
+    SmsService.Infrastructure.Implements.Services.OutboxClaimService>();
+
+// Sprint 6.3 NOTI3-05 (#705) — seam để sau này cắm provider SMS thứ hai (Twilio/Vonage) mà không
+// phải sửa business logic. Hiện tại chỉ có gateway Android — giới hạn đã ghi nhận ở R-44.
+builder.Services.AddScoped<ISmsProvider, GatewaySmsProvider>();
 
 // ── 3. SharedInfrastructure ───────────────────────────────────────────────
 // CRITICAL: assemblyName là "SmsService.Application" — KHÔNG phải Api.
@@ -58,10 +66,12 @@ builder.Services.AddInboxIdempotency(builder.Configuration);
 // ── 5. MassTransit consumers ──────────────────────────────────────────────
 // Consumer assembly: SmsService.Application chứa SendSmsCommandConsumer + SendPhoneOtpConsumer (Phase 5).
 // AddMessageBus đăng ký IMessageProducerService = MassTransitProducer — step 6 OVERRIDE bằng OutboxMessagePublisher.
+// GH-728 — thêm assembly Infrastructure để MassTransit thấy SmsAuditReplayRequestedConsumer.
 builder.Services.AddMessageBus(
     builder.Configuration,
     configure: null,
-    AppDI.ApplicationAssembly);
+    AppDI.ApplicationAssembly,
+    typeof(SmsService.Infrastructure.Consumers.SmsAuditReplayRequestedConsumer).Assembly);
 
 // ── 6. Outbox publisher (PHẢI đăng ký SAU AddMessageBus để override) ──────
 // Last-registration-wins: handler resolve IMessageProducerService → OutboxMessagePublisher.
@@ -90,7 +100,12 @@ builder.Services.AddAuthorizationBuilder()
         .RequireAuthenticatedUser()
         .RequireClaim("device_code"));
 
-// ── 9. Rate limiter (60 req/phút/device) ──────────────────────────────────
+// ── 9. Rate limiter ───────────────────────────────────────────────────────
+// Hạn mức nền cho mọi endpoint (60 req/30s ẩn danh · 500 req/30s đã đăng nhập).
+builder.Services.AddStandardRateLimiting(builder.Configuration);
+
+// Policy chặt hơn cho endpoint gateway của thiết bị SMS (60 req/phút/device) — chạy chồng lên hạn mức nền.
+// KHÔNG đặt OnRejected/RejectionStatusCode ở đây: xem StandardRateLimitingExtensions.
 builder.Services.AddRateLimiter(o =>
 {
     o.AddPolicy("gateway", httpContext =>
@@ -105,7 +120,6 @@ builder.Services.AddRateLimiter(o =>
                 QueueLimit = 0
             });
     });
-    o.RejectionStatusCode = 429;
 });
 
 // ── 10. Background workers (StaleReaper + Redactor) ───────────────────────
@@ -151,10 +165,12 @@ if (!app.Environment.IsEnvironment("Docker")
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAll");
-app.UseRateLimiter();
+app.UseCors(SharedInfrastructure.DependencyInjection.Extensions.AddCORS.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
+// PHẢI đứng sau Authentication/Authorization. Trước đây dòng này nằm trước cả hai, nên
+// HttpContext.User còn rỗng và mọi request đều bị xếp vào bậc ẩn danh.
+app.UseStandardRateLimiter();
 
 // ── 13. Endpoints ─────────────────────────────────────────────────────────
 app.MapGet("/", () => "SMS Gateway Service is Running...");

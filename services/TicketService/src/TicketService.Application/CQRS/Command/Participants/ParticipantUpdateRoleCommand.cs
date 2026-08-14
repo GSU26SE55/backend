@@ -29,8 +29,12 @@ public class ParticipantUpdateRoleCommand : IRequest<ParticipantActionResponse>,
     /// </summary>
     [JsonIgnore]
     public Guid ActorUserId { get; set; }
+
     [JsonIgnore]
     public ActorRoleEnum ActorRole { get; set; }
+
+    [JsonIgnore]
+    public string? ActorName { get; set; }
 
     private static readonly ParticipantTypeEnum[] ManuallyAssignableTypes =
     {
@@ -44,19 +48,19 @@ public class ParticipantUpdateRoleCommand : IRequest<ParticipantActionResponse>,
         var response = new ParticipantActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "UserId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Invalid UserId." });
 
         if (!ManuallyAssignableTypes.Contains(ParticipantType))
-            response.ListErrors.Add(new Errors { Field = "ParticipantType", Detail = "ParticipantType chỉ được là Collaborator, Watcher hoặc Delegate." });
+            response.ListErrors.Add(new Errors { Field = "ParticipantType", Detail = "ParticipantType can only be Collaborator, Watcher, or Delegate." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

@@ -17,78 +17,71 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
-    private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
+    private readonly ISlaService _slaService;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
-    public TicketEscalateRequestCommandHandler(
-        ITicketUnitOfWork uow,
-        ITicketStateMachine stateMachine,
-        IActivityLogger activityLogger,
-        IMessageProducerService producer,
-        IPublisher publisher)
+    public TicketEscalateRequestCommandHandler(ITicketUnitOfWork uow, ITicketStateMachine stateMachine,
+        IActivityLogger activityLogger, IIntegrationEventOutboxWriter outboxWriter,
+        IPublisher publisher, ISlaService slaService)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
-        _publisher = publisher;
+        _outboxWriter = outboxWriter;
+        _slaService = slaService;
     }
 
     public async Task<TicketActionResponse> Handle(TicketEscalateRequestCommand request, CancellationToken ct)
     {
         var ticket = await _uow.Tickets.GetAllAsync()
-            .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
-
-        if (ticket == null)
+            .FirstOrDefaultAsync(x => x.Id == request.TicketId && !x.IsDeleted, ct);
+        if (ticket is null)
             return Fail(404, "Ticket not found.");
+        if (ticket.Priority == TicketPriorityEnum.Urgent)
+            return Fail(409, "Urgent is the highest priority and cannot be escalated.");
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Escalated, ActorRoleEnum.Staff, request.StaffId);
-        if (!transitionResult.IsAllowed)
-            return Fail(403, transitionResult.Reason ?? "Cannot escalate.");
+        ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+            .Where(x => x.TicketId == ticket.Id && !x.IsDeleted && x.Role == AssignmentRoleEnum.PrimaryHandler)
+            .Select(x => (Guid?)x.StaffId)
+            .SingleOrDefaultAsync(ct);
+        if (ticket.PrimaryHandlerStaffId != request.StaffId)
+            return Fail(403, "Only the active PrimaryHandler can request escalation.");
+        if (string.IsNullOrWhiteSpace(request.Note))
+            return Fail(400, "An escalation reason note is required.");
 
-        ticket.EscalationReason = request.Reason;
-        ticket.EscalatedAt = DateTime.UtcNow;
+        var transition = _stateMachine.CanTransition(ticket, TicketStatusEnum.Request, ActorRoleEnum.Staff, request.StaffId);
+        if (!transition.IsAllowed)
+            return Fail(409, transition.Reason ?? "Escalation cannot be requested from the current status.");
 
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Escalated, new TransitionContext
+        await _uow.ExecuteInTransactionAsync(async transactionCt =>
         {
-            ActorUserId = request.StaffId,
-            ActorRole = ActorRoleEnum.Staff,
-            ActorDisplayName = request.StaffName ?? "Staff",
-            Payload = new Dictionary<string, object?> { { "EscalationReason", request.Reason }, { "Note", request.Note } }
+            await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Request, new TransitionContext
+            {
+                ActorUserId = request.StaffId,
+                ActorRole = ActorRoleEnum.Staff,
+                ActorDisplayName = request.StaffName ?? "Staff"
+            }, transactionCt);
+            ticket.EscalationReason = request.Reason;
+            ticket.EscalatedAt = DateTime.UtcNow;
+            ticket.Reason = request.Note.Trim();
+            await _slaService.PauseSlaAsync(ticket.Id, PauseReasonEnum.WorkBlocked,
+                request.Note.Trim(), request.StaffId, transactionCt);
+            await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff,
+                request.StaffName, ActivityActionEnum.EscalationRequested, reason: request.Note.Trim());
+            await _outboxWriter.WriteAsync(new TicketEscalatedIntegrationEvent(
+                ticket.Id, ticket.Code, request.Reason, request.Note.Trim(), request.StaffId, request.StaffName), transactionCt);
+            await _uow.SaveChangesAsync(transactionCt);
         }, ct);
-
-        await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff, request.StaffName, ActivityActionEnum.EscalationRequested, newValue: request.Reason.ToString(), reason: request.Note);
-
-        // Outbox: Ticket Escalated
-        await _producer.PublishAsync(new TicketEscalatedIntegrationEvent(ticket.Id, ticket.Code, request.Reason, request.Note, request.StaffId, request.StaffName), ct);
-
-        // #AUDIT-26
-        await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
-            TicketAuditActionEnum.EscalatedToManager, ticket.Id, targetDisplay: ticket.Code, reason: request.Note), ct);
-
-        await _uow.SaveChangesAsync(ct);
 
         return new TicketActionResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Escalation requested.",
-            Data = new TicketActionDTO
-            {
-                Id = ticket.Id.ToString(),
-                Code = ticket.Code,
-                Status = ticket.Status
-            }
+            Message = "Escalation request submitted for Manager review.",
+            Data = new TicketActionDTO { Id = ticket.Id.ToString(), Code = ticket.Code, Status = ticket.Status }
         };
     }
 
-    private static TicketActionResponse Fail(int statusCode, string message)
-    {
-        return new TicketActionResponse
-        {
-            IsSuccess = false,
-            StatusCode = statusCode,
-            Message = message,
-        };
-    }
+    private static TicketActionResponse Fail(int code, string message) => new()
+    { IsSuccess = false, StatusCode = code, Message = message };
 }

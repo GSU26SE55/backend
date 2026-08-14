@@ -60,7 +60,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             .FirstOrDefaultAsync(rt => rt.Token == incomingHash, cancellationToken);
 
         if (existing == null)
-            return Fail(401, "Refresh token không hợp lệ.");
+            return Fail(401, "Invalid refresh token.");
 
         if (existing.Status == RefreshTokenStatus.Used)
         {
@@ -81,8 +81,15 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             // #AUTH-79: publish security alert event để NotificationService email user
             // + monitoring tool (Grafana alert) detect anomaly.
             var (ipForEvt, uaForEvt, _) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
+            // Sprint 6.2 NOTI-04 (#675) — kèm Email để EmailService gửi được cảnh báo cho nạn nhân.
+            var reuseAccountEmail = await _unitOfWork.Accounts.GetAllAsync()
+                .Where(a => a.Id == existing.AccountId && !a.IsDeleted)
+                .Select(a => a.Email)
+                .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
             await _messageProducer.PublishAsync(new RefreshTokenReuseDetectedEvent(
                 AccountId: existing.AccountId,
+                Email: reuseAccountEmail,
                 ReusedTokenId: existing.Id,
                 IpAddress: ipForEvt,
                 UserAgent: uaForEvt,
@@ -93,23 +100,23 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             AppMetrics.AuthRefreshTokenTotal.WithLabels("reuse_detected").Inc();
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "Phát hiện refresh token bị tái sử dụng. Toàn bộ phiên đã bị thu hồi.");
+            return Fail(401, "Refresh token reuse detected. All sessions have been revoked.");
         }
 
         if (existing.Status != RefreshTokenStatus.Active)
-            return Fail(401, "Refresh token đã bị thu hồi hoặc hết hạn.");
+            return Fail(401, "Refresh token has been revoked or has expired.");
 
         if (existing.ExpiredAt <= DateTime.UtcNow)
         {
             existing.Status = RefreshTokenStatus.Expired;
             _unitOfWork.RefreshTokens.UpdateAsync(existing);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "Refresh token đã hết hạn.");
+            return Fail(401, "Refresh token has expired.");
         }
 
         var account = existing.Account;
         if (account == null || account.IsDeleted || account.Status != AccountStatusEnum.Active)
-            return Fail(401, "Tài khoản không khả dụng.");
+            return Fail(401, "Account is not available.");
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
 
@@ -121,7 +128,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             existing.RevokedReason = "DeviceBindingMismatch";
             _unitOfWork.RefreshTokens.UpdateAsync(existing);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "Refresh token không hợp lệ cho thiết bị này.");
+            return Fail(401, "Refresh token is not valid for this device.");
         }
 
         var roleName = account.Role?.Name ?? string.Empty;
@@ -144,7 +151,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
             existing.Status = RefreshTokenStatus.Expired;
             _unitOfWork.RefreshTokens.UpdateAsync(existing);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "Refresh token chain đã hết hạn theo policy mới. Vui lòng đăng nhập lại.");
+            return Fail(401, "Refresh token chain has expired under the new policy. Please log in again.");
         }
 
         var newHashed = RefreshTokenHasher.Hash(newRefreshTokenValue);
@@ -185,7 +192,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, L
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cấp lại token thành công.",
+            Message = "Token refreshed successfully.",
             Data = new LoginResultDto
             {
                 Tokens = new TokenDTO

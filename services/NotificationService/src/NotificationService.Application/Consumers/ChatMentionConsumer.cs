@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -30,11 +31,23 @@ public class ChatMentionConsumer : IConsumer<ChatMentionedEvent>
         {
             var evt = context.Message;
 
-            var title = "Bạn được mention trong 1 chat";
-            var body = $"{evt.MentionedDisplayName} được mention trong ticket.";
-            var payload = $"{{\"chatId\":\"{evt.ChatId}\",\"ticketId\":\"{evt.TicketId}\",\"isGroupMention\":{evt.IsGroupMention.ToString().ToLowerInvariant()}}}";
+            var title = "You were mentioned in a chat";
+            var body = $"{evt.MentionedDisplayName} was mentioned in the ticket.";
+            // 03/08/2026 — dựng bằng JsonSerializer thay cho chuỗi nội suy. Payload hiện chỉ chứa
+            // Guid/int/bool nên chuỗi nội suy chưa từng sinh JSON hỏng, nhưng nó đúng chỉ nhờ
+            // may: người sau thêm một trường chữ (tên người, tiêu đề ticket) mà quên escape là
+            // dấu nháy trong đó cắt đôi JSON, và payload hỏng thì mọi biến template của loại đó
+            // im lặng render ra rỗng. 26/31 consumer khác đã dùng JsonSerializer.
+            var payload = JsonSerializer.Serialize(new
+            {
+                chatId = evt.ChatId,
+                ticketId = evt.TicketId,
+                isGroupMention = evt.IsGroupMention,
+            });
 
-            foreach (var channel in new[] { NotificationChannelEnum.Push, NotificationChannelEnum.Email })
+            // Sprint 6.3 NOTI3-01 (#701) — thêm InApp: feed in-app nay lọc theo Channel=InApp,
+            // thiếu row này thì mention biến mất hoàn toàn khỏi danh sách thông báo (R-40).
+            foreach (var channel in new[] { NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email })
             {
                 var cmd = new CreateNotificationCommand
                 {

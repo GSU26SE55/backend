@@ -37,16 +37,16 @@ public class TicketRateCommand : IRequest<TicketActionResponse>, IValidatable<Ti
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (Rating < 1 || Rating > 5)
-            response.ListErrors.Add(new Errors { Field = "Rating", Detail = "Đánh giá phải từ 1 đến 5 sao." });
+            response.ListErrors.Add(new Errors { Field = "Rating", Detail = "Rating must be between 1 and 5 stars." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

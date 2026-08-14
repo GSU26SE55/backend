@@ -2,6 +2,7 @@ using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Handler.Ticket;
 using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.UnitTests.Utils;
@@ -12,12 +13,24 @@ public class TicketGetListQueryHandlerTests
 {
     private readonly Mock<ITicketUnitOfWork> _mockUow = new();
     private readonly Mock<IGenericRepository<Ticket>> _mockRepo = new();
+    private readonly Mock<ITicketCurrentUserService> _mockCurrentUser = new();
     private readonly TicketGetListQueryHandler _handler;
 
     public TicketGetListQueryHandlerTests()
     {
         _mockUow.Setup(x => x.Tickets).Returns(_mockRepo.Object);
-        _handler = new TicketGetListQueryHandler(_mockUow.Object);
+        _mockCurrentUser.Setup(x => x.UserId).Returns(Guid.NewGuid().ToString());
+        _mockCurrentUser.Setup(x => x.Role).Returns("Admin");
+
+        var mockChatReads = new Mock<IGenericRepository<TicketChatRead>>();
+        mockChatReads.Setup(r => r.GetAllAsync()).Returns(Array.Empty<TicketChatRead>().BuildMock());
+        _mockUow.Setup(x => x.TicketChatReads).Returns(mockChatReads.Object);
+
+        var mockChats = new Mock<IGenericRepository<TicketChat>>();
+        mockChats.Setup(r => r.GetAllAsync()).Returns(Array.Empty<TicketChat>().BuildMock());
+        _mockUow.Setup(x => x.TicketChats).Returns(mockChats.Object);
+
+        _handler = new TicketGetListQueryHandler(_mockUow.Object, _mockCurrentUser.Object);
     }
 
     private static Ticket MakeTicket(
@@ -64,7 +77,7 @@ public class TicketGetListQueryHandlerTests
     {
         SetupMock([
             MakeTicket(TicketStatusEnum.Open),
-            MakeTicket(TicketStatusEnum.Assigned),
+            MakeTicket(TicketStatusEnum.Pending),
             MakeTicket(TicketStatusEnum.InProgress)
         ]);
 

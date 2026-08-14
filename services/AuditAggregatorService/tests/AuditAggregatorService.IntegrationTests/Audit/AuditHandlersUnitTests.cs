@@ -4,8 +4,13 @@ using AuditAggregatorService.Application.CQRS.Query.Audit;
 using AuditAggregatorService.Application.Interfaces;
 using AuditAggregatorService.Domain.Entities;
 using FluentAssertions;
+using MassTransit;
+using Microsoft.Extensions.Logging.Abstractions;
 using MockQueryable.Moq;
 using Moq;
+using SharedContracts.Audit;
+using SharedContracts.Events.Audit;
+using SharedInfrastructure.Services;
 using SharedKernels.Interfaces;
 using Xunit;
 
@@ -203,13 +208,116 @@ public class AuditHandlersUnitTests
         uow.Verify(u => u.AuditAggregates, Times.Never);
     }
 
-    [Fact]
-    public async Task ReplayHandler_Accepted_202()
-    {
-        var result = await new AuditReplayCommandHandler()
-            .Handle(new AuditReplayCommand { Service = "AuthService" }, CancellationToken.None);
+    // ───────── GH-728: replay phải tạo job thật, không chỉ trả 202 ─────────
 
-        result.IsSuccess.Should().BeTrue();
+    private static (AuditReplayCommandHandler Handler,
+                    List<AuditReplayJob> Saved,
+                    List<object> PublishedEvents,
+                    Mock<IAuditAggregatorUnitOfWork> Uow) BuildReplayHandler()
+    {
+        var saved = new List<AuditReplayJob>();
+        var published = new List<object>();
+
+        var jobs = new Mock<IGenericRepository<AuditReplayJob>>();
+        jobs.Setup(r => r.AddAsync(It.IsAny<AuditReplayJob>()))
+            .Callback<AuditReplayJob>(saved.Add)
+            .Returns(Task.CompletedTask);
+
+        var uow = new Mock<IAuditAggregatorUnitOfWork>();
+        uow.SetupGet(u => u.AuditReplayJobs).Returns(jobs.Object);
+        uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var publish = new Mock<IPublishEndpoint>();
+        publish.Setup(p => p.Publish(It.IsAny<AuditReplayRequestedEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<AuditReplayRequestedEvent, CancellationToken>((e, _) => published.Add(e))
+            .Returns(Task.CompletedTask);
+
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(c => c.UserId).Returns(Guid.NewGuid().ToString());
+
+        var handler = new AuditReplayCommandHandler(
+            uow.Object, publish.Object, currentUser.Object,
+            NullLogger<AuditReplayCommandHandler>.Instance);
+
+        return (handler, saved, published, uow);
+    }
+
+    [Fact]
+    public async Task ReplayHandler_PersistsJobAndPublishesRequest_Then202()
+    {
+        var (handler, saved, published, _) = BuildReplayHandler();
+
+        var result = await handler.Handle(
+            new AuditReplayCommand { Service = "AuthService" }, CancellationToken.None);
+
         result.StatusCode.Should().Be(202);
+
+        // Điểm cốt lõi của GH-728: 202 chỉ hợp lệ khi ĐÃ có job bền vững.
+        saved.Should().ContainSingle();
+        saved[0].ServiceName.Should().Be("AuthService");
+        saved[0].ExpectedResponders.Should().Be(1, "chỉ định 1 service thì chỉ chờ 1 phản hồi");
+        saved[0].Status.Should().Be(AuditReplayJobStatus.Requested);
+
+        published.Should().ContainSingle();
+        published[0].As<AuditReplayRequestedEvent>().JobId.Should().Be(saved[0].Id);
+    }
+
+    [Fact]
+    public async Task ReplayHandler_AllServices_ExpectsSixResponders()
+    {
+        var (handler, saved, _, _) = BuildReplayHandler();
+
+        await handler.Handle(new AuditReplayCommand(), CancellationToken.None);
+
+        saved.Should().ContainSingle();
+        saved[0].ServiceName.Should().BeNull();
+        saved[0].ExpectedResponders.Should().Be(AuditServiceNames.All.Count);
+    }
+
+    [Theory]
+    [InlineData("KhongCoService")]
+    [InlineData("ApiGateway")]
+    public async Task ReplayHandler_UnknownService_400_NoJob_NoPublish(string service)
+    {
+        var (handler, saved, published, uow) = BuildReplayHandler();
+
+        var result = await handler.Handle(
+            new AuditReplayCommand { Service = service }, CancellationToken.None);
+
+        result.StatusCode.Should().Be(400);
+        result.IsSuccess.Should().BeFalse();
+        saved.Should().BeEmpty("input sai thì KHÔNG được tạo job");
+        published.Should().BeEmpty();
+        uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ReplayHandler_FromAfterTo_400()
+    {
+        var (handler, saved, _, _) = BuildReplayHandler();
+
+        var result = await handler.Handle(new AuditReplayCommand
+        {
+            From = new DateTime(2026, 8, 2, 0, 0, 0, DateTimeKind.Utc),
+            To = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+        }, CancellationToken.None);
+
+        result.StatusCode.Should().Be(400);
+        saved.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ReplayHandler_UnspecifiedKind_TreatedAsUtc_NotServerLocal()
+    {
+        // Mốc không kèm offset: nếu coi là giờ máy chủ thì khoảng replay lệch đúng bằng
+        // timezone của container — bug âm thầm, chỉ lộ ra khi deploy khác múi giờ.
+        var (handler, saved, _, _) = BuildReplayHandler();
+        var unspecified = new DateTime(2026, 7, 1, 10, 0, 0, DateTimeKind.Unspecified);
+
+        await handler.Handle(new AuditReplayCommand { From = unspecified }, CancellationToken.None);
+
+        saved.Should().ContainSingle();
+        saved[0].FromUtc!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        saved[0].FromUtc!.Value.Hour.Should().Be(10);
     }
 }

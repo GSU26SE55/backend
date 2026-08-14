@@ -72,6 +72,27 @@ test-coverage: ## Test + coverage (XPlat Code Coverage)
 test-svc: _require-svc ## Test 1 service (SVC=BatteryService)
 	dotnet test $(SERVICES_DIR)/$(SVC)/$(SVC).slnx --verbosity minimal
 
+test-perf: ## Chạy riêng test Category=Performance (YÊU CẦU máy rảnh — xem ghi chú)
+	@printf '\n\033[1;34m[+] Performance tests (tuần tự, 1 assembly/lượt)\033[0m\n'
+	@printf 'Các test này đo tài nguyên máy nên bị loại khỏi ci-test/ci-integration.\n'
+	@printf '⚠️  Chạy trên máy RẢNH. Đo 2026-07-31: máy rảnh p99 ~6ms, pass 3/3 lần;\n'
+	@printf '    chạy song song cả solution p99 = 389ms (ngưỡng 50ms) => đỏ giả.\n'
+	@printf '    Đợi 10s cho tiến trình/container của lệnh trước teardown xong...\n'
+	@sleep 10
+	dotnet test services/AuthService/tests/AuthService.UnitTests/AuthService.UnitTests.csproj \
+		--no-build --filter "Category=Performance" --verbosity minimal
+	@docker info >/dev/null 2>&1 || { echo "SKIP: phần còn lại cần Docker (Testcontainers)."; exit 0; }
+	@sleep 5
+	# AuditThroughputChaosTests + AuditSearchSloTests (SLO search p95 < 200ms trên 1M dòng).
+	dotnet test services/AuditAggregatorService/tests/AuditAggregatorService.IntegrationTests/AuditAggregatorService.IntegrationTests.csproj \
+		--no-build --filter "Category=Performance" --verbosity minimal
+	@sleep 5
+	# DoD Sprint Chat — ChatSloTests (GetList p95 < 200ms / 1000 chat) + SignalRBroadcastSloTests
+	# (broadcast p99 < 500ms / 100 user). Thiếu dòng này thì 2 lớp đó KHÔNG chạy ở đâu cả:
+	# ci-test loại theo tên "IntegrationTests", ci-integration loại theo Category=Performance.
+	dotnet test services/TicketService/tests/TicketService.IntegrationTests/TicketService.IntegrationTests.csproj \
+		--no-build --filter "Category=Performance" --verbosity minimal
+
 # ---------------------------------------------------------------------
 # CI — chạy local trước khi push (mirror Jenkinsfile stage 0-7)
 # ---------------------------------------------------------------------
@@ -83,10 +104,10 @@ test-svc: _require-svc ## Test 1 service (SVC=BatteryService)
 
 BASE_REF ?= origin/dev
 
-ci: ci-preflight ci-format ci-build ci-test ci-rules ci-trivy ## Full local CI (preflight → format → build → unit test → rules → trivy)
+ci: ci-preflight ci-format ci-build ci-test ci-rules ci-audit ci-trivy ## Full local CI (preflight → format → build → unit test → rules → nuget audit → trivy)
 	@printf '\n\033[1;32m========== CI PASS ==========\033[0m\n'
 
-ci-fast: ci-preflight ci-build ci-test ci-rules ## CI nhanh (bỏ format + trivy) — cho vòng lặp dev
+ci-fast: ci-preflight ci-build ci-test ci-rules ## CI nhanh (bỏ format + audit + trivy) — cho vòng lặp dev
 	@printf '\n\033[1;32m========== CI-FAST PASS ==========\033[0m\n'
 
 ci-full: ci ci-integration ## CI + integration tests (cần Docker)
@@ -120,16 +141,22 @@ ci-rules: ## [stage 5] Project rule checks (await void / AuditableEntity / audit
 	@printf '\n\033[1;34m[5/6] Project rule checks (BASE_REF=$(BASE_REF))\033[0m\n'
 	@BASE_REF=$(BASE_REF) ./ci/scripts/rule-checks.sh
 
-ci-trivy: ## [stage 6] Trivy fs scan (CRITICAL, ignore-unfixed) — SKIP_TRIVY=1 để bỏ qua
-	@printf '\n\033[1;34m[6/6] Security scan (trivy)\033[0m\n'
+ci-audit: ## [stage 6] NuGet audit — chặn dependency dính lỗ hổng High/Critical (GH-730/731/732)
+	@printf '\n\033[1;34m[6/7] NuGet vulnerability audit\033[0m\n'
+	@./ci/scripts/nuget-audit.sh
+
+ci-trivy: ## [stage 7] Trivy fs scan (CRITICAL, ignore-unfixed) — SKIP_TRIVY=1 để bỏ qua
+	@printf '\n\033[1;34m[7/7] Security scan (trivy)\033[0m\n'
 	@./ci/scripts/trivy-scan.sh
 
 ci-integration: ## [stage 7] Integration tests (cần Docker daemon)
 	@printf '\n\033[1;34m[+] Integration tests\033[0m\n'
 	@docker info >/dev/null 2>&1 || { echo "FAIL: Docker daemon không chạy."; exit 1; }
 	@mkdir -p TestResults
+	# AuditThroughputChaosTests skip: đo throughput/kết nối đồng thời, đỏ giả khi chạy song song
+	# cả solution (428 ev/s vs 1000; Npgsql read-timeout khi mở 3200 connection). Run: make test-perf
 	dotnet test $(SLN) -c Release --no-build \
-		--filter "FullyQualifiedName~IntegrationTests" \
+		--filter "FullyQualifiedName~IntegrationTests&Category!=Performance" \
 		--logger "trx" \
 		--results-directory ./TestResults
 
@@ -235,6 +262,60 @@ docker-ps: ## Liệt kê container
 docker-clean: ## down + xoá volumes (DESTRUCTIVE — xác nhận trước)
 	@read -p "Xoá toàn bộ volumes (postgres, rabbit, minio, ...)? [y/N] " ans && [ "$$ans" = "y" ]
 	$(COMPOSE) down -v
+
+# ---------------------------------------------------------------------
+# Security scan — OWASP ZAP baseline (thụ động)
+# ---------------------------------------------------------------------
+# Yêu cầu: stack đang chạy (`make docker-up`) và service đích trả được OpenAPI.
+#
+# Quét THỤ ĐỘNG: chỉ đọc response, KHÔNG bắn payload tấn công. An toàn để chạy trên
+# stack local. Tuyệt đối KHÔNG trỏ vào môi trường của người khác.
+#
+# Kế hoạch quét khoá phạm vi trong đúng host đích — xem lý do trong infra/zap/api-baseline.yaml
+# (endpoint /api/auth/google/login trả 302 sang Google; không khoá thì ZAP quét luôn Google).
+.PHONY: zap-scan
+
+ZAP_SVC     ?= authservice
+ZAP_PORT    ?= 8080
+ZAP_NET     ?= backend_solar-net
+ZAP_OUT     ?= $(CURDIR)/logs/zap
+ZAP_SPEC    ?= /swagger/v1/swagger.json
+
+zap-scan: ## OWASP ZAP baseline scan (ZAP_SVC=authservice, kết quả trong logs/zap/)
+	@docker info >/dev/null 2>&1 || { echo "Cần Docker daemon đang chạy."; exit 1; }
+	@docker network inspect $(ZAP_NET) >/dev/null 2>&1 || \
+		{ echo "Không thấy network $(ZAP_NET) — chạy 'make docker-up' trước."; exit 1; }
+	@mkdir -p $(ZAP_OUT)
+	docker run --rm --network $(ZAP_NET) \
+		-v $(ZAP_OUT):/zap/wrk:rw \
+		-v $(CURDIR)/infra/zap:/plan:ro -u root \
+		-e ZAP_TARGET=http://$(ZAP_SVC):$(ZAP_PORT) \
+		-e ZAP_OPENAPI=http://$(ZAP_SVC):$(ZAP_PORT)$(ZAP_SPEC) \
+		-e ZAP_NAME=$(ZAP_SVC) \
+		ghcr.io/zaproxy/zaproxy:stable zap.sh -cmd -autorun /plan/api-baseline.yaml
+	@echo "Báo cáo: $(ZAP_OUT)/zap-baseline-$(ZAP_SVC).html"
+
+# ---------------------------------------------------------------------
+# Monitoring
+# ---------------------------------------------------------------------
+ALERT_RULES_SRC  := monitoring/prometheus/alert-rules.yml
+ALERT_RULES_HELM := deploy/helm/solar-battery/files/alert-rules.yml
+
+.PHONY: sync-alert-rules check-alert-rules
+
+sync-alert-rules: ## Đồng bộ alert rules sang chart Helm (chạy sau khi sửa alert-rules.yml)
+	@cp $(ALERT_RULES_SRC) $(ALERT_RULES_HELM)
+	@echo "Đã đồng bộ $(ALERT_RULES_SRC) -> $(ALERT_RULES_HELM) ($$(grep -c '^\s*- alert:' $(ALERT_RULES_SRC)) alert)."
+
+check-alert-rules: ## Kiểm 2 bản alert rules còn khớp nhau (CI cũng chạy luật này)
+	@if diff -q $(ALERT_RULES_SRC) $(ALERT_RULES_HELM) >/dev/null 2>&1; then \
+		echo "PASS: alert rules đồng bộ."; \
+	else \
+		echo "FAIL: $(ALERT_RULES_SRC) và $(ALERT_RULES_HELM) đã lệch nhau."; \
+		diff $(ALERT_RULES_SRC) $(ALERT_RULES_HELM) || true; \
+		echo "Chạy: make sync-alert-rules"; \
+		exit 1; \
+	fi
 
 # ---------------------------------------------------------------------
 # Helpers (internal)

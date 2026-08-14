@@ -50,7 +50,7 @@ public class MarkdownRendererTests
     [Fact]
     public void RenderToHtml_AutoLinksUrl()
     {
-        var html = _renderer.RenderToHtml("Xem tại https://example.com nhé", Array.Empty<Guid>());
+        var html = _renderer.RenderToHtml("See it at https://example.com", Array.Empty<Guid>());
 
         html.Should().Contain("<a href=\"https://example.com\"");
     }

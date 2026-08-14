@@ -12,14 +12,14 @@ public class SendEmailChangeOtpConsumer : IConsumer<SendEmailChangeOtpEvent>
 {
     private const int OtpExpireMinutes = 10;
 
-    private readonly EmailSenderService _emailSender;
+    private readonly IEmailProvider _emailSender;
     private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SendEmailChangeOtpConsumer> _logger;
     private readonly IInboxStore _inboxStore;
 
     public SendEmailChangeOtpConsumer(
-        EmailSenderService emailSender,
+        IEmailProvider emailSender,
         IEmailTemplateRenderer templateRenderer,
         IConfiguration configuration,
         ILogger<SendEmailChangeOtpConsumer> logger,
@@ -44,9 +44,12 @@ public class SendEmailChangeOtpConsumer : IConsumer<SendEmailChangeOtpEvent>
                 var values = new Dictionary<string, string?>
                 {
                     ["AppName"] = appName,
-                    ["UserName"] = string.IsNullOrWhiteSpace(msg.ToNewEmail) ? "bạn" : msg.ToNewEmail,
+                    ["UserName"] = string.IsNullOrWhiteSpace(msg.ToNewEmail) ? "there" : msg.ToNewEmail,
                     ["Otp"] = msg.Otp,
-                    ["ExpireMinutes"] = OtpExpireMinutes.ToString()
+                    ["ExpireMinutes"] = OtpExpireMinutes.ToString(),
+                    // Sprint 6.2 NOTI-09 (#680) — template OtpEmailChange.html mới hiển thị địa chỉ
+                    // email đích; thiếu key này thì placeholder sẽ hiện nguyên văn trong email.
+                    ["PendingEmail"] = msg.ToNewEmail
                 };
 
                 string htmlBody;

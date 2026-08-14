@@ -46,6 +46,13 @@ public class StaffAccountConfiguration : IEntityTypeConfiguration<StaffAccount>
             .HasColumnType("jsonb")
             .HasConversion(new JsonValueConverter<List<string>>());
 
+        // Mặc định "Staff" cho hàng cũ — bảng này chứa cả Manager/Admin, xem StaffAccount.Role.
+        builder.Property(e => e.Role)
+            .HasColumnName("role")
+            .HasMaxLength(20)
+            .HasDefaultValue("Staff")
+            .IsRequired();
+
         builder.Property(e => e.LastSyncedAt)
             .HasColumnName("last_synced_at");
 

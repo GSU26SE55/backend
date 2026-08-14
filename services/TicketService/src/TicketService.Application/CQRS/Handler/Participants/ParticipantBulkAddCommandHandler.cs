@@ -6,6 +6,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -14,12 +15,17 @@ namespace TicketService.Application.CQRS.Handler.Participants;
 public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkAddCommand, ParticipantBulkActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IActivityLogger _activityLogger;
 
-    public ParticipantBulkAddCommandHandler(ITicketUnitOfWork uow, IMessageProducerService producer)
+    public ParticipantBulkAddCommandHandler(
+        ITicketUnitOfWork uow,
+        IIntegrationEventOutboxWriter outboxWriter,
+        IActivityLogger activityLogger)
     {
         _uow = uow;
-        _producer = producer;
+        _outboxWriter = outboxWriter;
+        _activityLogger = activityLogger;
     }
 
     public async Task<ParticipantBulkActionResponse> Handle(ParticipantBulkAddCommand request, CancellationToken ct)
@@ -28,11 +34,11 @@ public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkA
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var isManagerOrAdmin = request.ActorRole == ActorRoleEnum.Manager || request.ActorRole == ActorRoleEnum.Admin;
         if (!isManagerOrAdmin)
-            return Fail(403, "Chỉ Manager/Admin mới có quyền thêm participant theo lô.");
+            return Fail(403, "Only Manager/Admin has permission to bulk add participants.");
 
         var activeUserIds = await _uow.TicketParticipants.GetAllAsync()
             .AsNoTracking()
@@ -43,7 +49,7 @@ public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkA
         foreach (var item in request.Participants)
         {
             if (activeUserIds.Contains(item.UserId))
-                return Fail(400, $"Người dùng {item.UserId} đã là participant active của ticket.");
+                return Fail(400, $"User {item.UserId} is already an active participant of the ticket.");
         }
 
         var participants = request.Participants.Select(item => new TicketParticipant
@@ -60,35 +66,40 @@ public class ParticipantBulkAddCommandHandler : IRequestHandler<ParticipantBulkA
             AddedAt = DateTime.UtcNow
         }).ToList();
 
-        await _uow.BeginTransactionAsync();
         try
         {
-            foreach (var participant in participants)
-                await _uow.TicketParticipants.AddAsync(participant);
+            await _uow.ExecuteInTransactionAsync(async transactionCt =>
+            {
+                foreach (var participant in participants)
+                {
+                    await _uow.TicketParticipants.AddAsync(participant);
+                    await _outboxWriter.WriteAsync(new ParticipantAddedEvent(
+                        ticket.Id,
+                        participant.UserId,
+                    (int)participant.UserRole,
+                    (int)participant.ParticipantType,
+                    request.ActorUserId), transactionCt);
 
-            await _uow.CommitTransactionAsync();
+                    await _activityLogger.LogAsync(
+                        ticket.Id,
+                        request.ActorUserId,
+                        request.ActorRole,
+                        request.ActorName,
+                        ActivityActionEnum.ParticipantAdded,
+                        newValue: $"User {participant.UserId} added as {participant.ParticipantType}.");
+                }
+            }, ct);
         }
         catch (Exception ex)
         {
-            await _uow.RollbackTransactionAsync();
-            return Fail(500, $"Thêm participant theo lô thất bại: {ex.Message}");
-        }
-
-        foreach (var participant in participants)
-        {
-            await _producer.PublishAsync(new ParticipantAddedEvent(
-                ticket.Id,
-                participant.UserId,
-                (int)participant.UserRole,
-                (int)participant.ParticipantType,
-                request.ActorUserId), ct);
+            return Fail(500, $"Bulk add participants failed: {ex.Message}");
         }
 
         return new ParticipantBulkActionResponse
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Thêm participant theo lô thành công.",
+            Message = "Participants added successfully.",
             Data = participants.Select(ToDto).ToList()
         };
     }

@@ -25,4 +25,13 @@ public class GetBatteryAssetsQuery : PaginationRequest, IRequest<CommonResponse<
 
     /// <summary>Bao gồm soft-deleted records.</summary>
     public bool IncludeDeleted { get; set; }
+
+    /// <summary>
+    /// Cột sort. Whitelist: serialNumber | batteryTypeName | customerName | siteName | status | installDate.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
 }

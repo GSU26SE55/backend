@@ -19,16 +19,16 @@ public class GoogleCallbackCommand : IRequest<LoginResponse>, IValidatable<Login
         var response = new LoginResponse();
 
         if (string.IsNullOrWhiteSpace(Code))
-            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Authorization code không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Code", Detail = "Authorization code is required." });
 
         if (string.IsNullOrWhiteSpace(RedirectUri))
-            response.ListErrors.Add(new Errors { Field = "RedirectUri", Detail = "RedirectUri không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "RedirectUri", Detail = "RedirectUri is required." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu callback không hợp lệ.";
+            response.Message = "Invalid callback data.";
         }
         return Task.FromResult(response);
     }

@@ -127,6 +127,24 @@ public class BatteryAssetFullHandlerTests
     }
 
     [Fact]
+    public async Task Create_SiteCustomerMismatch_IsReportedBeforeMissingCustomerMirror()
+    {
+        var site = MakeSite(customerId: Guid.NewGuid());
+        var cmd = BuildCreateCmd();
+        cmd.SiteId = site.Id;
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryTypes(MakeType())
+            .WithSites(site);
+
+        var r = await new CreateBatteryAssetCommandHandler(
+            b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>())
+            .Handle(cmd, CancellationToken.None);
+
+        r.StatusCode.Should().Be(409);
+        r.Message.Should().Contain("Site does not belong to the battery asset's customer");
+    }
+
+    [Fact]
     public async Task Create_HappyPath_Returns201()
     {
         var site = MakeSite();
@@ -312,7 +330,7 @@ public class BatteryAssetFullHandlerTests
     public async Task GetById_NotFound_Returns404()
     {
         var b = new MockUnitOfWorkBuilder();
-        var r = await new GetBatteryAssetByIdQueryHandler(b.Build()).Handle(new GetBatteryAssetByIdQuery { Id = Guid.NewGuid() }, CancellationToken.None);
+        var r = await new GetBatteryAssetByIdQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetBatteryAssetByIdQuery { Id = Guid.NewGuid() }, CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
 
@@ -324,7 +342,7 @@ public class BatteryAssetFullHandlerTests
         var b = new MockUnitOfWorkBuilder()
             .WithCustomerAccounts(Customer())
             .WithBatteryAssets(asset);
-        var r = await new GetBatteryAssetByIdQueryHandler(b.Build()).Handle(new GetBatteryAssetByIdQuery { Id = asset.Id }, CancellationToken.None);
+        var r = await new GetBatteryAssetByIdQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetBatteryAssetByIdQuery { Id = asset.Id }, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         r.Data!.CustomerName.Should().Be("x");
     }
@@ -385,7 +403,7 @@ public class BatteryAssetFullHandlerTests
     public async Task Realtime_NotFound_Returns404()
     {
         var b = new MockUnitOfWorkBuilder();
-        var r = await new GetBatteryAssetRealtimeQueryHandler(b.Build()).Handle(new GetBatteryAssetRealtimeQuery { Id = Guid.NewGuid() }, CancellationToken.None);
+        var r = await new GetBatteryAssetRealtimeQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetBatteryAssetRealtimeQuery { Id = Guid.NewGuid() }, CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
 
@@ -399,7 +417,7 @@ public class BatteryAssetFullHandlerTests
             .WithBatteryAssets(asset)
             .WithSensorReadings(reading)
             .WithAlerts(alert);
-        var r = await new GetBatteryAssetRealtimeQueryHandler(b.Build()).Handle(new GetBatteryAssetRealtimeQuery { Id = asset.Id }, CancellationToken.None);
+        var r = await new GetBatteryAssetRealtimeQueryHandler(b.Build(), TestBatteryCurrentUserService.Admin()).Handle(new GetBatteryAssetRealtimeQuery { Id = asset.Id }, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         r.Data!.Voltage.Should().Be(12);
         r.Data.ActiveAlerts.Should().Be(1);

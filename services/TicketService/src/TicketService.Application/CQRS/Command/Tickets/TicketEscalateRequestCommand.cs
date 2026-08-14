@@ -33,16 +33,16 @@ public class TicketEscalateRequestCommand : IRequest<TicketActionResponse>, IVal
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
         if (!Enum.IsDefined(typeof(EscalationReasonEnum), Reason))
-            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Lý do escalate không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Invalid escalation reason." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

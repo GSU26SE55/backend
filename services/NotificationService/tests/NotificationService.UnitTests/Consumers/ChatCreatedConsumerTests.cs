@@ -24,7 +24,13 @@ public class ChatCreatedConsumerTests
         inboxStore ??= MakeInboxStore();
 
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<ChatCreatedConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<ChatCreatedConsumer>();
+                // Timeout tường minh — mặc định inactivity 1s của MassTransit v8 làm test đỏ
+                // thất thường khi cả solution chạy song song. Xem ConsumerTestHarness.InactivityTimeout.
+                x.SetTestTimeouts(Helpers.ConsumerTestHarness.TestTimeout, Helpers.ConsumerTestHarness.InactivityTimeout);
+            })
             .AddSingleton(mediator)
             .AddSingleton(inboxStore.Object)
             .AddSingleton(NullLogger<ChatCreatedConsumer>.Instance)
@@ -37,8 +43,8 @@ public class ChatCreatedConsumerTests
     private static Mock<IInboxStore> MakeInboxStore()
     {
         var store = new Mock<IInboxStore>();
-        store.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(true);
+        store.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+             .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         return store;
     }
 
@@ -50,8 +56,8 @@ public class ChatCreatedConsumerTests
         TicketId: Guid.NewGuid(),
         AuthorUserId: Guid.NewGuid(),
         AuthorRole: authorRole,
-        AuthorDisplayName: "Tác giả",
-        Body: "Nội dung chat test",
+        AuthorDisplayName: "Author",
+        Body: "Chat test content",
         IsInternal: isInternal,
         AttachmentFileIds: new List<Guid>(),
         CustomerId: customerId,
@@ -73,9 +79,17 @@ public class ChatCreatedConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<ChatCreatedEvent>()).Should().BeTrue();
 
-        captured.Should().ContainSingle();
-        captured[0].UserId.Should().Be(customerId);
-        captured[0].Type.Should().Be(NotificationTypeEnum.ChatCreated);
+        // Sprint 6.2 NOTI-10 (#681) — ghi SONG SONG InApp + Push (trước đây chỉ Push).
+        captured.Should().HaveCount(2);
+        captured.Should().AllSatisfy(c =>
+        {
+            c.UserId.Should().Be(customerId);
+            c.Type.Should().Be(NotificationTypeEnum.ChatCreated);
+        });
+        captured.Select(c => c.Channel).Should().BeEquivalentTo(new[]
+        {
+            NotificationChannelEnum.InApp, NotificationChannelEnum.Push
+        });
 
         await harness.Stop();
     }
@@ -96,8 +110,12 @@ public class ChatCreatedConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<ChatCreatedEvent>()).Should().BeTrue();
 
-        captured.Should().ContainSingle();
-        captured[0].UserId.Should().Be(staffId);
+        captured.Should().HaveCount(2);
+        captured.Should().AllSatisfy(c => c.UserId.Should().Be(staffId));
+        captured.Select(c => c.Channel).Should().BeEquivalentTo(new[]
+        {
+            NotificationChannelEnum.InApp, NotificationChannelEnum.Push
+        });
 
         await harness.Stop();
     }
@@ -125,9 +143,9 @@ public class ChatCreatedConsumerTests
             .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
 
         var inboxStore = new Mock<IInboxStore>();
-        inboxStore.SetupSequence(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true)
-            .ReturnsAsync(false);
+        inboxStore.SetupSequence(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var evt = MakeEvent(StaffRole, isInternal: false, Guid.NewGuid(), Guid.NewGuid());
 
@@ -136,7 +154,8 @@ public class ChatCreatedConsumerTests
         await harness.Bus.Publish(evt);
         (await harness.Consumed.Any<ChatCreatedEvent>()).Should().BeTrue();
 
-        mediator.Verify(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()), Times.Once);
+        // Inbox dedup: event trùng chỉ xử lý 1 lần → vẫn đúng 2 command (InApp + Push), không phải 4.
+        mediator.Verify(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
 
         await harness.Stop();
     }

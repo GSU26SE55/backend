@@ -19,16 +19,16 @@ public class DeleteStaffSkillCommand : IRequest<AccountActionResponse>, IValidat
         var response = new AccountActionResponse();
 
         if (StaffAccountId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = nameof(StaffAccountId), Detail = "StaffAccountId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = nameof(StaffAccountId), Detail = "Invalid StaffAccountId." });
 
         if (string.IsNullOrWhiteSpace(SkillCode))
-            response.ListErrors.Add(new Errors { Field = nameof(SkillCode), Detail = "SkillCode không được để trống." });
+            response.ListErrors.Add(new Errors { Field = nameof(SkillCode), Detail = "SkillCode is required." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

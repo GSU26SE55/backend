@@ -8,22 +8,20 @@ namespace TicketService.Application.CQRS.Command.Tickets;
 
 public class TicketReassignCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
-    /// <summary>
-    /// ID của Ticket liên quan.
-    /// </summary>
     [JsonIgnore]
     public Guid TicketId { get; set; }
-    public Guid NewStaffId { get; set; }
+
     /// <summary>
-    /// Lý do thực hiện hành động.
+    /// Staff mới được chỉ định làm PrimaryHandler — phải đủ tier theo priority của ticket.
     /// </summary>
+    public Guid NewPrimaryHandlerStaffId { get; set; }
+    public DateTimeOffset ScheduledStartAt { get; set; }
+
     public string Reason { get; set; } = string.Empty;
 
     [JsonIgnore]
     public Guid ManagerId { get; set; }
-    /// <summary>
-    /// Tên của Manager.
-    /// </summary>
+
     [JsonIgnore]
     public string? ManagerName { get; set; }
 
@@ -32,19 +30,21 @@ public class TicketReassignCommand : IRequest<TicketActionResponse>, IValidatabl
         var response = new TicketActionResponse();
 
         if (TicketId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "TicketId không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "TicketId", Detail = "Invalid TicketId." });
 
-        if (NewStaffId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "NewStaffId", Detail = "NewStaffId không hợp lệ." });
+        if (NewPrimaryHandlerStaffId == Guid.Empty)
+            response.ListErrors.Add(new Errors { Field = "NewPrimaryHandlerStaffId", Detail = "Invalid NewPrimaryHandlerStaffId." });
+        if (ScheduledStartAt == default)
+            response.ListErrors.Add(new Errors { Field = "ScheduledStartAt", Detail = "A required offset-aware schedule must be provided." });
 
         if (string.IsNullOrWhiteSpace(Reason))
-            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Lý do điều chuyển không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "Reason", Detail = "Reassignment reason must not be empty." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

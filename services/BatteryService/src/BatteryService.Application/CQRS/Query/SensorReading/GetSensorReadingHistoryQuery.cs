@@ -24,18 +24,44 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
     /// <summary>Cursor pagination — timestamp record cuối trang trước.</summary>
     public DateTime? Cursor { get; set; }
 
+    /// <summary>
+    /// Cột sort. Whitelist: time (mặc định — cursor path) | voltage | current | temperature | socPercent.
+    /// Khi sort theo cột value (khác time) BẮT BUỘC truyền cả from+to (Hướng B — giới hạn khoảng quét, không cursor).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
+
+    /// <summary>
+    /// Chuẩn hoá SortBy → cột value ("voltage"/"current"/"temperature"/"socpercent");
+    /// trả null nếu sort theo time (cursor path) hoặc giá trị ngoài whitelist.
+    /// </summary>
+    public string? NormalizedValueSort() => (SortBy?.Trim().ToLowerInvariant()) switch
+    {
+        "voltage" => "voltage",
+        "current" => "current",
+        "temperature" => "temperature",
+        "socpercent" => "socpercent",
+        _ => null,
+    };
+
     public Task<CommonResponse<SensorReadingHistoryResponseDto>> ValidateAsync()
     {
         var response = new CommonResponse<SensorReadingHistoryResponseDto>();
 
         if (BatteryAssetId == Guid.Empty)
-            AddError(response, nameof(BatteryAssetId), "Id tài sản pin là bắt buộc.");
+            AddError(response, nameof(BatteryAssetId), "Battery asset Id is required.");
 
         if (Limit < 1 || Limit > MaxLimit)
-            AddError(response, nameof(Limit), $"Limit phải nằm trong khoảng 1-{MaxLimit}.");
+            AddError(response, nameof(Limit), $"Limit must be between 1 and {MaxLimit}.");
 
         if (From.HasValue && To.HasValue && ToUtc(From.Value) > ToUtc(To.Value))
-            AddCrossFieldError(response, nameof(To), "Thời điểm kết thúc phải lớn hơn hoặc bằng thời điểm bắt đầu.");
+            AddCrossFieldError(response, nameof(To), "The end time must be greater than or equal to the start time.");
+
+        // Hướng B: sort theo cột value (khác time) yêu cầu khoảng [from, to] để giới hạn scan (tránh full-scan hypertable).
+        if (NormalizedValueSort() != null && (!From.HasValue || !To.HasValue))
+            AddError(response, nameof(SortBy), "When sorting by a column other than 'time', both 'from' and 'to' must be provided.");
 
         return Task.FromResult(response);
     }
@@ -44,7 +70,7 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
     {
         response.IsSuccess = false;
         response.StatusCode = 400;
-        response.Message = "Dữ liệu không hợp lệ.";
+        response.Message = "Invalid data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 
@@ -55,7 +81,7 @@ public class GetSensorReadingHistoryQuery : IRequest<CommonResponse<SensorReadin
         // Do not overwrite 400 (field-level format errors take precedence).
         if (response.StatusCode != 400)
             response.StatusCode = 422;
-        response.Message = "Dữ liệu không hợp lệ.";
+        response.Message = "Invalid data.";
         response.ListErrors.Add(new Errors { Field = field, Detail = detail });
     }
 

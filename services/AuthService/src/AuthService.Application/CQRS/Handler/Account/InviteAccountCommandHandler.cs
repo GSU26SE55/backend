@@ -50,7 +50,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
             {
                 IsSuccess = false,
                 StatusCode = 409,
-                Message = "Email đã được sử dụng.",
+                Message = "Email is already in use.",
             };
         }
 
@@ -67,7 +67,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
                 {
                     IsSuccess = false,
                     StatusCode = 409,
-                    Message = "Số điện thoại đã được sử dụng.",
+                    Message = "Phone number is already in use.",
                 };
             }
         }
@@ -84,7 +84,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Role không tồn tại hoặc đã bị vô hiệu hóa.",
+                Message = "Role does not exist or has been deactivated.",
             };
         }
 
@@ -136,7 +136,7 @@ public class InviteAccountCommandHandler : IRequestHandler<InviteAccountCommand,
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Đã gửi email invite. User cần accept để kích hoạt tài khoản.",
+            Message = "Invitation email sent. The user must accept it to activate the account.",
             Data = account.Id
         };
     }

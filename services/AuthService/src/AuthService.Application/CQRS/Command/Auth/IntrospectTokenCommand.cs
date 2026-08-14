@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using MediatR;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedContracts.Common.Responses;
 
 namespace AuthService.Application.CQRS.Command.Auth;
@@ -10,6 +12,15 @@ namespace AuthService.Application.CQRS.Command.Auth;
 public class IntrospectTokenCommand : IRequest<CommonResponse<TokenIntrospectionDto>>
 {
     public string Token { get; set; } = string.Empty;
+
+    /// <summary>
+    /// GH-776 — khoá resource server gửi kèm, do CONTROLLER đọc từ header
+    /// <c>X-Introspection-Key</c> và gán vào. <c>[JsonIgnore]</c> + <c>[BindNever]</c> để client
+    /// không thể tự đặt qua body — nếu không thì lớp bảo vệ này tự mở cửa cho chính kẻ cần chặn.
+    /// </summary>
+    [JsonIgnore]
+    [BindNever]
+    public string? PresentedApiKey { get; set; }
 }
 
 /// <summary>RFC 7662 §2.2 response shape.</summary>

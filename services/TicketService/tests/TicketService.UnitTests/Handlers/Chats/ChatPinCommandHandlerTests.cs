@@ -1,7 +1,9 @@
+using MediatR;
 using Moq;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
+using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
@@ -13,6 +15,8 @@ namespace TicketService.UnitTests.Handlers.Chats;
 
 public class ChatPinCommandHandlerTests
 {
+    // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
+    private readonly Mock<IPublisher> _publisher = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
 
     private static readonly List<string> PinPermission = new() { ChatPermissionCodes.ChatPin };
@@ -52,7 +56,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object));
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -66,6 +70,11 @@ public class ChatPinCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+
+        // Sprint Chat DoD — chat.pinned phải sinh audit trail.
+        _publisher.Verify(x => x.Publish(
+            It.Is<TicketAuditTrailNotification>(nn => nn.ActionCode == nameof(TicketAuditActionEnum.ChatPinned)),
+            It.IsAny<CancellationToken>()), Times.Once);
         result.StatusCode.Should().Be(200);
         chat.IsPinned.Should().BeTrue();
         chat.PinnedByUserId.Should().Be(userId);
@@ -93,7 +102,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object));
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -124,7 +133,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object));
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -158,7 +167,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object));
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -186,7 +195,7 @@ public class ChatPinCommandHandlerTests
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync((TicketChat?)null);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object));
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -218,7 +227,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object));
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
         var command = new ChatPinCommand
         {
             TicketId = otherTicketId,

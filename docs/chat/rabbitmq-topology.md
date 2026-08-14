@@ -1,80 +1,140 @@
 # RabbitMQ Topology — Chat Pipeline
 
-Tài liệu này định nghĩa cấu trúc RabbitMQ topology phục vụ module Chat trong `TicketService` và các consumer liên quan (ví dụ: `NotificationService`).
+> 🔴 **Viết lại hoàn toàn 2026-08-02.** Bản trước mô tả một topology **thủ công không tồn tại trong
+> code**: exchange `chat.events`, queue `notification.chat.events`, routing key `chat.{ticketId}.{eventType}`,
+> DLX `chat.events.dlx`, retry 1s/5s/30s. **Không có thứ nào trong số đó** — grep toàn repo không ra
+> chuỗi `chat.events` nào ngoài tên metric. Hệ thống dùng **MassTransit convention-based topology**.
+
+Nguồn sự thật: `shared/src/SharedInfrastructure/Bus/MassTransitExtensions.cs`.
 
 ---
 
-## 1. Exchange Configurations
+## 1. Mô hình thật — MassTransit quản lý topology
 
-### Main Topic Exchange
-- **Name:** `chat.events`
-- **Type:** `topic`
-- **Durable:** `true`
-- **Auto-delete:** `false`
+Không service nào tự khai exchange/queue/binding. Cấu hình gọn lại còn:
 
-### Dead Letter Exchange (DLX)
-- **Name:** `chat.events.dlx`
-- **Type:** `topic`
-- **Durable:** `true`
-- **Auto-delete:** `false`
+```csharp
+cfg.Host(configuration["RabbitMQ:Host"], "/", h => { h.Username(...); h.Password(...); });
+cfg.ConfigureEndpoints(context);   // ← MassTransit tự sinh exchange + queue + binding
+```
 
----
+Hệ quả:
 
-## 2. Queue Configurations
+* **Exchange đặt theo full type name của message** (`SharedContracts.Events.Chats:ChatCreatedEvent`),
+  không phải một exchange chung `chat.events`.
+* **Queue đặt theo tên consumer** (kebab-case), ví dụ `chat-created`, `chat-mention`, `chat-reaction`.
+* **Binding tự tạo** giữa message-exchange → consumer-queue. **Không có routing key thủ công**, không
+  có pattern `chat.#`.
+* **Queue lỗi là `<queue>_error`** do MassTransit sinh — **không phải** `notification.chat.events.dlq`.
 
-### Main Queue: `notification.chat.events`
-- **Durable:** `true`
-- **Auto-delete:** `false`
-- **Arguments:**
-  - `x-max-length`: `500000` (Giới hạn tối đa 500k messages để bảo vệ tài nguyên hệ thống)
-  - `x-message-ttl`: `259200000` (Thời gian lưu trữ tối đa 3 ngày = 259,200,000 ms)
-  - `x-overflow`: `drop-head`
-  - `x-dead-letter-exchange`: `chat.events.dlx`
-  - `x-dead-letter-routing-key`: `notification.chat.events.error`
-
-### Dead Letter Queue (DLQ): `notification.chat.events.dlq`
-- **Durable:** `true`
-- **Auto-delete:** `false`
-- **Purpose:** Lưu trữ các tin nhắn bị lỗi sau khi vượt quá số lần retry tối đa.
-- **Retention Policy:** Lưu giữ thủ công tối đa 7 ngày để phục vụ điều tra lỗi.
+> ⚠️ **Đây là lý do các event nội bộ của `TicketService.Application.IntegrationEvents` không được
+> NotificationService nhận:** MassTransit route theo **full type name**, hai assembly khác nhau ⇒ khác
+> type ⇒ không bind được. Vì vậy event dùng chung phải đặt trong **`SharedContracts`**.
 
 ---
 
-## 3. Routing Keys & Bindings
+## 2. Event chat thật (trong `SharedContracts/Events/Chats`)
 
-### Routing Key Pattern
-Tất cả integration events liên quan đến chat đều phải được định tuyến theo định dạng:
-`chat.{ticketId}.{eventType}`
+| Event | Consumer (NotificationService) |
+|---|---|
+| `ChatCreatedEvent` | `ChatCreatedConsumer` |
+| `ChatMentionedEvent` | `ChatMentionConsumer` |
+| `ChatReactedEvent` | `ChatReactionConsumer` |
+| `ChatEscalationReviewRequestedEvent` | saga `ChatEscalationReview` (TicketService) |
+| `ChatEscalationReviewAckedEvent` | saga `ChatEscalationReview` (TicketService) |
 
-* **`ticketId`**: UUID 36 ký tự dạng chuỗi đại diện cho Ticket.
-* **`eventType`**: Tên sự kiện viết thường không dấu (Ví dụ: `created`, `edited`, `deleted`, `mentioned`, `reacted`, `participantadded`, `participantremoved`, `participantrolechanged`, `escalationrequested`).
+Thay đổi participant dùng event riêng, do `ParticipantChangeConsumer` xử lý.
 
-### Mapping Table
+### `ChatCreatedEvent.RecipientUserIds` — ai được báo
 
-| Event Class | Routing Key | Ví dụ thực tế |
-|-------------|-------------|---------------|
-| `ChatCreatedEvent` | `chat.*.created` | `chat.550e8400-e29b-41d4-a716-446655440000.created` |
-| `ChatEditedEvent` | `chat.*.edited` | `chat.550e8400-e29b-41d4-a716-446655440000.edited` |
-| `ChatDeletedEvent` | `chat.*.deleted` | `chat.550e8400-e29b-41d4-a716-446655440000.deleted` |
-| `ChatMentionedEvent` | `chat.*.mentioned` | `chat.550e8400-e29b-41d4-a716-446655440000.mentioned` |
-| `ChatReactedEvent` | `chat.*.reacted` | `chat.550e8400-e29b-41d4-a716-446655440000.reacted` |
-| `ParticipantAddedEvent` | `chat.*.participantadded` | `chat.550e8400-e29b-41d4-a716-446655440000.participantadded` |
-| `ParticipantRemovedEvent` | `chat.*.participantremoved` | `chat.550e8400-e29b-41d4-a716-446655440000.participantremoved` |
-| `ParticipantRoleChangedEvent` | `chat.*.participantrolechanged` | `chat.550e8400-e29b-41d4-a716-446655440000.participantrolechanged` |
-| `ChatEscalationReviewRequestedEvent` | `chat.*.escalationrequested` | `chat.550e8400-e29b-41d4-a716-446655440000.escalationrequested` |
+Trường `RecipientUserIds` (optional, thêm 05/08/2026) mang **sẵn danh sách người cần nhận thông
+báo**, đã loại tác giả và đã lọc theo `IsInternal`.
 
-### Queue Bindings
-* Queue `notification.chat.events` liên kết với exchange `chat.events` thông qua routing key pattern: **`chat.#`** (nhận toàn bộ các sub-events).
-* Queue `notification.chat.events.dlq` liên kết với exchange `chat.events.dlx` thông qua routing key pattern: **`notification.chat.events.error`**.
+**Vì sao publisher tính chứ không phải consumer:** NotificationService không có bảng
+`ticket_assignments` lẫn `ticket_participants` nên không thể tự suy ra. Trước khi có trường này,
+consumer đoán ra **đúng một** người (`isStaffAuthor ? CustomerId : AssignedStaffId`) và **bỏ qua
+hoàn toàn** chat nội bộ — supporter, participant và Admin/Manager từng trả lời không bao giờ biết
+có tin nhắn mới.
+
+**Luật lọc** nằm ở `ChatRecipientResolver` (TicketService) và **không được định nghĩa lại ở nơi
+khác**: nó gọi thẳng `TicketQueryHelper.CanViewInternalChats(roles, participantCanViewInternal)` —
+đúng hàm mà mọi query đọc chat, hub realtime và `ChatAuthorizationService` đang dùng. Danh sách
+"được báo" vì thế trùng khít danh sách "đọc được".
+
+- **Chat công khai:** chủ ticket + primary handler + supporter + participant còn hoạt động + mọi
+  người từng nhắn trên ticket. `PreviousPrimaryHandler` **không** tính — đã bàn giao thì thôi.
+- **Ghi chú nội bộ:** cùng bộ ứng viên đó nhưng chỉ giữ ai đọc được nội bộ — Admin/Manager/Staff
+  theo vai trò, cộng participant bất kỳ (kể cả Customer) đã được cấp cờ `CanViewInternal` (#522).
+
+> `null`/rỗng chỉ xảy ra với message publish từ bản cũ còn tồn trong queue. Consumer khi đó quay về
+> suy luận từ `CustomerId`/`AssignedStaffId` như trước.
+>
+> ⚠️ Nội dung tin nhắn đi **nguyên văn** vào `Title`/`Body` của thông báo đẩy (template `ChatCreated`
+> là `{{Title}}`/`{{Body}}`), nên nó hiện trên màn hình khoá. Danh sách người nhận vì vậy là ranh
+> giới bảo mật thật sự, không chỉ là chuyện tiện dụng — mọi thay đổi ở `ChatRecipientResolver` phải
+> kèm test cho nhánh `isInternal`.
+
+> ⚠️ Bản cũ liệt kê `ChatEditedEvent` / `ChatDeletedEvent` như integration event — **không tồn tại**.
+> Sửa/xoá chat chỉ phát **SignalR** (`ChatEdited`, `ChatDeleted`) tới client, không lên message bus.
 
 ---
 
-## 4. Retry Policy & DLQ Strategy
+## 3. Retry — giá trị thật
 
-* **Retry Policy:**
-  - Lần thử lại 1: 1 giây
-  - Lần thử lại 2: 5 giây
-  - Lần thử lại 3: 30 giây
-  - Sau 3 lần thất bại liên tiếp -> Chuyển trực tiếp sang DLQ.
-* **Reprocessing:**
-  - Quản trị viên sử dụng CLI hoặc giao diện RabbitMQ Management để di chuyển tin nhắn lỗi từ `notification.chat.events.dlq` quay ngược lại exchange `chat.events` để xử lý lại sau khi lỗi hạ tầng hoặc code đã được khắc phục.
+Cấu hình ở tầng bus, áp cho **mọi consumer của mọi service** (không riêng chat):
+
+| Tham số | Config key | Mặc định |
+|---|---|---|
+| Số lần retry | `MessageBus:Retry:Limit` | **3** |
+| Khoảng đầu | `MessageBus:Retry:InitialIntervalMs` | **200 ms** |
+| Khoảng tối đa | `MessageBus:Retry:MaxIntervalMs` | **5 000 ms** |
+| Kiểu | — | **Exponential** |
+
+Hết retry → message rơi vào queue **`<queue>_error`**.
+
+> ⚠️ Bản cũ ghi "retry 1s → 5s → 30s rồi vào DLQ" — **sai cả 3 mốc lẫn tên queue đích**.
+
+### Delayed redelivery — **TẮT mặc định**
+
+| Tham số | Config key | Mặc định |
+|---|---|---|
+| Bật/tắt | `MessageBus:Redelivery:Enabled` | **`false`** |
+| Các mốc | `MessageBus:Redelivery:IntervalsMinutes` | `[5, 15, 60]` |
+
+> ⚠️ **Đừng bật nếu chưa cài plugin.** Redelivery cần `rabbitmq_delayed_message_exchange`; image đang
+> dùng (`rabbitmq:3-management-alpine`) **không có**. Bật lên mà thiếu plugin thì việc khai báo
+> exchange **thất bại ngay lúc bus khởi động ⇒ chết TẤT CẢ service dùng bus**, không riêng chat.
+
+### Điều kiện an toàn của retry
+
+Retry chỉ an toàn nhờ consumer **idempotent**: NotificationService chặn trùng bằng `SET NX` (debounce)
+hoặc `IInboxStore`. Bật retry trên consumer chưa idempotent sẽ **nhân bản notification** thay vì gửi lại.
+
+---
+
+## 4. Throughput
+
+| Tham số | Config key | Mặc định |
+|---|---|---|
+| Prefetch | `MessageBus:PrefetchCount` | 16 |
+| Đồng thời | `MessageBus:ConcurrentMessageLimit` | 8 |
+
+---
+
+## 5. Correlation
+
+Bus gắn sẵn filter hai chiều — `CorrelationIdPublishFilter` (ghi header lúc publish) và
+`CorrelationIdConsumeFilter` (đọc lại lúc consume), nên `correlationId` xuyên suốt các service mà
+consumer không phải tự truyền.
+
+---
+
+## 6. Vận hành
+
+* **Xem message lỗi:** RabbitMQ Management → queue `<tên-consumer>_error`
+  (ví dụ `chat-created_error`), **không phải** `notification.chat.events.dlq`.
+* **Reprocess:** dùng Management UI/CLI shovel message từ `<queue>_error` về queue gốc sau khi đã fix.
+* **Sự cố đã gặp:** thiếu `cfg.UsePublishMessageScheduler()` khiến saga `ChatEscalationReview` và
+  `AlertTicketSaga` ném `MassTransit.PayloadNotFoundException: MessageSchedulerContext` mỗi lần
+  `.Schedule(...)` → retry → rơi `_error`. Đã đo được **1662 message** kẹt ở `AlertTicketSagaState_error`
+  (fix 30/07/2026).

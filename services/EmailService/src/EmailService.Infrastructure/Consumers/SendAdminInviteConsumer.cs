@@ -12,14 +12,14 @@ public class SendAdminInviteConsumer : IConsumer<SendAdminInviteEvent>
 {
     private const string DefaultAcceptUrlBase = "http://localhost:5173/auth/accept-invite";
 
-    private readonly EmailSenderService _emailSender;
+    private readonly IEmailProvider _emailSender;
     private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SendAdminInviteConsumer> _logger;
     private readonly IInboxStore _inboxStore;
 
     public SendAdminInviteConsumer(
-        EmailSenderService emailSender,
+        IEmailProvider emailSender,
         IEmailTemplateRenderer templateRenderer,
         IConfiguration configuration,
         ILogger<SendAdminInviteConsumer> logger,

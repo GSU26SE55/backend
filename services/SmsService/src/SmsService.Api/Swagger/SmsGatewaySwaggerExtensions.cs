@@ -29,9 +29,9 @@ public static class SmsGatewaySwaggerExtensions
             // 1. Scheme `GatewayApiKey` — BCrypt API key plaintext qua Authorization: Bearer <key>
             c.AddSecurityDefinition(GatewaySchemeName, new OpenApiSecurityScheme
             {
-                Description = "Nhập API key plaintext (BCrypt) của gateway device — KHÔNG dùng JWT user. "
-                              + "Backend hash + verify qua " + nameof(BcryptGatewayApiKeyHasher) + ". "
-                              + "Phải kèm header `" + DeviceCodeHeader + "` (định nghĩa dưới đây).",
+                Description = "Enter the gateway device's plaintext (BCrypt) API key — do NOT use a user JWT. "
+                              + "The backend hashes and verifies it via " + nameof(BcryptGatewayApiKeyHasher) + ". "
+                              + "Must be accompanied by the `" + DeviceCodeHeader + "` header (defined below).",
                 Name = "Authorization",
                 In = ParameterLocation.Header,
                 Type = SecuritySchemeType.Http,
@@ -41,8 +41,8 @@ public static class SmsGatewaySwaggerExtensions
             // 2. Scheme `X-Device-Code` — header phụ trợ, đi kèm GatewayApiKey
             c.AddSecurityDefinition(DeviceCodeHeader, new OpenApiSecurityScheme
             {
-                Description = "Device code của gateway (vd `android-gateway-001`). Bắt buộc đi kèm `"
-                              + GatewaySchemeName + "` khi gọi `/api/sms-gateway/*` hoặc `/hubs/sms-gateway`.",
+                Description = "The gateway's device code (e.g. `android-gateway-001`). Required alongside `"
+                              + GatewaySchemeName + "` when calling `/api/sms-gateway/*` or `/hubs/sms-gateway`.",
                 Name = DeviceCodeHeader,
                 In = ParameterLocation.Header,
                 Type = SecuritySchemeType.ApiKey

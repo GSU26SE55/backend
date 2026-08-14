@@ -29,18 +29,17 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
             .FirstOrDefaultAsync(m => m.Id == request.LogId && !m.IsDeleted, ct);
 
         if (log == null)
-            return Fail(404, "Không tìm thấy nhật ký bảo trì.");
+            return Fail(404, "Maintenance log not found.");
 
         var ticket = log.Ticket;
 
         // KIỂM TRA LOCK LOGIC THEO YÊU CẦU:
-        // Khóa nếu Ticket đang ở trạng thái Resolved (đã báo xong, chờ Manager phê duyệt)
+        // Khóa nếu Ticket đang ở trạng thái Completed (đã báo xong, chờ Manager phê duyệt)
         // hoặc đã đóng (ClosedPendingRate, Closed).
-        if (ticket.Status == TicketStatusEnum.Resolved ||
-            ticket.Status == TicketStatusEnum.ClosedPendingRate ||
+        if (ticket.Status == TicketStatusEnum.Completed ||
             ticket.Status == TicketStatusEnum.Closed)
         {
-            return Fail(403, "Nhật ký đã bị khóa. Không thể chỉnh sửa khi Ticket đang chờ phê duyệt hoặc đã hoàn thành.");
+            return Fail(403, "The log is locked. Cannot edit while the Ticket is pending approval or already completed.");
         }
 
         // Kiểm tra quyền sở hữu (chỉ chính Staff đó hoặc Manager/Admin mới được sửa)
@@ -49,7 +48,7 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
         {
             // Nếu không phải chủ nhân, có thể check thêm role Manager/Admin ở tầng Controller hoặc tại đây
             // Để đơn giản và bảo mật theo ý người dùng, ta chỉ cho phép chính chủ sửa trong phase InProgress
-            return Fail(403, "Bạn không có quyền chỉnh sửa nhật ký của người khác.");
+            return Fail(403, "You do not have permission to edit another person's log.");
         }
 
         // Cập nhật thông tin (chỉ cập nhật những trường được gửi lên)
@@ -91,7 +90,7 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
             ActivityActionEnum.MaintenanceLogged, // Hoặc định nghĩa thêm MaintenanceUpdated
             null,
             $"[Updated] [{log.LogType}] {log.Summary}",
-            "Đã cập nhật nhật ký bảo trì.");
+            "Updated the maintenance log.");
 
         await _uow.SaveChangesAsync(ct);
 
@@ -99,7 +98,7 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Cập nhật nhật ký bảo trì thành công.",
+            Message = "Maintenance log updated successfully.",
             Data = new TicketActionDTO
             {
                 Id = log.Id.ToString(),
@@ -135,7 +134,8 @@ public class MaintenanceLogUpdateCommandHandler : IRequestHandler<MaintenanceLog
                     FileName = input.FileName,
                     ContentType = input.ContentType,
                     SizeBytes = input.SizeBytes,
-                    Source = source
+                    Source = source,
+                    Url = input.Url
                 };
                 await _uow.TicketAttachments.AddAsync(attachment);
             }

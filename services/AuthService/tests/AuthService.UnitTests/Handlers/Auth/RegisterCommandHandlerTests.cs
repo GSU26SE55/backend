@@ -97,7 +97,7 @@ public class RegisterCommandHandlerTests
 
         response.IsSuccess.Should().BeFalse();
         response.StatusCode.Should().Be(409);
-        response.Message.Should().Be("Email đã được sử dụng.");
+        response.Message.Should().Be("Email is already in use.");
         response.ListErrors.Should().BeEmpty();
         accounts.Verify(r => r.AddAsync(It.IsAny<Account>()), Times.Never);
         _producer.Verify(p => p.PublishAsync(It.IsAny<SendOtpRegisterEvent>(), It.IsAny<CancellationToken>()), Times.Never);

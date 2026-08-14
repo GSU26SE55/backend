@@ -48,7 +48,7 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, CommonRespons
             {
                 IsSuccess = true,
                 StatusCode = 200,
-                Message = "Refresh token đã không còn hiệu lực.",
+                Message = "Refresh token is no longer valid.",
                 Data = "AlreadyInactive"
             };
         }
@@ -59,7 +59,7 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, CommonRespons
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Không có quyền đăng xuất session này.",
+                Message = "You do not have permission to log out this session.",
             };
         }
 
@@ -85,7 +85,7 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, CommonRespons
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đăng xuất thành công.",
+            Message = "Logout successful.",
             Data = "Revoked"
         };
     }

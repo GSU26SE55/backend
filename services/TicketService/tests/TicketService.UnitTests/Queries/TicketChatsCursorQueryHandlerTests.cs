@@ -26,6 +26,7 @@ public class TicketChatsCursorQueryHandlerTests
         _uow.SetupMentions();
         _uow.SetupReactions();
         _uow.SetupChatTranslationUsers();
+        _uow.SetupChatHides();
 
         _participantsRepo.Setup(r => r.GetAllAsync())
             .Returns(() => new TestAsyncEnumerable<TicketParticipant>(new List<TicketParticipant>()));
@@ -169,6 +170,51 @@ public class TicketChatsCursorQueryHandlerTests
         result.Data!.Items.Should().HaveCount(3);
         result.Data.HasMore.Should().BeTrue();
         result.Data.NextCursor.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_DeletedChat_IncludedWithPlaceholderBody()
+    {
+        var ticketId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var ticket = MakeTicket(ticketId, customerId);
+        var now = DateTime.UtcNow;
+
+        var deletedChat = new TicketChat
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            AuthorUserId = customerId,
+            AuthorRole = ActorRoleEnum.Customer,
+            Body = "Original secret",
+            IsInternal = false,
+            CreatedAt = now,
+            IsDeleted = true,
+            AttachmentFileIds = new List<Guid>(),
+            Ticket = _dummyTicket
+        };
+        var normalChat = MakeChat(ticketId, "Normal", now.AddMinutes(-1));
+
+        SetupTickets([ticket]);
+        SetupChats([deletedChat, normalChat]);
+
+        var result = await _handler.Handle(new TicketChatsCursorQuery
+        {
+            TicketId = ticketId,
+            ActorUserId = customerId,
+            ActorRoles = ["Customer"],
+            Limit = 10
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Items.Should().HaveCount(2);
+
+        var deleted = result.Data.Items.Single(c => c.IsDeleted);
+        deleted.Body.Should().Be("This message has been deleted.");
+        deleted.AttachmentFileIds.Should().BeEmpty();
+
+        var normal = result.Data.Items.Single(c => !c.IsDeleted);
+        normal.Body.Should().Be("Normal");
     }
 
     [Fact]

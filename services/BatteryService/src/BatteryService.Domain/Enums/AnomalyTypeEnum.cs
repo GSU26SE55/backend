@@ -24,5 +24,18 @@ public enum AnomalyTypeEnum
     EnvironmentalIncident = 14,
 
     // Sprint 7 #157 (B10) — Cross-source mismatch BMS vs IoT.
-    SensorMismatch = 15
+    SensorMismatch = 15,
+
+    /// <summary>
+    /// Sprint Bonus NS-25 (#665, F1, Q11=A) — nhiệt độ dưới <c>ThresholdConfig.TemperatureMin</c>.
+    /// Sạc pin lithium dưới 0°C gây lithium plating (nguy hiểm thật) — citation B2 (Feng et al.,
+    /// J. Power Sources 2018). ⚠️ Wire value cross-service — đồng bộ FE + TicketService/NotificationService.
+    /// </summary>
+    Undertemp = 16,
+
+    /// <summary>
+    /// IoT gateway was automatically decommissioned after repeatedly submitting impossible
+    /// sensor values. This is a data-integrity/security incident, not a connectivity outage.
+    /// </summary>
+    IotDataIntegrityViolation = 17
 }

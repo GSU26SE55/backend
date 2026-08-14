@@ -26,6 +26,8 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        {{- include "solar.podSecurityContext" . | nindent 8 }}
       imagePullSecrets:
       - name: {{ .Values.global.imagePullSecret }}
       initContainers:
@@ -61,8 +63,10 @@ spec:
           echo "audit aggregator database ready"
       containers:
       - name: auditaggregatorservice
-        image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image) }}
+        image: {{ include "solar.image" (dict "Values" .Values "image" $svc.image "digest" ($svc.digest | default "")) }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        securityContext:
+          {{- include "solar.containerSecurityContext" . | nindent 10 }}
         ports:
         - { name: http, containerPort: {{ $svc.port }} }
         env:
@@ -79,10 +83,10 @@ spec:
           failureThreshold: 30
           periodSeconds: 5
         readinessProbe:
-          httpGet: { path: /ready, port: http }
+          httpGet: { path: /metrics, port: http }
           periodSeconds: 5
         livenessProbe:
-          httpGet: { path: /live, port: http }
+          httpGet: { path: /metrics, port: http }
           periodSeconds: 10
           initialDelaySeconds: 20
         resources:

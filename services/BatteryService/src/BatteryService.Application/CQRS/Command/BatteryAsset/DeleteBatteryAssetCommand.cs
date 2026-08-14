@@ -18,8 +18,8 @@ public class DeleteBatteryAssetCommand : IRequest<CommonResponse<object>>, IVali
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Id tài sản pin không hợp lệ.";
-            response.ListErrors.Add(new Errors { Field = nameof(Id), Detail = "Id tài sản pin là bắt buộc." });
+            response.Message = "Invalid battery asset Id.";
+            response.ListErrors.Add(new Errors { Field = nameof(Id), Detail = "Battery asset Id is required." });
         }
 
         return Task.FromResult(response);

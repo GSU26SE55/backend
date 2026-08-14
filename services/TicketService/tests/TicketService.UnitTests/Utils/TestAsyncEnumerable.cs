@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Query;
 
 namespace TicketService.UnitTests.Utils;
 
-public sealed class TestAsyncEnumerable<T> : EnumerableQuery<T>, IAsyncEnumerable<T>, IQueryable<T>
+public class TestAsyncEnumerable<T> : EnumerableQuery<T>, IAsyncEnumerable<T>, IQueryable<T>
 {
     public TestAsyncEnumerable(IEnumerable<T> enumerable) : base(enumerable) { }
     public TestAsyncEnumerable(Expression expression) : base(expression) { }
@@ -14,7 +14,7 @@ public sealed class TestAsyncEnumerable<T> : EnumerableQuery<T>, IAsyncEnumerabl
     IQueryProvider IQueryable.Provider => new TestAsyncQueryProvider<T>(this);
 }
 
-public sealed class TestAsyncEnumerator<T> : IAsyncEnumerator<T>
+public class TestAsyncEnumerator<T> : IAsyncEnumerator<T>
 {
     private readonly IEnumerator<T> _inner;
     public TestAsyncEnumerator(IEnumerator<T> inner) => _inner = inner;
@@ -23,7 +23,7 @@ public sealed class TestAsyncEnumerator<T> : IAsyncEnumerator<T>
     public ValueTask<bool> MoveNextAsync() => ValueTask.FromResult(_inner.MoveNext());
 }
 
-public sealed class TestAsyncQueryProvider<TEntity> : IAsyncQueryProvider
+public class TestAsyncQueryProvider<TEntity> : IAsyncQueryProvider
 {
     private readonly IQueryProvider _inner;
     public TestAsyncQueryProvider(IQueryProvider inner) => _inner = inner;

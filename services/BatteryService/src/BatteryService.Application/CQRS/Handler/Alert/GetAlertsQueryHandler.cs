@@ -1,28 +1,52 @@
 using BatteryService.Application.CQRS.Query.Alert;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.Alert;
 
 public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonResponse<PaginationResponse<AlertDto>>>
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
+    private readonly IBatteryCurrentUserService _currentUserService;
 
-    public GetAlertsQueryHandler(IBatteryUnitOfWork unitOfWork)
+    public GetAlertsQueryHandler(IBatteryUnitOfWork unitOfWork, IBatteryCurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CommonResponse<PaginationResponse<AlertDto>>> Handle(GetAlertsQuery request, CancellationToken cancellationToken)
     {
+        // GH-722 — Customer chỉ thấy alert của asset/site thuộc mình.
+        var scope = BatteryTenantScopeHelper.Resolve(_currentUserService.UserId, _currentUserService.Roles);
+        if (scope.IsDenied)
+        {
+            return new CommonResponse<PaginationResponse<AlertDto>>
+            {
+                IsSuccess = false,
+                StatusCode = 401,
+                Message = "Unable to determine the current user."
+            };
+        }
+
         var query = _unitOfWork.Alerts
             .GetAllAsync()
             .AsNoTracking()
             .Include(alert => alert.BatteryAsset)
             .Where(alert => !alert.IsDeleted);
+
+        // Alert có thể gắn asset HOẶC site (cả hai đều nullable) — phải phủ cả hai đường.
+        if (scope.IsCustomerScoped)
+        {
+            query = query.Where(alert =>
+                (alert.BatteryAsset != null && alert.BatteryAsset.CustomerId == scope.CustomerId)
+                || (alert.Site != null && alert.Site.CustomerId == scope.CustomerId));
+        }
 
         if (request.BatteryAssetId.HasValue)
             query = query.Where(alert => alert.BatteryAssetId == request.BatteryAssetId.Value);
@@ -47,16 +71,18 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             query = query.Where(alert => alert.DetectedAt <= to);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var page = await query
             .OrderByDescending(alert => alert.DetectedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(alert => alert.Id) // tie-breaker cố định — pagination ổn định
             .Select(alert => new AlertDto
             {
                 Id = alert.Id.ToString(),
-                BatteryAssetId = alert.BatteryAssetId.ToString(),
-                BatterySerialNumber = alert.BatteryAsset.SerialNumber,
+                BatteryAssetId = alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
+                IotDeviceId = alert.IotDeviceId.HasValue ? alert.IotDeviceId.Value.ToString() : null,
+                // Sprint Bonus NS-21 (#661) — null cho alert cấp pin, GUID cho alert cấp site.
+                SiteId = alert.SiteId.HasValue ? alert.SiteId.Value.ToString() : null,
+                // Alert cấp site (ambient/env) không có BatteryAsset → serial rỗng thay vì null.
+                BatterySerialNumber = alert.BatteryAsset.SerialNumber ?? string.Empty,
                 AnomalyType = alert.AnomalyType,
                 Severity = alert.Severity,
                 ThresholdValue = alert.ThresholdValue,
@@ -69,21 +95,16 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
                 AcknowledgedAt = alert.AcknowledgedAt,
                 ResolvedAt = alert.ResolvedAt,
                 DedupWindowEndUtc = alert.DedupWindowEndUtc,
+                AiPrescriptionId = alert.AiPrescriptionId,
                 CreatedAt = alert.CreatedAt
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<AlertDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<AlertDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 

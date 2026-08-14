@@ -156,6 +156,152 @@ public class NoiseSuppressionTests
     }
 
     [Fact]
+    public async Task NoiseSuppression_OnlySuppressedTick_PersistsBreachEvents()
+    {
+        // Sprint Bonus NS-07 (#651, N1) — tick chỉ toàn suppress vẫn phải SaveChanges
+        // để NoiseBreachEvent pending không bị vứt cùng DbContext scope.
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1))
+            .WithSensorReadings(MakeReading(voltage: 9m));
+
+        var sut = new AnomalyDetectionService(builder.Build(), Opts());
+        var result = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
+
+        result.AlertsSuppressed.Should().Be(1);
+        result.AlertsCreated.Should().Be(0);
+        builder.NoiseBreachEvents.Verify(r => r.AddAsync(It.IsAny<NoiseBreachEvent>()), Times.Once);
+        builder.UnitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task NoiseSuppression_FiveConsecutiveTicks_FifthTickRaisesAlert()
+    {
+        // Sprint Bonus NS-07 (#651, N1) — kịch bản tái hiện bug: vi phạm lai rai qua nhiều tick,
+        // breach persist dần → tick 5 (count=5) alert phải nổ. Trước fix, breach bị vứt mỗi tick
+        // → count mãi = 0 → không bao giờ nổ.
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1));
+
+        var sut = new AnomalyDetectionService(builder.Build(), Opts());
+
+        for (var tick = 1; tick <= 4; tick++)
+        {
+            builder.WithSensorReadings(MakeReading(voltage: 9m)); // thay reading mới mỗi tick
+            var r = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
+            r.AlertsSuppressed.Should().Be(1, $"tick {tick} chưa đủ tần suất");
+            r.AlertsCreated.Should().Be(0, $"tick {tick} chưa đủ tần suất");
+        }
+
+        builder.WithSensorReadings(MakeReading(voltage: 9m));
+        var fifth = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
+
+        fifth.AlertsCreated.Should().Be(1, "tick 5 đạt ngưỡng NoiseSuppressionCount=5");
+        fifth.AlertsSuppressed.Should().Be(0);
+        builder.UnitOfWork.Verify(
+            u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(5),
+            "cả 4 tick suppress lẫn tick 5 tạo alert đều phải save");
+    }
+
+    [Fact]
+    public async Task NoiseSuppression_BreachRecordedWithReadingTimeAndSourceType()
+    {
+        // Sprint Bonus NS-10 (#654, N3) — breach ghi theo reading.Time (phục vụ dedup)
+        // + copy SourceType từ reading (B9 — phân biệt breach từ BMS hay IoT).
+        var reading = MakeReading(voltage: 9m);
+        reading.SourceType = SensorReadingSourceTypeEnum.Bms;
+
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold(noise: true, count: 3, hours: 1))
+            .WithSensorReadings(reading);
+
+        var sut = new AnomalyDetectionService(builder.Build(), Opts());
+        await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
+
+        builder.NoiseBreachEvents.Verify(r => r.AddAsync(It.Is<NoiseBreachEvent>(n =>
+            n.Time == reading.Time
+            && n.SourceType == SensorReadingSourceTypeEnum.Bms
+            && n.BatteryAssetId == AssetId)), Times.Once);
+    }
+
+    [Fact]
+    public async Task NoiseSuppression_SameReadingScannedTwice_RecordsSingleBreach()
+    {
+        // Sprint Bonus NS-10 (#654, N3) — lookback overlap 2× khiến cùng 1 reading bị scan
+        // ở 2 tick liên tiếp → chỉ được 1 breach (dedup theo assetId+anomalyType+reading.Time).
+        var reading = MakeReading(voltage: 9m);
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1))
+            .WithSensorReadings(reading);
+
+        var sut = new AnomalyDetectionService(builder.Build(), Opts());
+        var tick1 = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
+        var tick2 = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5)); // reading cũ còn trong lookback
+
+        tick1.AlertsSuppressed.Should().Be(1);
+        tick2.AlertsSuppressed.Should().Be(1);
+        builder.NoiseBreachEvents.Verify(r => r.AddAsync(It.IsAny<NoiseBreachEvent>()), Times.Once,
+            "cùng 1 reading không được đếm thành 2 breach");
+    }
+
+    [Fact]
+    public async Task NoiseSuppression_AlertRaised_PromotesBreachChain()
+    {
+        // Sprint Bonus NS-10 (#654, N2) — alert nổ từ chuỗi breach → mọi breach trong window
+        // được gán PromotedToAlertId (audit), gồm cả breach pending của tick hiện tại.
+        var now = DateTime.UtcNow;
+        var prior = new[]
+        {
+            new NoiseBreachEvent { Time = now.AddMinutes(-10), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Undervoltage, ThresholdValue = 10, ActualValue = 9, Unit = "V" },
+            new NoiseBreachEvent { Time = now.AddMinutes(-5),  BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Undervoltage, ThresholdValue = 10, ActualValue = 9, Unit = "V" }
+        };
+
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold(noise: true, count: 3, hours: 1))
+            .WithSensorReadings(MakeReading(voltage: 9m))
+            .WithNoiseBreachEvents(prior);
+
+        var sut = new AnomalyDetectionService(builder.Build(), Opts());
+        var result = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(15));
+
+        result.AlertsCreated.Should().Be(1);
+        prior[0].PromotedToAlertId.Should().NotBeNull("breach cũ trong window phải được link vào alert");
+        prior[1].PromotedToAlertId.Should().NotBeNull();
+        prior[0].PromotedToAlertId.Should().Be(prior[1].PromotedToAlertId!.Value, "cả chuỗi link cùng 1 alert");
+        builder.NoiseBreachEvents.Verify(r => r.AddAsync(It.Is<NoiseBreachEvent>(n =>
+            n.PromotedToAlertId != null)), Times.Once, "breach pending của tick nổ alert cũng phải được promote");
+    }
+
+    [Fact]
+    public async Task NoiseSuppression_Suppressed_DoesNotPromoteBreaches()
+    {
+        var prior = new NoiseBreachEvent
+        {
+            Time = DateTime.UtcNow.AddMinutes(-10),
+            BatteryAssetId = AssetId,
+            AnomalyType = AnomalyTypeEnum.Undervoltage,
+            ThresholdValue = 10,
+            ActualValue = 9,
+            Unit = "V"
+        };
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(MakeAsset())
+            .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1))
+            .WithSensorReadings(MakeReading(voltage: 9m))
+            .WithNoiseBreachEvents(prior);
+
+        var sut = new AnomalyDetectionService(builder.Build(), Opts());
+        var result = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(15));
+
+        result.AlertsSuppressed.Should().Be(1);
+        prior.PromotedToAlertId.Should().BeNull("chưa nổ alert thì chuỗi breach chưa được promote");
+    }
+
+    [Fact]
     public async Task NoiseSuppression_BreachOutsideWindow_ShouldStillSuppress()
     {
         var now = DateTime.UtcNow;

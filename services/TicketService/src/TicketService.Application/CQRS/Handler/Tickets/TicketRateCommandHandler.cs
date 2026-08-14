@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -17,20 +18,20 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
     private readonly ITicketUnitOfWork _uow;
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
 
     public TicketRateCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
         IPublisher publisher)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
-        _producer = producer;
+        _outboxWriter = producer;
         _publisher = publisher;
     }
 
@@ -40,29 +41,25 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
             .FirstOrDefaultAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
         if (ticket == null)
-            return Fail(404, "Ticket không tìm thấy.");
+            return Fail(404, "Ticket not found.");
 
-        var transitionResult = _stateMachine.CanTransition(ticket, TicketStatusEnum.Closed, ActorRoleEnum.Customer, request.CustomerId);
-        if (!transitionResult.IsAllowed)
-            return Fail(403, transitionResult.Reason ?? "Không thể đánh giá ticket này.");
+        if (ticket.CustomerId != request.CustomerId)
+            return Fail(403, "Only the ticket owner can rate this ticket.");
+        if (ticket.Status != TicketStatusEnum.Closed || ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate)
+            return Fail(409, "Only a non-merged Closed ticket can be rated.");
+        if (ticket.RatedAt.HasValue || ticket.Rating.HasValue)
+            return Fail(409, "This ticket has already been rated.");
+        if (!ticket.ClosedAt.HasValue || DateTime.UtcNow - ticket.ClosedAt.Value > TimeSpan.FromDays(7))
+            return Fail(409, "The seven-day rating window has expired.");
 
-        // Execute rate transition (to Closed)
-        await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.Closed, new TransitionContext
-        {
-            ActorUserId = request.CustomerId,
-            ActorRole = ActorRoleEnum.Customer,
-            ActorDisplayName = request.CustomerName ?? "Customer",
-            Payload = new Dictionary<string, object?>
-            {
-                { "Rating", request.Rating },
-                { "Comment", request.RatingComment }
-            }
-        }, ct);
+        ticket.Rating = request.Rating;
+        ticket.RatingComment = request.RatingComment;
+        ticket.RatedAt = DateTime.UtcNow;
 
         await _activityLogger.LogAsync(ticket.Id, request.CustomerId, ActorRoleEnum.Customer, request.CustomerName, ActivityActionEnum.Rated, newValue: request.Rating.ToString(), reason: request.RatingComment);
 
         // Outbox: Ticket Rated
-        await _producer.PublishAsync(new TicketRatedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.Rating, request.RatingComment), ct);
+        await _outboxWriter.WriteAsync(new TicketRatedIntegrationEvent(ticket.Id, ticket.Code, request.CustomerId, request.Rating, request.RatingComment), ct);
 
         // #AUDIT-26
         await _publisher.Publish(TicketService.Application.CQRS.Notification.Audit.TicketAuditTrailNotification.For(
@@ -75,7 +72,7 @@ public class TicketRateCommandHandler : IRequestHandler<TicketRateCommand, Ticke
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đánh giá thành công. Ticket đã được đóng.",
+            Message = "Rating submitted successfully. The ticket has been closed.",
             Data = new TicketActionDTO
             {
                 Id = ticket.Id.ToString(),

@@ -62,9 +62,13 @@ public class AlertTicketSagaFailedConsumer : IConsumer<AlertTicketSagaFailedEven
             return;
         }
 
-        var title = $"[Saga Failed] Alert {evt.AlertId} — {evt.FailedAtStage}";
-        var plainBody = $"Alert-Ticket Saga failed at stage '{evt.FailedAtStage}': {evt.Reason}. " +
-                        $"Admin reprocess required. Asset: {evt.AssetSerialNumber}";
+        // Người nhận là Admin/Manager nghiệp vụ, không phải người vận hành saga: "Saga", "stage",
+        // và Guid alert trần không giúp họ quyết định gì. Nêu HẬU QUẢ (cảnh báo chưa thành ticket)
+        // + việc cần làm; định danh kỹ thuật giữ trong PayloadJson bên dưới.
+        var title = $"Battery alert {evt.AssetSerialNumber} failed to create a ticket";
+        var plainBody = $"The system failed to automatically create a ticket for the alert on battery {evt.AssetSerialNumber} " +
+                        $"at {evt.FailedAt:HH:mm dd/MM/yyyy}. This alert is not being tracked by a ticket " +
+                        $"— manual review and handling is required.";
 
         var htmlBody = _templateRenderer.Render("alert-ticket-saga-failed", new
         {

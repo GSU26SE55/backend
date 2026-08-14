@@ -4,6 +4,7 @@ using BatteryService.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Application.CQRS.Handler.ThresholdConfig;
 
@@ -30,11 +31,9 @@ public class GetThresholdConfigsQueryHandler : IRequestHandler<GetThresholdConfi
         if (request.IsActive.HasValue)
             query = query.Where(config => config.IsActive == request.IsActive.Value);
 
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query
+        var page = await query
             .OrderByDescending(config => config.EffectiveFromUtc)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .ThenBy(config => config.Id) // tie-breaker cố định — pagination ổn định
             .Select(config => new ThresholdConfigDto
             {
                 Id = config.Id.ToString(),
@@ -53,19 +52,13 @@ public class GetThresholdConfigsQueryHandler : IRequestHandler<GetThresholdConfi
                 EffectiveFromUtc = config.EffectiveFromUtc,
                 IsActive = config.IsActive
             })
-            .ToListAsync(cancellationToken);
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
 
         return new CommonResponse<PaginationResponse<ThresholdConfigDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<ThresholdConfigDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page
         };
     }
 }

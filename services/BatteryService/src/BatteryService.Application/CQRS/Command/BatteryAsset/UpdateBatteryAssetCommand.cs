@@ -25,7 +25,7 @@ public class UpdateBatteryAssetCommand : CreateBatteryAssetCommand, IRequest<Com
         ValidateShared(response);
 
         if (Id == Guid.Empty)
-            AddError(response, nameof(Id), "Id tài sản pin là bắt buộc.");
+            AddError(response, nameof(Id), "Battery asset Id is required.");
 
         return Task.FromResult(response);
     }

@@ -24,7 +24,7 @@ namespace BatteryService.Api.Controllers;
 ///
 /// Phân quyền:
 /// <list type="bullet">
-///   <item><description><b>Admin/Manager</b>: đọc (list, get by type).</description></item>
+///   <item><description><b>Admin/Manager/Staff</b>: đọc (list, get by type) - Staff cần ngưỡng để tô vùng cảnh báo trên chart telemetry.</description></item>
 ///   <item><description><b>Admin</b>: cập nhật (Upsert).</description></item>
 /// </list>
 /// </remarks>
@@ -58,9 +58,9 @@ public class ThresholdConfigsController : ControllerBase
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="PaginationResponse{T}"/> các <see cref="ThresholdConfigDto"/>.</returns>
     /// <response code="200">Trả danh sách.</response>
     /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin/Manager.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff.</response>
     [HttpGet]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<ThresholdConfigDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -94,10 +94,10 @@ public class ThresholdConfigsController : ControllerBase
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="ThresholdConfigDto"/>.</returns>
     /// <response code="200">Trả về config.</response>
     /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin/Manager.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff.</response>
     /// <response code="404">BatteryType chưa có config nào (hoặc đều inactive khi không cho includeInactive).</response>
     [HttpGet("by-type/{batteryTypeId:guid}")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(CommonResponse<ThresholdConfigDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

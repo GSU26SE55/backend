@@ -15,13 +15,12 @@ public class TicketStateMachine : ITicketStateMachine
 
     public TransitionResult CanTransition(Ticket ticket, TicketStatusEnum target, ActorRoleEnum actorRole, Guid actorUserId)
     {
-        // Kiểm tra ticket nếu đã closed thì ko thể thay đổi trạng thái nữa
-        if (TicketStatusEnum.Closed.Equals(ticket.Status))
+        if (TicketStatusEnum.ClosedRejected.Equals(ticket.Status))
         {
             return new TransitionResult()
             {
                 IsAllowed = false,
-                Reason = "Ticket is closed. No further transitions allowed.",
+                Reason = "A rejected ticket is terminal and cannot transition.",
             };
         }
 
@@ -78,8 +77,7 @@ public class TicketStateMachine : ITicketStateMachine
         switch (to)
         {
             case TicketStatusEnum.Open:
-                // Reopen từ giai đoạn chờ đánh giá
-                if (from == TicketStatusEnum.ClosedPendingRate)
+                if (from == TicketStatusEnum.Closed)
                 {
                     ticket.ReopenCount++;
                     if (ctx.Payload.TryGetValue("ReopenReason", out var reopenReason) && reopenReason is string r)
@@ -87,51 +85,40 @@ public class TicketStateMachine : ITicketStateMachine
                 }
                 break;
 
-            case TicketStatusEnum.Approved:
-                ticket.ApprovedAt = DateTime.UtcNow;
-                ticket.ApprovedByManagerId = ctx.ActorUserId;
-                break;
-
-            case TicketStatusEnum.Assigned:
-                break;
 
             case TicketStatusEnum.InProgress:
-                // Nếu quay lại InProgress từ Resolved (Manager Reject)
-                if (from == TicketStatusEnum.Resolved)
+                ticket.PendingContext = null;
+                ticket.PendingReason = null;
+                if (from == TicketStatusEnum.Completed)
                 {
                     if (ctx.Payload.TryGetValue("Reason", out var inProgressRejectReason) && inProgressRejectReason is string ipr)
                         ticket.Reason = ipr;
                 }
                 break;
 
-            case TicketStatusEnum.WaitingCustomer:
-            case TicketStatusEnum.WaitingParts:
-            case TicketStatusEnum.WaitingOnsiteSchedule:
+            case TicketStatusEnum.Pending:
                 if (ctx.Payload.TryGetValue("Note", out var note) && note is string n)
                     ticket.Reason = n;
                 break;
 
-            case TicketStatusEnum.Resolved:
+            case TicketStatusEnum.Completed:
                 ticket.ResolvedAt = DateTime.UtcNow;
-                ticket.ResolvedByStaffId = (ctx.ActorUserId == ticket.AssignedStaffId && ctx.ActorRole == ActorRoleEnum.Staff)
-                                            ? ctx.ActorUserId : ticket.AssignedStaffId;
+                ticket.ResolvedByStaffId = (ctx.ActorUserId == ticket.PrimaryHandlerStaffId && ctx.ActorRole == ActorRoleEnum.Staff)
+                                            ? ctx.ActorUserId : ticket.PrimaryHandlerStaffId;
 
                 if (ctx.Payload.TryGetValue("ResolutionSummary", out var summary) && summary is string s)
                     ticket.ResolutionSummary = s;
                 break;
 
-            case TicketStatusEnum.Escalated:
+            case TicketStatusEnum.ReAssign:
                 ticket.EscalatedAt = DateTime.UtcNow;
                 if (ctx.Payload.TryGetValue("EscalationReason", out var escalateReason) && escalateReason is EscalationReasonEnum er)
                     ticket.EscalationReason = er;
                 break;
 
-            case TicketStatusEnum.ClosedPendingRate:
+            case TicketStatusEnum.Closed:
                 ticket.ApprovedAt = DateTime.UtcNow;
                 ticket.ApprovedByManagerId = ctx.ActorUserId;
-                break;
-
-            case TicketStatusEnum.Closed:
                 ticket.ClosedAt = DateTime.UtcNow;
                 if (ctx.Payload.TryGetValue("Rating", out var rating) && rating is short rate)
                 {

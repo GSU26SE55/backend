@@ -17,6 +17,7 @@ public class TicketDbContext : DbContext
     }
 
     public virtual DbSet<Ticket> Tickets { get; set; }
+    public virtual DbSet<TicketBatteryAsset> TicketBatteryAssets { get; set; }
     public virtual DbSet<TicketActivity> TicketActivities { get; set; }
     public virtual DbSet<TicketChat> TicketChats { get; set; }
     public virtual DbSet<TicketChatEdit> TicketChatEdits { get; set; }
@@ -30,13 +31,19 @@ public class TicketDbContext : DbContext
     public virtual DbSet<CustomerAccount> CustomerAccounts { get; set; }
     public virtual DbSet<StaffAccount> StaffAccounts { get; set; }
     public virtual DbSet<KnowledgeBaseArticle> KnowledgeBaseArticles { get; set; }
+    public virtual DbSet<KbArticleVersion> KbArticleVersions { get; set; }
     public virtual DbSet<TicketKbReference> TicketKbReferences { get; set; }
+    public virtual DbSet<TicketAiSuggestion> TicketAiSuggestions { get; set; }
+    public virtual DbSet<BlogPost> BlogPosts { get; set; }
+    public virtual DbSet<BlogPostVersion> BlogPostVersions { get; set; }
+    public virtual DbSet<BlogTemplate> BlogTemplates { get; set; }
     public virtual DbSet<AlertTicketSagaState> AlertTicketSagaStates { get; set; }
     public virtual DbSet<TicketParticipant> TicketParticipants { get; set; }
+    public virtual DbSet<TicketAssignment> TicketAssignments { get; set; }
     public virtual DbSet<TicketChatMention> TicketChatMentions { get; set; }
     public virtual DbSet<TicketChatReaction> TicketChatReactions { get; set; }
     public virtual DbSet<TicketChatRead> TicketChatReads { get; set; }
-    public virtual DbSet<ChatTemplate> ChatTemplates { get; set; }
+    public virtual DbSet<TicketChatHide> TicketChatHides { get; set; }
     public virtual DbSet<ChatAiSuggestion> ChatAiSuggestions { get; set; }
     public virtual DbSet<TicketChatTranslation> TicketChatTranslations { get; set; }
     public virtual DbSet<TicketChatTranslationUser> TicketChatTranslationUsers { get; set; }
@@ -55,6 +62,34 @@ public class TicketDbContext : DbContext
         if (Database.IsNpgsql())
         {
             // PostgreSQL xmin optimistic concurrency token (per overall.md §53.8).
+            modelBuilder.Entity<Ticket>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<TicketAssignment>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<TicketParticipant>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            modelBuilder.Entity<SlaTimer>()
+                .Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
             modelBuilder.Entity<AlertTicketSagaState>()
                 .Property<uint>("xmin")
                 .HasColumnType("xid")

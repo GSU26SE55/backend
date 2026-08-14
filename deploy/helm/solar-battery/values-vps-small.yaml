@@ -1,6 +1,8 @@
 # =====================================================================
 # values-vps-small.yaml
-# Overlay for a single 2 vCPU / 4GB RAM VPS running Jenkins + k3s.
+# Resource overlay for a single-node k3s VPS. Jenkins runs on a separate VPS.
+# Production should use at least 8 vCPU / 16 GiB; the limits remain conservative
+# so a 4 vCPU / 8 GiB temporary environment can start with reduced headroom.
 # Keep every service enabled, but avoid temporary double memory use during deploy.
 # =====================================================================
 
@@ -61,9 +63,15 @@ services:
 
   notificationservice:
     replicas: 1
+    # limit nâng 384Mi → 512Mi (30/07/2026). Service này chạy 7 background worker thường trú
+    # (AuditOutboxRelay · Dispatch · Digest · DlqMonitor + ExpoReceiptReconcile · Fallback ·
+    # Retention — 3 cái cuối thêm ở Sprint 6.3), nhiều nhất hệ thống. Đo thực tế lúc rảnh:
+    # 329 MiB = 86% của 384Mi, mà các đợt tốn nhất (bão alert, gom digest, purge retention)
+    # chưa hề xảy ra lúc đo. Chạm limit thì K8s OOMKill pod, mất thông báo đang chờ trong hàng.
+    # File này được `-f` SAU CÙNG trong Jenkins deploy nên giá trị ở đây là giá trị thắng.
     resources:
-      requests: { cpu: 100m, memory: 192Mi }
-      limits:   { cpu: 400m, memory: 384Mi }
+      requests: { cpu: 100m, memory: 256Mi }
+      limits:   { cpu: 400m, memory: 512Mi }
 
   auditaggregatorservice:           # Sprint audit #AUDIT-13
     replicas: 1

@@ -27,6 +27,11 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     public const string ClaimDeviceSiteId = "iot:site_id";
     public const string ClaimScopes = "iot:scopes";
 
+    /// <summary>
+    /// GH-785 — cờ đánh dấu "khoá HỢP LỆ nhưng thiếu scope", để bước challenge trả 403 thay vì 401.
+    /// </summary>
+    private const string ScopeDeniedItemKey = "iot:scope_denied";
+
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
 
@@ -56,7 +61,18 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             using var scope = _serviceProvider.CreateScope();
             var apiKeyService = scope.ServiceProvider.GetRequiredService<IIotApiKeyService>();
             var requiredScope = ResolveRequiredScope();
-            var device = await apiKeyService.FindDeviceByRawKeyAsync(providedKey, requiredScope, Context.RequestAborted);
+            var lookup = await apiKeyService.LookupDeviceByRawKeyAsync(providedKey, requiredScope, Context.RequestAborted);
+
+            // GH-785 — tách hai ca vốn bị gộp thành 401: khoá sai (401 — "chưa biết anh là ai") và
+            // khoá đúng nhưng thiếu quyền (403 — "biết anh là ai, nhưng không được phép"). Gộp lại
+            // khiến người vận hành đi xoay khoá mãi mà không nhận ra vấn đề thật là thiếu scope.
+            if (lookup.ScopeDenied)
+            {
+                Context.Items[ScopeDeniedItemKey] = true;
+                return AuthenticateResult.Fail("Device API key is missing scope for this endpoint.");
+            }
+
+            var device = lookup.Device;
             if (device is null)
                 return AuthenticateResult.Fail("Invalid or unauthorized device API key.");
 
@@ -118,6 +134,26 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         return providedBytes.Length == expectedBytes.Length &&
                CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
     }
+
+    /// <summary>
+    /// GH-785 — trả 403 cho ca thiếu scope, 401 cho mọi ca còn lại.
+    /// </summary>
+    /// <remarks>
+    /// Phải làm ở đây vì scope được kiểm ngay trong bước xác thực (khoá thiết bị mang luôn quyền),
+    /// nên ASP.NET mặc định biến mọi thất bại thành 401 qua challenge. Không có nhánh này thì hợp
+    /// đồng API nói 403 còn hệ thống trả 401 — tài liệu và hành vi nói hai chuyện khác nhau.
+    /// </remarks>
+    protected override Task HandleChallengeAsync(AuthenticationProperties properties)
+    {
+        if (Context.Items.TryGetValue(ScopeDeniedItemKey, out var denied) && denied is true)
+        {
+            Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        }
+
+        return base.HandleChallengeAsync(properties);
+    }
+
 }
 
 /// <summary>

@@ -11,4 +11,13 @@ public class GetAccountsQuery : PaginationRequest, IRequest<AccountListResponse>
     public AccountStatusEnum? Status { get; set; }
     public Guid? RoleId { get; set; }
     public bool? EmailConfirmed { get; set; }
+
+    /// <summary>
+    /// Cột sort. Whitelist: fullName | role | status | createdAt.
+    /// Giá trị ngoài whitelist → createdAt (mặc định). Xem handler.
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
 }

@@ -29,7 +29,7 @@ public class AdminTicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin override — thêm bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// Admin override — thêm bình luận dù ticket đang Closed (#517). Bắt buộc <c>OverrideReason</c>.
     /// </summary>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="command">Nội dung bình luận + lý do override.</param>
@@ -49,7 +49,7 @@ public class AdminTicketChatsController : ControllerBase
     {
         command.TicketId = ticketId;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ActorRoleEnum.Admin;
 
         var result = await _mediator.Send(command, ct);
@@ -57,7 +57,7 @@ public class AdminTicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin override — sửa bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// Admin override — sửa bình luận dù ticket đang Closed (#517). Bắt buộc <c>OverrideReason</c>.
     /// </summary>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="id">ID của bình luận cần sửa.</param>
@@ -79,7 +79,7 @@ public class AdminTicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ActorRoleEnum.Admin;
 
         var result = await _mediator.Send(command, ct);
@@ -87,7 +87,7 @@ public class AdminTicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin override — xóa bình luận dù ticket đang Closed/ClosedPendingRate (#517). Bắt buộc <c>OverrideReason</c>.
+    /// Admin override — xóa bình luận dù ticket đang Closed (#517). Bắt buộc <c>OverrideReason</c>.
     /// </summary>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="id">ID của bình luận cần xóa.</param>
@@ -109,7 +109,7 @@ public class AdminTicketChatsController : ControllerBase
         command.TicketId = ticketId;
         command.ChatId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.UserDisplayName = _currentUser.FullName ?? "Unknown";
+        command.UserDisplayName = _currentUser.FullName!;
         command.UserRole = ActorRoleEnum.Admin;
 
         var result = await _mediator.Send(command, ct);
@@ -143,7 +143,7 @@ public class AdminTicketChatsController : ControllerBase
             TicketId = ticketId,
             ChatId = id,
             UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            UserDisplayName = _currentUser.FullName ?? "Unknown",
+            UserDisplayName = _currentUser.FullName!,
             UserRole = ActorRoleEnum.Admin
         };
 

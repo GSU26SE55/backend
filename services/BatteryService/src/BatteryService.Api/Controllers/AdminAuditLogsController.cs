@@ -2,7 +2,9 @@ using BatteryService.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 
 namespace BatteryService.Api.Controllers;
 
@@ -65,8 +67,9 @@ public class AdminAuditLogsController : ControllerBase
     [ProducesResponseType(typeof(CommonResponse<object>), 403)]
     public Task<IActionResult> GetBatteryAuditLogs([FromQuery] string? action, [FromQuery] Guid? batteryId,
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
-        => QueryAsync(action, batteryId, from, to, pageNumber, pageSize, alertOnly: false, ct);
+        [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50,
+        [FromQuery] string? sortBy = null, [FromQuery] string? sortDir = null, CancellationToken ct = default)
+        => QueryAsync(action, batteryId, from, to, pageNumber, pageSize, alertOnly: false, sortBy, sortDir, ct);
 
     /// <summary>
     /// Tra cứu AUDIT LOG các hành động trên CẢNH BÁO (alert) — lịch sử xử lý cảnh báo (Alert audit host trong BatteryService — D14).
@@ -109,11 +112,12 @@ public class AdminAuditLogsController : ControllerBase
     [ProducesResponseType(typeof(CommonResponse<object>), 403)]
     public Task<IActionResult> GetAlertAuditLogs([FromQuery] string? action, [FromQuery] Guid? alertId,
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
-        => QueryAsync(action, alertId, from, to, pageNumber, pageSize, alertOnly: true, ct);
+        [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50,
+        [FromQuery] string? sortBy = null, [FromQuery] string? sortDir = null, CancellationToken ct = default)
+        => QueryAsync(action, alertId, from, to, pageNumber, pageSize, alertOnly: true, sortBy, sortDir, ct);
 
     private async Task<IActionResult> QueryAsync(string? action, Guid? targetId, DateTime? from, DateTime? to,
-        int pageNumber, int pageSize, bool alertOnly, CancellationToken ct)
+        int pageNumber, int pageSize, bool alertOnly, string? sortBy, string? sortDir, CancellationToken ct)
     {
         pageSize = pageSize is <= 0 or > 100 ? 50 : pageSize;
         pageNumber = pageNumber <= 0 ? 1 : pageNumber;
@@ -130,9 +134,19 @@ public class AdminAuditLogsController : ControllerBase
         if (to.HasValue)
             q = q.Where(x => x.OccurredAt <= to.Value);
 
-        var total = await q.CountAsync(ct);
-        var items = await q.OrderByDescending(x => x.OccurredAt)
-            .Skip((pageNumber - 1) * pageSize).Take(pageSize)
+        var descending = SortHelper.IsDescending(sortDir);
+        // Whitelist: occurredAt (default) | actionCode | severity | targetDisplay | actorAccountId | isSuccess.
+        var ordered = (sortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "actioncode" => descending ? q.OrderByDescending(x => x.ActionCode) : q.OrderBy(x => x.ActionCode),
+            "severity" => descending ? q.OrderByDescending(x => x.Severity) : q.OrderBy(x => x.Severity),
+            "targetdisplay" => descending ? q.OrderByDescending(x => x.TargetDisplay) : q.OrderBy(x => x.TargetDisplay),
+            "actoraccountid" => descending ? q.OrderByDescending(x => x.ActorAccountId) : q.OrderBy(x => x.ActorAccountId),
+            "issuccess" => descending ? q.OrderByDescending(x => x.IsSuccess) : q.OrderBy(x => x.IsSuccess),
+            _ => descending ? q.OrderByDescending(x => x.OccurredAt) : q.OrderBy(x => x.OccurredAt),
+        };
+        var page = await ordered
+            .ThenBy(x => x.Id) // tie-breaker cố định — pagination ổn định
             .Select(x => new BatteryAuditLogDto
             {
                 Id = x.Id.ToString(),
@@ -146,17 +160,12 @@ public class AdminAuditLogsController : ControllerBase
                 IsSuccess = x.IsSuccess,
                 Reason = x.Reason,
                 OccurredAt = x.OccurredAt,
-            }).ToListAsync(ct);
+            })
+            .ToPagedEntityListAsync(pageNumber, pageSize, ct);
 
         return Ok(new CommonResponse<PaginationResponse<BatteryAuditLogDto>>
         {
-            Data = new PaginationResponse<BatteryAuditLogDto>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-            },
+            Data = page,
         });
     }
 }

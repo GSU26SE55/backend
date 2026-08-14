@@ -4,6 +4,7 @@ using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -21,11 +22,11 @@ public class TicketUnreadCountQueryHandler : IRequestHandler<TicketUnreadCountQu
         var ticket = await _uow.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() ?? t.PrimaryHandlerStaffId })
             .FirstOrDefaultAsync(ct);
 
         if (ticket == null)
-            return new TicketUnreadCountResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy ticket." };
+            return new TicketUnreadCountResponse { IsSuccess = false, StatusCode = 404, Message = "Ticket not found." };
 
         var activeParticipants = await _uow.TicketParticipants.GetAllAsync()
             .AsNoTracking()
@@ -33,8 +34,8 @@ public class TicketUnreadCountQueryHandler : IRequestHandler<TicketUnreadCountQu
             .Select(p => new { p.UserId, p.CanViewInternal })
             .ToListAsync(ct);
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
-            return new TicketUnreadCountResponse { IsSuccess = false, StatusCode = 403, Message = "Không có quyền truy cập ticket." };
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
+            return new TicketUnreadCountResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to access this ticket." };
 
         var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);

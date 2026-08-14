@@ -213,7 +213,7 @@ public class JwtHelperTests
         var (id, err) = _sut.ValidateResetToken(" ");
 
         id.Should().BeNull();
-        err.Should().Contain("không được để trống");
+        err.Should().Contain("must not be empty");
     }
 
     [Fact]
@@ -225,7 +225,7 @@ public class JwtHelperTests
         var (id, err) = _sut.ValidateResetToken(access);
 
         id.Should().BeNull();
-        err.Should().Contain("không phải dành cho reset password");
+        err.Should().Contain("not intended for password reset");
     }
 
     [Fact]
@@ -238,7 +238,7 @@ public class JwtHelperTests
         var (id, err) = _sut.ValidateResetToken(expired);
 
         id.Should().BeNull();
-        err.Should().Contain("hết hạn");
+        err.Should().Contain("expired");
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public class JwtHelperTests
         var (id, err) = _sut.ValidateResetToken("garbage-not-a-jwt");
 
         id.Should().BeNull();
-        err.Should().Contain("không hợp lệ");
+        err.Should().Contain("Invalid");
     }
 
     [Fact]
@@ -267,6 +267,6 @@ public class JwtHelperTests
         var (id, err) = _sut.ValidateResetToken(foreign);
 
         id.Should().BeNull();
-        err.Should().Contain("không hợp lệ");
+        err.Should().Contain("Invalid");
     }
 }

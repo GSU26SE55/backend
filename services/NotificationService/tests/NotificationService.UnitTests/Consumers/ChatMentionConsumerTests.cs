@@ -21,7 +21,13 @@ public class ChatMentionConsumerTests
         inboxStore ??= MakeInboxStore();
 
         var provider = new ServiceCollection()
-            .AddMassTransitTestHarness(x => x.AddConsumer<ChatMentionConsumer>())
+            .AddMassTransitTestHarness(x =>
+            {
+                x.AddConsumer<ChatMentionConsumer>();
+                // Timeout tường minh — mặc định inactivity 1s của MassTransit v8 làm test đỏ
+                // thất thường khi cả solution chạy song song. Xem ConsumerTestHarness.InactivityTimeout.
+                x.SetTestTimeouts(Helpers.ConsumerTestHarness.TestTimeout, Helpers.ConsumerTestHarness.InactivityTimeout);
+            })
             .AddSingleton(mediator)
             .AddSingleton(inboxStore.Object)
             .AddSingleton(NullLogger<ChatMentionConsumer>.Instance)
@@ -34,8 +40,8 @@ public class ChatMentionConsumerTests
     private static Mock<IInboxStore> MakeInboxStore()
     {
         var store = new Mock<IInboxStore>();
-        store.Setup(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-             .ReturnsAsync(true);
+        store.Setup(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+             .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
         return store;
     }
 
@@ -44,7 +50,7 @@ public class ChatMentionConsumerTests
         TicketId: Guid.NewGuid(),
         MentionedUserId: mentionedUserId,
         MentionedUserRole: 3,
-        MentionedDisplayName: "Nguyễn Văn A",
+        MentionedDisplayName: "John Doe",
         ActorUserId: Guid.NewGuid(),
         IsGroupMention: false);
 
@@ -62,12 +68,14 @@ public class ChatMentionConsumerTests
         await harness.Bus.Publish(MakeEvent(mentionedUserId));
         (await harness.Consumed.Any<ChatMentionedEvent>()).Should().BeTrue();
 
-        captured.Should().HaveCount(2);
+        // Sprint 6.3 NOTI3-01 (#701) — thêm row InApp để notification hiện trong feed (feed lọc Channel=InApp).
+        captured.Should().HaveCount(3);
         captured.Should().AllSatisfy(c =>
         {
             c.UserId.Should().Be(mentionedUserId);
             c.Type.Should().Be(NotificationTypeEnum.ChatMentioned);
         });
+        captured.Should().Contain(c => c.Channel == NotificationChannelEnum.InApp);
         captured.Should().Contain(c => c.Channel == NotificationChannelEnum.Push);
         captured.Should().Contain(c => c.Channel == NotificationChannelEnum.Email);
 
@@ -82,9 +90,9 @@ public class ChatMentionConsumerTests
             .ReturnsAsync(new NotificationActionResponse { IsSuccess = true });
 
         var inboxStore = new Mock<IInboxStore>();
-        inboxStore.SetupSequence(s => s.TryMarkProcessedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true)
-            .ReturnsAsync(false);
+        inboxStore.SetupSequence(s => s.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"))
+            .ReturnsAsync(InboxClaim.Completed);
 
         var evt = MakeEvent(Guid.NewGuid());
         var harness = await StartHarness(mediator.Object, inboxStore);
@@ -93,7 +101,7 @@ public class ChatMentionConsumerTests
         (await harness.Consumed.Any<ChatMentionedEvent>()).Should().BeTrue();
 
         // Mỗi lần process thành công gửi 2 notification (Push+Email) — duplicate bị skip nên vẫn đúng 2.
-        mediator.Verify(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        mediator.Verify(m => m.Send(It.IsAny<CreateNotificationCommand>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
 
         await harness.Stop();
     }

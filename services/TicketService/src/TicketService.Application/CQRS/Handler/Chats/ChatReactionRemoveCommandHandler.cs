@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -35,20 +36,20 @@ public class ChatReactionRemoveCommandHandler : IRequestHandler<ChatReactionRemo
         var ticket = await _uow.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new { t.CustomerId, PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault() })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.UserId, request.ActorRoles))
-            return Fail(403, "Không có quyền truy cập ticket.");
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles))
+            return Fail(403, "You do not have permission to access this ticket.");
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted || chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (chat.IsInternal && !TicketQueryHelper.CanViewInternalChats(request.ActorRoles))
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var existing = await _uow.TicketChatReactions.GetAllAsync()
             .FirstOrDefaultAsync(r => r.ChatId == request.ChatId
@@ -95,7 +96,7 @@ public class ChatReactionRemoveCommandHandler : IRequestHandler<ChatReactionRemo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa reaction thành công.",
+            Message = "Reaction removed successfully.",
             Data = aggregate
         };
     }

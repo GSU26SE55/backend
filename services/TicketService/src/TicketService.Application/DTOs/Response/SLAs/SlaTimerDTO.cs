@@ -16,6 +16,7 @@ public class SlaTimerDTO
     public DateTime DueAt { get; set; }
     public DateTime OriginalDueAt { get; set; }
     public int TotalPausedMinutes { get; set; }
+    public int PauseEpisodesCount { get; set; }
     /// <summary>
     /// Warning sent at.
     /// </summary>

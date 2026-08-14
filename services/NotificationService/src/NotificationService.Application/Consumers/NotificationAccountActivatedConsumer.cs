@@ -1,0 +1,57 @@
+using System.Text.Json;
+using MassTransit;
+using Microsoft.Extensions.Logging;
+using NotificationService.Application.Interfaces.Repositories;
+using NotificationService.Domain.Enums;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
+
+namespace NotificationService.Application.Consumers;
+
+/// <summary>
+/// GH-107 — Account được kích hoạt → welcome notification cho chính account đó (AccountId là recipient).
+/// Channel InApp (email welcome do EmailService lo riêng).
+/// </summary>
+public class NotificationAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
+{
+    private readonly INotificationUnitOfWork _unitOfWork;
+    private readonly ICacheService _cache;
+    private readonly ILogger<NotificationAccountActivatedConsumer> _logger;
+
+    public NotificationAccountActivatedConsumer(
+        INotificationUnitOfWork unitOfWork,
+        ICacheService cache,
+        ILogger<NotificationAccountActivatedConsumer> logger)
+    {
+        _unitOfWork = unitOfWork;
+        _cache = cache;
+        _logger = logger;
+    }
+
+    public async Task Consume(ConsumeContext<AccountActivatedEvent> context)
+    {
+        // GH-765 — chỗ giữ có hạn ngắn, chỉ nâng lên cửa sổ 30 phút SAU KHI ghi xong.
+        // Bản cũ chiếm key 30 phút ngay từ đầu, nên một lỗi DB/resolver ở lần đầu là mọi lần
+        // gửi lại trong 30 phút đều bị coi là trùng ⇒ notification biến mất hẳn.
+        await NotificationDebounce.ProcessOnceAsync(_cache, context, "AccountActivated", _logger, async () =>
+        {
+            var evt = context.Message;
+
+            var recipientIds = new[] { evt.AccountId };
+
+            var title = "Welcome to the system";
+            var body = $"The account for {evt.FullName} has been activated successfully.";
+            var payload = JsonSerializer.Serialize(new
+            {
+                accountId = evt.AccountId,
+                role = evt.Role,
+                creationSource = evt.CreationSource,
+                screen = "Home"
+            });
+
+            await NotificationWriter.WriteAsync(
+                _unitOfWork, recipientIds, NotificationTypeEnum.AccountActivated, NotificationWriter.InAppOnly,
+                title, body, payload, "Account", evt.AccountId, context.CancellationToken);
+        });
+    }
+}

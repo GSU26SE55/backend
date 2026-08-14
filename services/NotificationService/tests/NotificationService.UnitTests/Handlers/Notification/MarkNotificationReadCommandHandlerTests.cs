@@ -27,7 +27,7 @@ public class MarkNotificationReadCommandHandlerTests
         var id = Guid.NewGuid();
         var entity = Noti(id, userId, NotificationStatusEnum.Sent);
         var (uow, _, notifications) = MockNotificationUnitOfWork.Build(notificationSeed: new[] { entity });
-        var handler = new MarkNotificationReadCommandHandler(uow.Object);
+        var handler = new MarkNotificationReadCommandHandler(uow.Object, NoopAuditWriter.Instance);
 
         var resp = await handler.Handle(new MarkNotificationReadCommand { Id = id, UserId = userId }, CancellationToken.None);
 
@@ -47,7 +47,7 @@ public class MarkNotificationReadCommandHandlerTests
         var id = Guid.NewGuid();
         var entity = Noti(id, userId, NotificationStatusEnum.Read);
         var (uow, _, notifications) = MockNotificationUnitOfWork.Build(notificationSeed: new[] { entity });
-        var handler = new MarkNotificationReadCommandHandler(uow.Object);
+        var handler = new MarkNotificationReadCommandHandler(uow.Object, NoopAuditWriter.Instance);
 
         var resp = await handler.Handle(new MarkNotificationReadCommand { Id = id, UserId = userId }, CancellationToken.None);
 
@@ -62,7 +62,7 @@ public class MarkNotificationReadCommandHandlerTests
     public async Task MarkRead_NotFound_Returns404_NoWrite()
     {
         var (uow, _, notifications) = MockNotificationUnitOfWork.Build();
-        var handler = new MarkNotificationReadCommandHandler(uow.Object);
+        var handler = new MarkNotificationReadCommandHandler(uow.Object, NoopAuditWriter.Instance);
 
         var resp = await handler.Handle(
             new MarkNotificationReadCommand { Id = Guid.NewGuid(), UserId = Guid.NewGuid() },
@@ -80,7 +80,7 @@ public class MarkNotificationReadCommandHandlerTests
         var id = Guid.NewGuid();
         var entity = Noti(id, Guid.NewGuid(), NotificationStatusEnum.Sent); // chủ khác
         var (uow, _, notifications) = MockNotificationUnitOfWork.Build(notificationSeed: new[] { entity });
-        var handler = new MarkNotificationReadCommandHandler(uow.Object);
+        var handler = new MarkNotificationReadCommandHandler(uow.Object, NoopAuditWriter.Instance);
 
         var resp = await handler.Handle(
             new MarkNotificationReadCommand { Id = id, UserId = Guid.NewGuid() },
@@ -100,7 +100,7 @@ public class MarkNotificationReadCommandHandlerTests
         var id = Guid.NewGuid();
         var entity = Noti(id, userId, NotificationStatusEnum.Sent, isDeleted: true);
         var (uow, _, _) = MockNotificationUnitOfWork.Build(notificationSeed: new[] { entity });
-        var handler = new MarkNotificationReadCommandHandler(uow.Object);
+        var handler = new MarkNotificationReadCommandHandler(uow.Object, NoopAuditWriter.Instance);
 
         var resp = await handler.Handle(new MarkNotificationReadCommand { Id = id, UserId = userId }, CancellationToken.None);
 

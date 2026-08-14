@@ -25,6 +25,12 @@ public class TicketChat : AuditableEntity
     public Guid? PinnedByUserId { get; set; }
     public string? OriginalLanguage { get; set; }
 
+    /// <summary>Null for text chats; tracks the lifecycle of an audio transcription.</summary>
+    public VoiceTranscriptionStatusEnum? VoiceTranscriptionStatus { get; set; }
+    public string? VoiceTranscriptionError { get; set; }
+    public DateTime? TranscriptionStartedAt { get; set; }
+    public DateTime? TranscribedAt { get; set; }
+
     // GDPR — #569
     public bool IsRedacted { get; set; } = false;
     public DateTime? RedactedAt { get; set; }

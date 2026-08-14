@@ -46,28 +46,43 @@ public class CascadeRiskService : ICascadeRiskService
         var now = DateTime.UtcNow;
         var result = new CascadeRiskScanResult();
 
-        // Asset có ít nhất 1 Open alert (battery-level → BatteryAssetId not null).
-        var assetIds = await _unitOfWork.Alerts
+        // Set A — asset có ít nhất 1 Open alert (battery-level → BatteryAssetId not null): có thể tăng risk.
+        var activeIds = await _unitOfWork.Alerts
             .GetAllAsync()
             .Where(a => !a.IsDeleted
                 && a.Status == AlertStatusEnum.Open
                 && a.BatteryAssetId != null)
             .Select(a => a.BatteryAssetId!.Value)
             .Distinct()
+            .ToListAsync(cancellationToken);
+
+        // Set B (Sprint Bonus NS-15 #659, R4 decay) — asset có score > 0 nhưng KHÔNG còn Open alert
+        // → recompute để score tự tụt về topology. Nếu không, pin từng chạm 0.8 hiện "High" trên heat
+        // map MÃI MÃI dù đã khỏe → Manager mất niềm tin (alert fatigue hệ thống cố tránh).
+        var decayIds = await _unitOfWork.BatteryAssets
+            .GetAllAsync()
+            .Where(a => !a.IsDeleted && a.CascadeRiskScore > 0m && !activeIds.Contains(a.Id))
+            .Select(a => a.Id)
+            .ToListAsync(cancellationToken);
+
+        var candidateIds = activeIds.Concat(decayIds).Distinct().ToList();
+        if (candidateIds.Count == 0)
+            return result;
+
+        // Sprint Bonus NS-16 (#660, R7) — OrderBy CascadeRiskUpdatedAt (null = chưa tính bao giờ →
+        // coi như MinValue, lên đầu) chống starvation khi > batchSize asset: asset lâu chưa tính nhất
+        // được ưu tiên, không có asset nào bị bỏ quên qua nhiều tick.
+        var assets = await _unitOfWork.BatteryAssets
+            .GetAllAsync()
+            .Where(a => !a.IsDeleted && candidateIds.Contains(a.Id))
+            .OrderBy(a => a.CascadeRiskUpdatedAt ?? DateTime.MinValue)
             .Take(batchSize)
             .ToListAsync(cancellationToken);
 
-        if (assetIds.Count == 0)
-            return result;
-
-        foreach (var assetId in assetIds)
+        foreach (var asset in assets)
         {
-            var asset = await _unitOfWork.BatteryAssets.GetByIdAsync(assetId);
-            if (asset is null || asset.IsDeleted)
-                continue;
-
             var oldScore = asset.CascadeRiskScore;
-            var newScore = await _calculator.CalculateAsync(assetId, cancellationToken);
+            var newScore = await _calculator.CalculateAsync(asset.Id, cancellationToken);
 
             asset.CascadeRiskScore = newScore;
             asset.CascadeRiskUpdatedAt = now;
@@ -80,7 +95,7 @@ public class CascadeRiskService : ICascadeRiskService
                 var relatedTicketId = await _unitOfWork.Alerts
                     .GetAllAsync()
                     .Where(a => !a.IsDeleted
-                        && a.BatteryAssetId == assetId
+                        && a.BatteryAssetId == asset.Id
                         && a.Status == AlertStatusEnum.Open
                         && a.TicketId != null)
                     .OrderByDescending(a => a.DetectedAt)
@@ -88,7 +103,7 @@ public class CascadeRiskService : ICascadeRiskService
                     .FirstOrDefaultAsync(cancellationToken);
 
                 var evt = new BatteryCascadeRiskHighEvent(
-                    BatteryAssetId: assetId,
+                    BatteryAssetId: asset.Id,
                     SiteId: asset.SiteId,
                     CustomerId: asset.CustomerId,
                     AssetSerialNumber: asset.SerialNumber,
@@ -101,14 +116,14 @@ public class CascadeRiskService : ICascadeRiskService
 
                 _logger.LogWarning(
                     "Cascade risk HIGH: asset {AssetId} ({Serial}) score {Score} (was {Old}) — published BatteryCascadeRiskHighEvent",
-                    assetId, asset.SerialNumber, newScore, oldScore);
+                    asset.Id, asset.SerialNumber, newScore, oldScore);
             }
             else if (newScore >= MediumThreshold && oldScore < MediumThreshold)
             {
                 result.MediumRisk++;
                 _logger.LogInformation(
                     "Cascade risk MEDIUM: asset {AssetId} ({Serial}) score {Score} — Manager dashboard review",
-                    assetId, asset.SerialNumber, newScore);
+                    asset.Id, asset.SerialNumber, newScore);
             }
         }
 

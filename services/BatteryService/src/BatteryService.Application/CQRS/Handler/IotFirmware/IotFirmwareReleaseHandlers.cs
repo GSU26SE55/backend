@@ -5,7 +5,9 @@ using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mapping;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
 using FirmwareEntity = BatteryService.Domain.Entities.IotFirmwareRelease;
 
 namespace BatteryService.Application.CQRS.Handler.IotFirmware;
@@ -22,7 +24,7 @@ public class CreateIotFirmwareReleaseCommandHandler : IRequestHandler<CreateIotF
         var dup = await _unitOfWork.IotFirmwareReleases.GetAllAsync()
             .AnyAsync(f => !f.IsDeleted && f.Version == ver && f.HardwareRevision == hw, ct);
         if (dup)
-            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 409, Message = "Version đã tồn tại cho hardware này." };
+            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 409, Message = "Version already exists for this hardware." };
 
         var entity = new FirmwareEntity
         {
@@ -47,7 +49,7 @@ public class CreateIotFirmwareReleaseCommandHandler : IRequestHandler<CreateIotF
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Tạo firmware release thành công.",
+            Message = "Firmware release created successfully.",
             Data = IotDeviceMapper.ToDto(entity)
         };
     }
@@ -63,9 +65,9 @@ public class PublishIotFirmwareReleaseCommandHandler : IRequestHandler<PublishIo
         var entity = await _unitOfWork.IotFirmwareReleases.GetAllAsync()
             .FirstOrDefaultAsync(f => f.Id == request.Id && !f.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy firmware release." };
+            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 404, Message = "Firmware release not found." };
         if (entity.IsArchived)
-            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 409, Message = "Release đã archived." };
+            return new CommonResponse<IotFirmwareReleaseDto> { IsSuccess = false, StatusCode = 409, Message = "Release is already archived." };
 
         entity.IsPublished = true;
         entity.PublishedAt ??= DateTime.UtcNow;
@@ -76,7 +78,7 @@ public class PublishIotFirmwareReleaseCommandHandler : IRequestHandler<PublishIo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đã publish.",
+            Message = "Published.",
             Data = IotDeviceMapper.ToDto(entity)
         };
     }
@@ -92,11 +94,11 @@ public class ArchiveIotFirmwareReleaseCommandHandler : IRequestHandler<ArchiveIo
         var entity = await _unitOfWork.IotFirmwareReleases.GetAllAsync()
             .FirstOrDefaultAsync(f => f.Id == request.Id && !f.IsDeleted, ct);
         if (entity is null)
-            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy firmware release." };
+            return new CommonResponse<object> { IsSuccess = false, StatusCode = 404, Message = "Firmware release not found." };
         entity.IsArchived = true;
         _unitOfWork.IotFirmwareReleases.UpdateAsync(entity);
         await _unitOfWork.SaveChangesAsync(ct);
-        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Đã archive." };
+        return new CommonResponse<object> { IsSuccess = true, StatusCode = 200, Message = "Archived." };
     }
 }
 
@@ -107,8 +109,9 @@ public class GetIotFirmwareReleasesQueryHandler : IRequestHandler<GetIotFirmware
 
     public async Task<CommonResponse<PaginationResponse<IotFirmwareReleaseDto>>> Handle(GetIotFirmwareReleasesQuery request, CancellationToken ct)
     {
-        var page = request.Page <= 0 ? 1 : request.Page;
-        var size = Math.Clamp(request.PageSize, 1, 100);
+        // PaginationRequest đã clamp: PageNumber >= 1, PageSize trong [1, 100]
+        var page = request.PageNumber;
+        var size = request.PageSize;
 
         var query = _unitOfWork.IotFirmwareReleases.GetAllAsync().Where(f => !f.IsDeleted);
         if (!string.IsNullOrWhiteSpace(request.HardwareRevision))
@@ -116,21 +119,31 @@ public class GetIotFirmwareReleasesQueryHandler : IRequestHandler<GetIotFirmware
         if (request.PublishedOnly == true)
             query = query.Where(f => f.IsPublished && !f.IsArchived);
 
-        var total = await query.CountAsync(ct);
-        var items = await query.OrderByDescending(f => f.CreatedAt)
-            .Skip((page - 1) * size).Take(size).ToListAsync(ct);
+        var descending = SortHelper.IsDescending(request.SortDir);
+        // Whitelist: version | hardwareRevision | channel | status(rank) | artifactSizeBytes | createdAt (default).
+        // status rank: Draft=0 < Published=1 < Archived=2 (lifecycle) — derived vì entity không có field Status đơn.
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "version" => descending ? query.OrderByDescending(f => f.Version) : query.OrderBy(f => f.Version),
+            "hardwarerevision" => descending ? query.OrderByDescending(f => f.HardwareRevision) : query.OrderBy(f => f.HardwareRevision),
+            "channel" => descending ? query.OrderByDescending(f => f.Channel) : query.OrderBy(f => f.Channel),
+            "status" => descending
+                ? query.OrderByDescending(f => f.IsArchived ? 2 : (f.IsPublished ? 1 : 0))
+                : query.OrderBy(f => f.IsArchived ? 2 : (f.IsPublished ? 1 : 0)),
+            "artifactsizebytes" => descending ? query.OrderByDescending(f => f.ArtifactSizeBytes) : query.OrderBy(f => f.ArtifactSizeBytes),
+            _ => descending ? query.OrderByDescending(f => f.CreatedAt) : query.OrderBy(f => f.CreatedAt),
+        };
+
+        // IotDeviceMapper.ToDto là method call → EF không dịch sang SQL, phân trang trên entity trước.
+        var paged = await ordered
+            .ThenBy(f => f.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(page, size, ct);
 
         return new CommonResponse<PaginationResponse<IotFirmwareReleaseDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<IotFirmwareReleaseDto>
-            {
-                Items = items.Select(IotDeviceMapper.ToDto).ToList(),
-                TotalItems = total,
-                PageNumber = page,
-                PageSize = size
-            }
+            Data = paged.Map(IotDeviceMapper.ToDto)
         };
     }
 }

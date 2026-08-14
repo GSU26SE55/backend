@@ -10,6 +10,7 @@ namespace AuthService.UnitTests.Handlers.PermissionTests;
 public class SetRolePermissionsCommandHandlerTests
 {
     private readonly Mock<MediatR.IPublisher> _publisher = MockPublisher.NoOp();
+    private readonly Mock<SharedContracts.Interfaces.IMessageProducerService> _producer = new();
 
     private static Permission NewPerm(string code) => new()
     {
@@ -37,7 +38,7 @@ public class SetRolePermissionsCommandHandlerTests
         rolePermsMock.Setup(r => r.GetAllAsync()).Returns(Array.Empty<RolePermission>().AsQueryable().BuildMock());
         uow.SetupGet(u => u.RolePermissions).Returns(rolePermsMock.Object);
 
-        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
+        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object, _producer.Object);
         var resp = await handler.Handle(new SetRolePermissionsCommand
         {
             RoleId = role.Id,
@@ -70,7 +71,7 @@ public class SetRolePermissionsCommandHandlerTests
         rolePermsMock.Setup(r => r.GetAllAsync()).Returns(existing.AsQueryable().BuildMock());
         uow.SetupGet(u => u.RolePermissions).Returns(rolePermsMock.Object);
 
-        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
+        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object, _producer.Object);
         var resp = await handler.Handle(new SetRolePermissionsCommand
         {
             RoleId = role.Id,
@@ -88,7 +89,7 @@ public class SetRolePermissionsCommandHandlerTests
         var role = new Role { Id = Guid.NewGuid(), Name = "Admin", NormalizedName = "ADMIN", Status = RoleStatusEnum.Active, IsSystemRole = true };
         var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
 
-        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
+        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object, _producer.Object);
         var resp = await handler.Handle(new SetRolePermissionsCommand
         {
             RoleId = role.Id,
@@ -113,7 +114,7 @@ public class SetRolePermissionsCommandHandlerTests
         rolePermsMock.Setup(r => r.GetAllAsync()).Returns(Array.Empty<RolePermission>().AsQueryable().BuildMock());
         uow.SetupGet(u => u.RolePermissions).Returns(rolePermsMock.Object);
 
-        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
+        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object, _producer.Object);
         var resp = await handler.Handle(new SetRolePermissionsCommand
         {
             RoleId = role.Id,
@@ -128,7 +129,7 @@ public class SetRolePermissionsCommandHandlerTests
     public async Task Set_RoleNotFound_Returns404()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
-        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
+        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object, _producer.Object);
 
         var resp = await handler.Handle(new SetRolePermissionsCommand
         {
@@ -145,7 +146,7 @@ public class SetRolePermissionsCommandHandlerTests
         var role = new Role { Id = Guid.NewGuid(), Name = "Tech", NormalizedName = "TECH", Status = RoleStatusEnum.Active, IsSystemRole = false };
         var (uow, _, _, _) = MockUnitOfWork.Build(roleSeed: new[] { role });
 
-        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object);
+        var handler = new SetRolePermissionsCommandHandler(uow.Object, _publisher.Object, _producer.Object);
         var resp = await handler.Handle(new SetRolePermissionsCommand
         {
             RoleId = role.Id,

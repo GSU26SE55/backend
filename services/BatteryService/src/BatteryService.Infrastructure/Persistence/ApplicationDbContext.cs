@@ -47,10 +47,15 @@ public class ApplicationDbContext : DbContext
     // Sprint 5B B1 (#152) — Noise breach hypertable.
     public virtual DbSet<NoiseBreachEvent> NoiseBreachEvents { get; set; }
 
+    // Sprint Bonus NS-26 (#666, F2) — AI classification (spec §30.3).
+    public virtual DbSet<AnomalyClassification> AnomalyClassifications { get; set; }
+    public virtual DbSet<SohPrediction> SohPredictions { get; set; }
+
     // Sprint IoT-1 (#242) — IoT edge device management.
     public virtual DbSet<IotDevice> IotDevices { get; set; }
     public virtual DbSet<IotDeviceHeartbeat> IotDeviceHeartbeats { get; set; }
     public virtual DbSet<IotDeviceCalibration> IotDeviceCalibrations { get; set; }
+    public virtual DbSet<IotDeviceCommand> IotDeviceCommands { get; set; }
     public virtual DbSet<IotFirmwareRelease> IotFirmwareReleases { get; set; }
     public virtual DbSet<IotFirmwareUpdateLog> IotFirmwareUpdateLogs { get; set; }
 

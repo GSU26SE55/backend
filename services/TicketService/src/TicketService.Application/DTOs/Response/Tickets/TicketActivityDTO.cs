@@ -9,6 +9,7 @@ public class TicketActivityDTO
     /// </summary>
     public string Id { get; set; } = string.Empty;
     public string TicketId { get; set; } = string.Empty;
+    public string? SourceTicketId { get; set; }
     public string? ActorUserId { get; set; }
     /// <summary>
     /// Actor role.

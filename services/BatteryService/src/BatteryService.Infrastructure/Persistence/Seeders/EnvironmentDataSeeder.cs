@@ -222,7 +222,7 @@ public class EnvironmentDataSeeder
                 Severity = AlertSeverityEnum.Critical,
                 ReportedBy = "iot-edge-01",
                 DetectedAt = now.AddMinutes(-15),
-                Notes = "Smoke sensor MQ-2 vượt ngưỡng > 200ppm trong 30s.",
+                Notes = "Smoke sensor MQ-2 exceeded threshold > 200ppm for 30s.",
                 CreatedAt = now.AddMinutes(-15)
             },
             // Kịch bản 2: incident Acknowledged — Manager đã xác nhận.
@@ -237,7 +237,7 @@ public class EnvironmentDataSeeder
                 DetectedAt = now.AddHours(-2),
                 AcknowledgedBy = Guid.NewGuid(),
                 AcknowledgedAt = now.AddHours(-1).AddMinutes(-30),
-                Notes = "Ambient temp > 42°C kéo dài 10 phút, đã thông báo kỹ thuật.",
+                Notes = "Ambient temperature > 42°C sustained for 10 minutes; technical team notified.",
                 CreatedAt = now.AddHours(-2)
             },
             // Kịch bản 3: incident đã Resolved — đầy đủ dấu vết audit.
@@ -254,7 +254,7 @@ public class EnvironmentDataSeeder
                 AcknowledgedAt = now.AddDays(-1).AddMinutes(20),
                 ResolvedBy = Guid.NewGuid(),
                 ResolvedAt = now.AddDays(-1).AddHours(3),
-                ResolutionNote = "Mưa lớn — đã bơm thoát nước, kiểm tra cabinet không bị ngập.",
+                ResolutionNote = "Heavy rain — water pumped out; cabinet checked and confirmed not flooded.",
                 CreatedAt = now.AddDays(-1)
             }
         };
@@ -274,7 +274,7 @@ public class EnvironmentDataSeeder
                 DetectedAt = now.AddDays(-2),
                 FalseAlarmBy = Guid.NewGuid(),
                 FalseAlarmAt = now.AddDays(-2).AddMinutes(45),
-                FalseAlarmReason = "Vệ sinh module phun cồn — bay hơi giả gas leak.",
+                FalseAlarmReason = "Alcohol-spray module cleaning — vapor mimicked a gas leak.",
                 CreatedAt = now.AddDays(-2)
             });
         }

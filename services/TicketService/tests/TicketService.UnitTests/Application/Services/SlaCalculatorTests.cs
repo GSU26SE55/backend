@@ -16,7 +16,7 @@ public class SlaCalculatorTests
     {
         // Arrange
         var createdAt = new DateTime(2023, 1, 1, 12, 0, 0, DateTimeKind.Utc);
-        var ticket = new Ticket { CreatedAt = createdAt, Priority = priority, Code = "T1", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.New, Origin = TicketOriginEnum.ManualByCustomer };
+        var ticket = new Ticket { CreatedAt = createdAt, Priority = priority, Code = "T1", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.Open, Origin = TicketOriginEnum.ManualByCustomer };
         var expectedDueDate = createdAt.AddHours(expectedHours);
 
         // Act
@@ -41,7 +41,7 @@ public class SlaCalculatorTests
             Title = "Test",
             Description = "Test",
             Category = TicketCategoryEnum.Other,
-            Status = TicketStatusEnum.New,
+            Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.ManualByCustomer
         };
 
@@ -50,14 +50,14 @@ public class SlaCalculatorTests
 
         // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
-            .WithMessage($"*Giá trị Priority {invalidPriority} không được hỗ trợ*");
+            .WithMessage($"*Priority value {invalidPriority} is not supported*");
     }
 
     [Fact]
     public void CalculateSlaDueDate_ShouldThrowArgumentNullException_WhenPriorityIsNull()
     {
         // Arrange
-        var ticket = new Ticket { CreatedAt = DateTime.UtcNow, Priority = null, Code = "T1", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.New, Origin = TicketOriginEnum.ManualByCustomer };
+        var ticket = new Ticket { CreatedAt = DateTime.UtcNow, Priority = null, Code = "T1", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.Open, Origin = TicketOriginEnum.ManualByCustomer };
 
         // Act
         Action act = () => _sut.CalculateSlaDueDate(ticket);

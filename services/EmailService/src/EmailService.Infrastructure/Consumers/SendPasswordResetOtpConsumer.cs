@@ -12,14 +12,14 @@ public class SendPasswordResetOtpConsumer : IConsumer<SendPasswordResetOtpEvent>
 {
     private const int OtpExpireMinutes = 10;
 
-    private readonly EmailSenderService _emailSender;
+    private readonly IEmailProvider _emailSender;
     private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SendPasswordResetOtpConsumer> _logger;
     private readonly IInboxStore _inboxStore;
 
     public SendPasswordResetOtpConsumer(
-        EmailSenderService emailSender,
+        IEmailProvider emailSender,
         IEmailTemplateRenderer templateRenderer,
         IConfiguration configuration,
         ILogger<SendPasswordResetOtpConsumer> logger,
@@ -45,7 +45,7 @@ public class SendPasswordResetOtpConsumer : IConsumer<SendPasswordResetOtpEvent>
                 var values = new Dictionary<string, string?>
                 {
                     ["AppName"] = appName,
-                    ["UserName"] = string.IsNullOrWhiteSpace(msg.ToEmail) ? "bạn" : msg.ToEmail,
+                    ["UserName"] = string.IsNullOrWhiteSpace(msg.ToEmail) ? "there" : msg.ToEmail,
                     ["Otp"] = msg.Otp,
                     ["ExpireMinutes"] = OtpExpireMinutes.ToString()
                 };

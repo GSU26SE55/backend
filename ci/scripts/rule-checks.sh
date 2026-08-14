@@ -223,4 +223,107 @@ else
   echo "PASS: AUDIT003 no new Console.Write* (outside Program.cs)"
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 8: hai bản alert rules phải trùng khít.
+#
+# docker-compose mount `monitoring/prometheus/alert-rules.yml`; Helm chỉ đọc được file nằm
+# TRONG thư mục chart nên phải giữ bản sao `deploy/helm/solar-battery/files/alert-rules.yml`.
+# Hai bản này từng trôi rất xa nhau — Helm chỉ có 26/40 alert, thiếu trọn 3 nhóm auth-security,
+# chat_hub_alerts, notification-delivery. Cảnh báo chạy ở docker nhưng không tồn tại trên K8s,
+# và không có gì báo cho ai biết.
+#
+# Đây là luật chạy trên TOÀN CÂY (không theo diff): lệch là đỏ, bất kể ai gây ra.
+# ---------------------------------------------------------------------------
+ALERT_SRC="monitoring/prometheus/alert-rules.yml"
+ALERT_HELM="deploy/helm/solar-battery/files/alert-rules.yml"
+
+if [ ! -f "$ALERT_SRC" ] || [ ! -f "$ALERT_HELM" ]; then
+  echo "FAIL: thiếu file alert rules ($ALERT_SRC hoặc $ALERT_HELM)."
+  FAILED=1
+elif diff -q "$ALERT_SRC" "$ALERT_HELM" >/dev/null 2>&1; then
+  echo "PASS: alert rules đồng bộ giữa compose và Helm ($(grep -c '^[[:space:]]*- alert:' "$ALERT_SRC") alert)"
+else
+  echo "FAIL: $ALERT_SRC và $ALERT_HELM đã lệch nhau — alert sẽ chạy ở docker mà không có trên K8s:"
+  diff "$ALERT_SRC" "$ALERT_HELM" || true
+  echo "Fix: make sync-alert-rules"
+  FAILED=1
+fi
+
+# ---------------------------------------------------------------------------
+# Rule 9: template Helm đặt tên `_*` mà không phải partial.
+#
+# Helm bỏ qua MỌI file trong templates/ bắt đầu bằng dấu gạch dưới — nó coi đó là partial
+# (chỗ chứa `define`). File manifest lỡ đặt tên như vậy sẽ không bao giờ render, không lỗi,
+# không cảnh báo. Repo này đã dính hai lần:
+#   · _servicemonitor.yaml → K8s không scrape bất kỳ service ứng dụng nào
+#   · _autoscaling.yaml    → HPA/PDB chưa từng được tạo
+# Cả hai đều không chứa `define` — dấu hiệu nhận biết chắc chắn.
+# ---------------------------------------------------------------------------
+HELM_TPL_DIR="deploy/helm/solar-battery/templates"
+UNDERSCORE_HITS=""
+if [ -d "$HELM_TPL_DIR" ]; then
+  while IFS= read -r f; do
+    case "$f" in *.tpl) continue;; esac          # *.tpl là partial theo quy ước, bỏ qua
+    if ! grep -qE '\{\{-?[[:space:]]*define' "$f"; then
+      UNDERSCORE_HITS="${UNDERSCORE_HITS}  $f
+"
+    fi
+  done < <(find "$HELM_TPL_DIR" -type f -name '_*' 2>/dev/null)
+fi
+
+if [ -n "$UNDERSCORE_HITS" ]; then
+  echo "FAIL: template Helm tên '_*' nhưng không có block define — Helm sẽ BỎ QUA, không render:"
+  printf '%s' "$UNDERSCORE_HITS"
+  echo "Fix: đổi tên bỏ dấu gạch dưới, hoặc chuyển thành partial thật (.tpl + define)."
+  FAILED=1
+else
+  echo "PASS: không có template Helm bị bỏ qua vì đặt tên '_*'"
+fi
+
+# ---------------------------------------------------------------------------
+# RULE 9 — Tên class consumer PHẢI duy nhất trên toàn repo (GH-1073)
+#
+# MassTransit đặt tên queue từ TÊN CLASS consumer (bỏ hậu tố "Consumer"), KHÔNG kèm
+# namespace, vì repo không cấu hình EndpointNameFormatter riêng. Hai service đặt trùng
+# tên class ⇒ CHUNG một queue trong RabbitMQ ⇒ mô hình competing-consumer: mỗi message
+# chỉ tới ĐÚNG MỘT service, luân phiên.
+#
+# Đây là lỗi mất dữ liệu và HOÀN TOÀN IM LẶNG — không exception, không log, không test
+# nào bắt. Repo đã dính 6 nhóm cùng lúc (đo trên RabbitMQ đang chạy ngày 05/08/2026):
+#   · AuditReplayRequestedConsumer   ← 6 service, mà thiết kế là fanout "mọi service đều
+#     nhận rồi tự lọc ServiceName" ⇒ ~83% lệnh replay rơi vào service sai và bị bỏ qua
+#   · AccountActivatedConsumer       ← BatteryService + NotificationService
+#   · BatteryAnomalyDetectedConsumer · BatteryCascadeRiskHighConsumer
+#   · EnvironmentalIncidentDetectedConsumer · EnvironmentalIncidentResolvedConsumer
+#
+# Lệ đặt tên của repo (đã có sẵn từ trước, chỉ là bị bỏ sót):
+#   · TicketService  → tiền tố service:  TicketAccountActivatedConsumer
+#   · Khi cùng service có 2 consumer cho 1 event → hậu tố mô tả việc:
+#     AccountActivatedSyncConsumer (sync read-model) vs AccountActivatedWelcomeConsumer
+#
+# Quét TOÀN BỘ repo chứ không chỉ diff: một class đổi tên ở service A có thể đụng class
+# đã tồn tại từ lâu ở service B mà diff không hề chạm tới.
+# ---------------------------------------------------------------------------
+DUP_CONSUMERS="$(
+  grep -rhoE 'class[[:space:]]+[A-Za-z0-9_]+[[:space:]]*:[[:space:]]*(I?Consumer<|[A-Za-z0-9_]*ConsumerBase<)' \
+       --include='*.cs' services/ 2>/dev/null \
+    | sed -E 's/^class[[:space:]]+([A-Za-z0-9_]+).*/\1/' \
+    | grep -vE 'ConsumerBase$' \
+    | sort | uniq -d
+)"
+
+if [ -n "$DUP_CONSUMERS" ]; then
+  echo "FAIL: tên class consumer bị TRÙNG giữa các service ⇒ chung queue RabbitMQ, mất message:"
+  for c in $DUP_CONSUMERS; do
+    echo "  $c"
+    grep -rl "class[[:space:]]\+${c}[[:space:]]*:" --include='*.cs' services/ 2>/dev/null | sed 's/^/      /'
+  done
+  echo "Fix: đổi tên MỘT bên theo lệ sẵn có — tiền tố service (TicketXxxConsumer) hoặc"
+  echo "     hậu tố mô tả việc (XxxSyncConsumer / XxxWelcomeConsumer)."
+  echo "Lưu ý: đổi tên class = đổi tên queue. Queue cũ còn lại trên broker phải dọn tay khi deploy."
+  FAILED=1
+else
+  echo "PASS: không có tên class consumer trùng giữa các service"
+fi
+
 exit "$FAILED"

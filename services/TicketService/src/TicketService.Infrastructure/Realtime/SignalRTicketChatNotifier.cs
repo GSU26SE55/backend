@@ -95,8 +95,4 @@ public class SignalRTicketChatNotifier : ITicketChatRealtimeNotifier
         }
     }
 
-    public Task NotifySentimentAlertAsync(Guid ticketId, double score, string label, CancellationToken cancellationToken = default)
-        => _hubContext.Clients
-            .Group(TicketChatHub.InternalGroup(ticketId))
-            .SendAsync("SentimentAlert", new { ticketId = ticketId.ToString(), score, label }, cancellationToken);
 }

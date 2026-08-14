@@ -22,7 +22,24 @@ networks:
     driver: bridge
 
 volumes:
+  # F4 — phản hồi phân loại của Staff, dữ liệu để retrain model anomaly.
+  # BẮT BUỘC là volume, vì hai lý do độc lập:
+  #   1. gRPC và HTTP là HAI container riêng ⇒ mỗi cái ghi một file trong lớp ghi của
+  #      chính nó, thống kê precision/recall sẽ khác nhau tuỳ hỏi transport nào.
+  #   2. Không có volume thì `docker compose build` là xoá sạch dữ liệu retrain —
+  #      đúng thứ duy nhất mà F4 sinh ra để giữ lại.
+  ai-classification-feedback:
+  # Lịch sử prescription (ChromaDB) — giữ prescription_id và các ca đã được kỹ thuật viên
+  # chấp nhận (dùng làm few-shot cho ca tương tự sau).
+  # BẮT BUỘC dùng chung, cùng hai lý do như store phản hồi phân loại, nhưng hậu quả nặng hơn:
+  #   1. BE fallback gRPC→HTTP giữa lúc kê đơn và lúc gửi phản hồi là chuyện BÌNH THƯỜNG.
+  #      Store tách đôi ⇒ prescription kê ở container này, phản hồi hỏi container kia ⇒ 410,
+  #      phản hồi của kỹ thuật viên mất trắng mà UI vẫn báo thành công.
+  #   2. Nửa số ca "accepted" vô hình với nửa còn lại ⇒ few-shot học trên nửa dữ liệu.
+  ai-prescription-history:
   postgres-data:
+  mosquitto-data:   # Sprint IoT-1 #253 — chỉ dùng khi bật profile `mqtt`
+  mosquitto-log:
   rabbitmq-data:
   minio-data:
   prometheus-data:
@@ -101,6 +118,92 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks: [solar-net]
+
+  # ==================================================================
+  # Sprint IoT-1 #253 — MQTT broker cho bridge của BatteryService.
+  #
+  # ĐẶT SAU PROFILE `mqtt` nên KHÔNG chạy mặc định (`docker compose up` bỏ qua service này) —
+  # đúng yêu cầu "chỉ bật khi triển khai MQTT" (§51). Bật bằng:
+  #     docker compose --profile mqtt up -d mosquitto
+  #
+  # Trước 31/07/2026 compose KHÔNG có service này, trong khi batteryservice đã trỏ sẵn
+  # `Mqtt__Host=mosquitto` ⇒ đặt `Mqtt__Enabled=true` là bridge treo ở trạng thái reconnect vô hạn
+  # vì không có host nào tên `mosquitto` trên `solar-net`.
+  #
+  # Chuẩn bị trước lần chạy đầu (xem infra/mqtt/README.md):
+  #   ./infra/mqtt/mosquitto/bootstrap.sh          # sinh passwd → paste vào .env.Docker
+  #   ./infra/mqtt/scripts/gen-certs.sh mosquitto  # (tuỳ chọn) bật TLS 8883
+  # ==================================================================
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: solar-mosquitto
+    profiles: ["mqtt"]
+    restart: unless-stopped
+    ports:
+      - "${MQTT_HOST_PORT:-21883}:1883"      # plain MQTT
+      - "${MQTT_HOST_TLS_PORT:-28883}:8883"  # TLS — chỉ có listener sau khi chạy gen-certs.sh
+    volumes:
+      - ./infra/mqtt/mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infra/mqtt/mosquitto/config/acl.conf:/mosquitto/config/acl.conf:ro
+      # conf.d rỗng khi chưa sinh cert → broker chạy với 1883, KHÔNG fail to start.
+      - ./infra/mqtt/mosquitto/config/conf.d:/mosquitto/config/conf.d:ro
+      # IOT3-106/M1 — mount THƯ MỤC, không phải file lẻ.
+      # Backend ghi passwd bằng `File.Move` (đổi inode); bind mount file lẻ không truyền đủ thay
+      # đổi đó vào container ⇒ `passwd-watch` không thấy mtime đổi ⇒ không SIGHUP ⇒ thiết bị mới
+      # bị từ chối trong im lặng. `password_file` trong mosquitto.conf trỏ vào đường này.
+      - ./infra/mqtt/mosquitto:/mosquitto/config-src:ro
+      - ./infra/mqtt/mosquitto/certs:/mosquitto/certs:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    # GH-784 — broker TỰ nạp lại khi file passwd đổi.
+    #
+    # Mosquitto 2.0 chỉ đọc lại `password_file` khi nhận SIGHUP. Cách khác là để BatteryService gọi
+    # Docker API mà bắn tín hiệu sang đây — nhưng như vậy phải cấp Docker socket cho một container
+    # ứng dụng, tức trao quyền điều khiển toàn máy chủ chỉ để bảo broker đọc lại một file.
+    # Ở đây broker tự theo dõi file của chính nó: không container nào cần thêm đặc quyền.
+    #
+    # Dùng vòng lặp so mốc sửa đổi thay vì inotify vì image mosquitto:2.0 không có inotify-tools;
+    # 5 giây là đủ nhanh cho việc cấp/thu hồi thiết bị.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        (
+          last=""
+          while :; do
+            cur=$$(stat -c %Y /mosquitto/config-src/passwd 2>/dev/null || echo none)
+            if [ -n "$$last" ] && [ "$$cur" != "$$last" ]; then
+              echo "[passwd-watch] file doi -> SIGHUP mosquitto"
+              kill -HUP 1 2>/dev/null || true
+            fi
+            last="$$cur"
+            sleep 5
+          done
+        ) &
+        exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
+    environment:
+      # GH-786 — credential cho healthcheck. Dùng lại tài khoản bridge: ACL đã cho nó
+      # `readwrite solar/#`, nên không phải sinh thêm user chỉ để thăm dò.
+      MQTT_HEALTH_USER: ${Mqtt__Username:-backend-bridge}
+      MQTT_HEALTH_PASS: ${Mqtt__Password:-}
+    healthcheck:
+      # GH-786 — thăm dò bằng PUBLISH CÓ XÁC THỰC, không phải mở socket.
+      #
+      # Bản cũ dùng `sh -c '</dev/tcp/127.0.0.1/1883'` kèm chú thích "nc không có trong image".
+      # Nhưng `/dev/tcp` là tính năng của BASH, còn image mosquitto:2.0 dùng BusyBox ash — kiểm
+      # chứng trực tiếp: `sh: can't open /dev/tcp/127.0.0.1/1883: no such file`. Nên healthcheck
+      # LUÔN thất bại và container vĩnh viễn `unhealthy`, kể cả khi broker đang phục vụ bình thường.
+      #
+      # `mosquitto_pub` CÓ trong image (/usr/bin/mosquitto_pub). Publish QoS 1 buộc broker phải ACK,
+      # nên phép thử này phủ cả listener LẪN đường xác thực — mở được socket mà auth hỏng thì vẫn
+      # phải báo unhealthy, đó mới là "thật sự dùng được".
+      #
+      # Không đặt cờ timeout của mosquitto_pub: nó không có `-W`; `timeout:` của Docker lo việc đó.
+      test: ["CMD-SHELL", "mosquitto_pub -h 127.0.0.1 -p 1883 -u \"$$MQTT_HEALTH_USER\" -P \"$$MQTT_HEALTH_PASS\" -t solar/healthcheck -m ok -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks: [solar-net]
 
   rabbitmq:
@@ -255,6 +358,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
+      # FileStorageService gRPC server consumed internally by TicketService voice transcription.
+      Grpc__Port: ${FILE_STORAGE_SERVICE_GRPC_SERVER_PORT:?FILE_STORAGE_SERVICE_GRPC_SERVER_PORT is required}
       # HARDCODE — match minio container credentials. KHÔNG đọc từ .env.Docker để tránh mismatch.
       ObjectStorage__ServiceUrl: http://minio:9000              # internal API calls (filestorage container → minio)
       ObjectStorage__PublicServiceUrl: http://localhost:9090    # presigned URL signed cho browser
@@ -270,6 +375,8 @@ services:
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
     ports:
       - "4005:8080"
+    expose:
+      - "8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -281,6 +388,60 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    networks: [solar-net]
+    restart: unless-stopped
+
+  # ---------- AI Module (GSU26SE55) — hybrid serving, 2 container ----------
+  # Same image, 2 transports (BE gọi gRPC primary → fallback HTTP). ai-module nằm
+  # NGOÀI backend repo (../ai-module) — context trỏ ra ngoài. Model artifacts
+  # (soh_mamba_v1.6.pth, scaler.pkl, ...) đã commit trong repo ai-module.
+  # KHÔNG expose 50051 ra host — chỉ nội bộ solar-net (insecure, no TLS).
+  ai-module-grpc:
+    container_name: solar-ai-module-grpc
+    build:
+      context: ../ai-module
+      dockerfile: Dockerfile
+    command: ["python", "-m", "src.grpc_server"]
+    environment:
+      GRPC_PORT: "50051"
+      # LLM keys optional — chỉ cần cho /prescribe enrich=true. Thiếu → rule-based fallback.
+      DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
+      GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+    expose:
+      - "50051"
+    volumes:
+      # Dùng CHUNG với ai-module-http: hai transport phải ghi vào một store, nếu không
+      # precision/recall khác nhau tuỳ hỏi bên nào.
+      - ai-classification-feedback:/app/models/classification_feedback
+      - ai-prescription-history:/app/models/prescription_history
+    networks: [solar-net]
+    restart: unless-stopped
+
+  ai-module-http:
+    container_name: solar-ai-module-http
+    build:
+      context: ../ai-module
+      dockerfile: Dockerfile
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
+      GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+    ports:
+      - "4015:8000"   # expose HTTP fallback ra host cho debug/Swagger (:4015/docs)
+    volumes:
+      # Dùng CHUNG với ai-module-grpc: hai transport phải ghi vào một store, nếu không
+      # precision/recall khác nhau tuỳ hỏi bên nào.
+      - ai-classification-feedback:/app/models/classification_feedback
+      - ai-prescription-history:/app/models/prescription_history
+    # Dùng python chứ KHÔNG phải curl: image base là python:3.11-slim, Dockerfile chỉ
+    # `pip install`, không hề `apt-get install curl` — healthcheck bằng curl sẽ luôn đỏ.
+    # start_period rộng vì lúc boot AI nạp torch + tối đa 8 bộ artifact.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     networks: [solar-net]
     restart: unless-stopped
 
@@ -300,7 +461,7 @@ services:
       RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
       ApiKeys__SensorIngest: ${BATTERY_SENSOR_INGEST_API_KEY:-dev-battery-ingest-key}
-      AnomalyEngine__ScanIntervalSeconds: ${BATTERY_ANOMALY_SCAN_INTERVAL_SECONDS:-30}
+      AnomalyEngine__ScanIntervalSeconds: ${BATTERY_ANOMALY_SCAN_INTERVAL_SECONDS:-10}   # IOT3-80 — 30→10 s
       AnomalyEngine__DedupWindowMinutes: ${BATTERY_ANOMALY_DEDUP_WINDOW_MINUTES:-30}
       AnomalyEngine__OfflineThresholdMinutes: ${BATTERY_ANOMALY_OFFLINE_THRESHOLD_MINUTES:-10}
       AnomalyEngine__EscalationAfterMinutes: ${BATTERY_ANOMALY_ESCALATION_AFTER_MINUTES:-5}
@@ -325,21 +486,49 @@ services:
       # Sprint IoT-2 #IoT2-22..26 — MQTT bridge. DEV: listener 1883 plaintext.
       # Bật: Mqtt__Enabled=true sau khi mosquitto container up + đã sinh passwd cho user backend-bridge.
       Mqtt__Enabled: ${Mqtt__Enabled:-false}
+      # Internal broker address for the BatteryService container.
       Mqtt__Host: ${Mqtt__Host:-mosquitto}
       Mqtt__Port: ${Mqtt__Port:-1883}
+      # Stable address returned to ESP32 devices. It must be reachable from the
+      # customer LAN; never expose the Docker-only name "mosquitto" here.
+      Mqtt__PublicHost: ${Mqtt__PublicHost:-}
+      Mqtt__PublicPort: ${Mqtt__PublicPort:-}
       Mqtt__UseTls: ${Mqtt__UseTls:-false}
       Mqtt__AllowUntrustedCertificates: ${Mqtt__AllowUntrustedCertificates:-true}
       Mqtt__Username: ${Mqtt__Username:-backend-bridge}
       Mqtt__Password: ${Mqtt__Password:-CHANGE_ME}
       Mqtt__ClientId: ${Mqtt__ClientId:-battery-service-bridge}
       Mqtt__ReconnectIntervalSeconds: ${Mqtt__ReconnectIntervalSeconds:-5}
+      Mqtt__LwtOfflineGraceSeconds: ${Mqtt__LwtOfflineGraceSeconds:-90}
+      # GH-784 — nơi ghi thông tin đăng nhập thiết bị để broker biết chúng tồn tại. Bỏ trống ⇒
+      # KHÔNG đồng bộ, và thiết bị vừa cấp sẽ nhận "not authorised" dù API trả 201.
+      Mqtt__PasswordFilePath: ${Mqtt__PasswordFilePath:-/mosquitto-config/passwd}
+      Mqtt__CredentialSyncIntervalSeconds: ${Mqtt__CredentialSyncIntervalSeconds:-60}
       # Sprint IoT-2 #IoT2-35 — Firmware OTA artifact storage (multipart upload).
       Firmware__StorageRoot: ${Firmware__StorageRoot:-/data/firmware-storage}
       Firmware__PublicBaseUrl: ${Firmware__PublicBaseUrl:-}
+      # BE-AI — SohPredictionBackgroundService gọi AI (gRPC primary → HTTP fallback).
+      # Ai__Enabled=false → job no-op hoàn toàn (threshold rule vẫn chạy).
+      Ai__Enabled: ${AI_ENABLED:-true}
+      Ai__GrpcAddress: ${AI_GRPC_ADDRESS:-http://ai-module-grpc:50051}
+      Ai__HttpBaseUrl: ${AI_HTTP_BASE_URL:-http://ai-module-http:8000}
+      Ai__TimeoutSeconds: ${AI_TIMEOUT_SECONDS:-5}
+      Ai__IntervalMinutes: ${AI_INTERVAL_MINUTES:-5}
+      Ai__MinReadings: ${AI_MIN_READINGS:-30}
+      Ai__PrescriptionEnabled: ${AI_PRESCRIPTION_ENABLED:-true}
+      # GH-verify-sensor-grpc — gRPC server nội bộ (BatteryInternal.GetSensorSnapshot).
+      # Listener HTTP/2 riêng, chỉ trong solar-net (KHÔNG map ra host, KHÔNG JWT).
+      Grpc__Port: ${BATTERY_GRPC_PORT:-8081}
     ports:
       - "4006:8080"
+    expose:
+      - "8081"
     volumes:
       - firmware-storage:/data/firmware-storage
+      # GH-784 — mount READ-WRITE đúng MỘT thư mục chứa file passwd, không phải cả infra/mqtt.
+      # Mosquitto vẫn mount file đó read-only ở phía nó: chỉ một bên được ghi, và bên ghi là bên
+      # sở hữu dữ liệu (DB thiết bị).
+      - ./infra/mqtt/mosquitto:/mosquitto-config:rw
     depends_on:
       postgres:
         condition: service_healthy
@@ -348,6 +537,13 @@ services:
       redis:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      ai-module-grpc:
+        condition: service_started
+      # HTTP có healthcheck thật (gRPC thì không: image không có grpc_health_probe và AI
+      # không implement grpc.health.v1). Hai container dùng CHUNG image và cùng gọi
+      # load_models(), nên HTTP xanh là bằng chứng đủ tốt rằng artifact nạp được.
+      ai-module-http:
         condition: service_healthy
     networks: [solar-net]
     restart: unless-stopped
@@ -375,6 +571,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
+      # TicketService gRPC client target; source variable names both services explicitly.
+      Chat__Voice__FileStorageGrpcAddress: ${FILE_STORAGE_GRPC_CLIENT_ADDRESS:?FILE_STORAGE_GRPC_CLIENT_ADDRESS is required}
       ConnectionStrings__TicketDb: "Host=postgres;Port=5432;Database=${TICKET_DB_NAME:-ticket_db};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-Password12345@}"
       ConnectionStrings__Redis: redis:6379
       RabbitMQ__Host: rabbitmq
@@ -387,6 +585,19 @@ services:
       AlertTicketSaga__AlertTicketDispatchEnabled: ${ALERT_TICKET_DISPATCH_ENABLED:-true}
       AlertTicketSaga__AlertTicketSagaEnabled: ${ALERT_TICKET_SAGA_ENABLED:-true}
       # AI features — config loaded directly from .env.Docker via env_file (no substitution needed)
+      # GH-ticket-verify — battery serial lookup (HTTP) + AI verify ticket (gRPC).
+      # TicketAi__Enabled=false → consumer set Skipped (ticket vẫn tạo bình thường).
+      TicketAi__Enabled: ${TICKET_AI_ENABLED:-true}
+      TicketAi__BatteryServiceBaseUrl: ${TICKET_AI_BATTERY_BASE_URL:-http://batteryservice:8080}
+      TicketAi__AiGrpcAddress: ${TICKET_AI_GRPC_ADDRESS:-http://ai-module-grpc:50051}
+      # GH-verify-sensor-grpc — gRPC tới BatteryService (đọc sensor pin verify). Nội bộ, không JWT.
+      TicketAi__BatteryGrpcAddress: ${TICKET_AI_BATTERY_GRPC_ADDRESS:-http://batteryservice:8081}
+      TicketAi__TimeoutSeconds: ${TICKET_AI_TIMEOUT_SECONDS:-5}
+      TicketAi__MaxDuplicateCandidates: ${TICKET_AI_MAX_DUPLICATE_CANDIDATES:-10}
+      # Chặng 1/2 của độ trễ notification: chat ghi outbox → relay poll → RabbitMQ.
+      # Mỗi giây poll ở đây cộng thẳng vào thời gian tin nhắn hiện trên máy người nhận.
+      Outbox__IntervalSeconds: ${TICKET_OUTBOX_INTERVAL_SECONDS:-1}
+      Outbox__BatchSize: ${TICKET_OUTBOX_BATCH_SIZE:-100}
     ports:
       - "4007:8080"
     depends_on:
@@ -398,6 +609,11 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      ai-module-grpc:
+        condition: service_started
+      # GH-verify-sensor-grpc — verify consumer gọi gRPC batteryservice đọc sensor.
+      batteryservice:
+        condition: service_started
     networks: [solar-net]
     restart: unless-stopped
 
@@ -416,6 +632,18 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USERNAME:-guest}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-guest}
+      # Chặng 2/2 của độ trễ notification: consumer ghi row Pending → dispatch poll → SignalR.
+      # Cùng với Outbox__IntervalSeconds bên TicketService, hai vòng poll này là toàn bộ độ trễ
+      # cảm nhận được; bản thân SignalR đẩy tới máy tức thì.
+      Notification__Dispatch__PollIntervalSeconds: ${NOTIFICATION_DISPATCH_POLL_INTERVAL_SECONDS:-1}
+      Notification__Dispatch__BatchSize: ${NOTIFICATION_DISPATCH_BATCH_SIZE:-100}
+      # ADR-0019 — đường vận chuyển push. Hai giá trị dưới chỉ là MẶC ĐỊNH cho lần chạy đầu khi
+      # bảng notification_settings còn trống; sau khi Admin đổi qua
+      # PUT /api/admin/notification-settings/push-transport thì database là nguồn sự thật và biến
+      # môi trường này không còn ảnh hưởng (nếu không, mỗi lần restart sẽ ghi đè lựa chọn đó).
+      # SignalR | Expo | Both
+      Notification__Push__DefaultTransport: ${NOTIFICATION_PUSH_DEFAULT_TRANSPORT:-SignalR}
+      Notification__Push__CacheSeconds: ${NOTIFICATION_PUSH_CACHE_SECONDS:-30}
     ports:
       - "4008:8080"
     depends_on:
@@ -610,7 +838,8 @@ services:
       - /var/lib/docker:/var/lib/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "8081:8080"
+      # 8081 is Expo Metro's default port; keep cAdvisor available without blocking mobile dev.
+      - "8082:8080"
     networks: [solar-net]
     restart: unless-stopped
 

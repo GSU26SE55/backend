@@ -17,4 +17,13 @@ public class GetSiteAssetsQuery : PaginationRequest, IRequest<CommonResponse<Pag
 
     /// <summary>Filter theo status enum.</summary>
     public BatteryStatusEnum? Status { get; set; }
+
+    /// <summary>
+    /// Cột sort. Whitelist: serialNumber | batteryTypeName | status | installDate | lastSensorReadingAt.
+    /// Giá trị ngoài whitelist → createdAt (mặc định).
+    /// </summary>
+    public string? SortBy { get; set; }
+
+    /// <summary>Hướng sort: asc | desc. Mặc định desc.</summary>
+    public string? SortDir { get; set; }
 }

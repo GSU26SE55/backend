@@ -1,4 +1,5 @@
 #!/bin/ash
+# This script is bind-mounted into Alpine containers and must retain LF line endings.
 POSTGRES_HOST="${POSTGRES_HOST:-postgres}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_DB="${POSTGRES_DB:-postgres}"
@@ -40,5 +41,5 @@ create_database "${BATTERY_DB_NAME:-battery_db}"
 create_database "${TICKET_DB_NAME:-ticket_db}"
 create_database "${NOTIFICATION_DB_NAME:-notification_db}"
 create_database "${SMS_DB_NAME:-sms_db}"
-# Sprint audit #AUDIT-13/14 — read-store của AuditAggregatorService (logical DB chung postgres instance).
+# AuditAggregatorService read store (logical database in the shared Postgres instance).
 create_database "${AUDIT_AGGREGATOR_DB_NAME:-audit_aggregator_db}"

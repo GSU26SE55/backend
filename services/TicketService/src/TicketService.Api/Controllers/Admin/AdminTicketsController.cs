@@ -72,31 +72,6 @@ public class AdminTicketsController : ControllerBase
     }
 
     /// <summary>
-    /// Manager phê duyệt tính hợp lệ của ticket và xác định mức độ ưu tiên.
-    /// </summary>
-    /// <remarks>
-    /// - Chuyển trạng thái từ <c>Open</c> sang <c>Approved</c>.
-    /// - Priority được tính tự động từ Impact và Urgency.
-    /// </remarks>
-    /// <param name="id">ID của Ticket.</param>
-    /// <param name="command">Thông tin triage.</param>
-    /// <param name="ct">Token hủy request.</param>
-    /// <response code="200">Triage thành công.</response>
-    [HttpPost("{id}/triage")]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Triage(Guid id, [FromBody] TicketTriageCommand command, CancellationToken ct)
-    {
-        command.TicketId = id;
-        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.ManagerName = _currentUser.FullName ?? "Unknown";
-
-        var result = await _mediator.Send(command, ct);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
     /// Manager từ chối ticket ngay từ bước phân loại (Triage).
     /// </summary>
     /// <remarks>
@@ -115,18 +90,17 @@ public class AdminTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.ManagerName = _currentUser.FullName ?? "Unknown";
+        command.ManagerName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
 
     /// <summary>
-    /// Manager gán nhân viên xử lý cho ticket đã được phê duyệt.
+    /// Manager assigns staff, priority and an offset-aware work schedule.
     /// </summary>
     /// <remarks>
-    /// - Ticket phải ở trạng thái <c>Approved</c>.
-    /// - Chuyển trạng thái sang <c>Assigned</c>.
+    /// A current schedule enters <c>InProgress</c>; a future schedule enters <c>Pending</c>.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
     /// <param name="command">ID Staff được gán.</param>
@@ -141,8 +115,28 @@ public class AdminTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.ManagerName = _currentUser.FullName ?? "Unknown";
+        command.ManagerName = _currentUser.FullName!;
 
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Manager thay đổi priority của ticket đang xử lý; SLA không reset.</summary>
+    [HttpPost("{id:guid}/re-prioritize")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reprioritize(Guid id, [FromBody] TicketReprioritizeCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        if (!Guid.TryParse(_currentUser.UserId, out var managerId))
+        {
+            return Unauthorized();
+        }
+
+        command.ManagerId = managerId;
+        command.ManagerName = _currentUser.FullName;
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -165,7 +159,7 @@ public class AdminTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.ManagerName = _currentUser.FullName ?? "Unknown";
+        command.ManagerName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -175,8 +169,8 @@ public class AdminTicketsController : ControllerBase
     /// Manager phê duyệt kết quả giải quyết của Staff và cho phép đóng ticket.
     /// </summary>
     /// <remarks>
-    /// - Chuyển trạng thái sang <c>ClosedPendingRate</c>.
-    /// - Kích hoạt yêu cầu đánh giá cho khách hàng.
+    /// - Chuyển trạng thái sang <c>Closed</c>.
+    /// - Customer may rate or reopen during the seven-day grace period.
     /// </remarks>
     /// <param name="id">ID của Ticket.</param>
     /// <param name="comment">Nhận xét của Manager.</param>
@@ -193,7 +187,7 @@ public class AdminTicketsController : ControllerBase
             TicketId = id,
             ManagerComment = comment,
             ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId),
-            ManagerName = _currentUser.FullName ?? "Unknown"
+            ManagerName = _currentUser.FullName!
         };
 
         var result = await _mediator.Send(command, ct);
@@ -218,31 +212,7 @@ public class AdminTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.ManagerName = _currentUser.FullName ?? "Unknown";
-
-        var result = await _mediator.Send(command, ct);
-        return StatusCode(result.StatusCode, result);
-    }
-
-    /// <summary>
-    /// Manager ép buộc chuyển cấp xử lý ticket (Senior tier hoặc thêm helper) — dùng khi SLA breach hoặc Critical incident yêu cầu thêm nhân lực; không đổi Priority.
-    /// </summary>
-    /// <remarks>
-    /// Dùng trong trường hợp khẩn cấp hoặc điều phối lại nguồn lực.
-    /// </remarks>
-    /// <param name="id">ID của Ticket.</param>
-    /// <param name="command">Lý do ép chuyển cấp.</param>
-    /// <param name="ct">Token hủy request.</param>
-    /// <response code="200">Ép chuyển cấp thành công.</response>
-    [HttpPost("{id}/escalate")]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Escalate(Guid id, [FromBody] TicketEscalateForceCommand command, CancellationToken ct)
-    {
-        command.TicketId = id;
-        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
-        command.ManagerName = _currentUser.FullName ?? "Unknown";
+        command.ManagerName = _currentUser.FullName!;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -279,7 +249,82 @@ public class AdminTicketsController : ControllerBase
     {
         command.TicketId = id;
         command.UserId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.UserDisplayName = _currentUser.FullName!;
 
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Manager gộp ticket nghi trùng (B) vào ticket đích (A).
+    /// </summary>
+    /// <remarks>
+    /// - Ticket B (route id) đóng lại (<c>Closed</c>), link <c>MergedIntoTicketId</c> tới ticket A và ẩn khỏi queue.
+    /// - Body chứa <c>targetTicketId</c> (ticket A giữ lại).
+    /// - Human-in-the-loop: dùng khi Manager xác nhận cờ nghi trùng đúng là trùng thật.
+    /// </remarks>
+    /// <param name="id">ID của ticket bị gộp (B).</param>
+    /// <param name="command">Ticket đích (A).</param>
+    /// <param name="ct">Token hủy request.</param>
+    /// <response code="200">Gộp thành công.</response>
+    /// <response code="404">Không tìm thấy ticket nguồn hoặc đích.</response>
+    /// <response code="409">Ticket đã được gộp trước đó.</response>
+    [HttpPost("{id:guid}/merge")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Merge(Guid id, [FromBody] TicketMergeCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName!;
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Kích hoạt AI kiểm tra lại 1 ticket (chỉ ticket manual đang Skipped/Pending).</summary>
+    [HttpPost("{id:guid}/re-verify")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReVerify(Guid id, CancellationToken ct)
+    {
+        var command = new TicketReVerifyCommand
+        {
+            TicketId = id,
+            ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId)
+        };
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("{id:guid}/escalation-decision")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DecideEscalation(Guid id, [FromBody] TicketEscalationDecisionCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName!;
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    [HttpPost("{id:guid}/schedule")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> Schedule(Guid id, [FromBody] TicketScheduleCommand command, CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.ManagerId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ManagerName = _currentUser.FullName!;
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }

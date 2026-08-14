@@ -5,6 +5,7 @@ using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Chats;
 
@@ -28,19 +29,26 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
     {
         if (request.ChatIds.Count == 0)
         {
-            return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "Không có chat nào để mark-read.", Data = 0 };
+            return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "No chats to mark as read.", Data = 0 };
         }
 
         var ticket = await _uow.Tickets.GetAllAsync()
             .AsNoTracking()
             .Where(t => t.Id == request.TicketId && !t.IsDeleted)
-            .Select(t => new { t.CustomerId, t.AssignedStaffId })
+            .Select(t => new
+            {
+                t.CustomerId,
+                PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault(),
+                AssignedStaffIds = t.Assignments.Where(a => !a.IsDeleted).Select(a => a.StaffId).ToList(),
+                ParticipantUserIds = t.Participants.Where(p => !p.IsDeleted && p.RemovedAt == null).Select(p => p.UserId).ToList()
+            })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
-            return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 404, Message = "Không tìm thấy Ticket." };
+            return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 404, Message = "Ticket not found." };
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.AssignedStaffId, request.UserId, request.ActorRoles))
-            return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 403, Message = "Không có quyền truy cập ticket." };
+        var allowedUserIds = ticket.ParticipantUserIds.Concat(ticket.AssignedStaffIds).Distinct().ToList();
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles, allowedUserIds))
+            return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to access this ticket." };
 
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
 
@@ -57,7 +65,7 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
 
         if (validChatIds.Count == 0)
         {
-            return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "Không có chat hợp lệ để mark-read.", Data = 0 };
+            return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "No valid chats to mark as read.", Data = 0 };
         }
 
         var alreadyReadChatIds = await _uow.TicketChatReads.GetAllAsync()
@@ -80,7 +88,7 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Mark-read thành công.",
+            Message = "Marked as read successfully.",
             Data = enqueuedCount
         };
     }

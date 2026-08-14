@@ -26,7 +26,7 @@ public class Init2FACommand : IRequest<CommonResponse<TwoFactorSetupDto>>, IVali
         {
             response.IsSuccess = false;
             response.StatusCode = 401;
-            response.Message = "Phiên đăng nhập không hợp lệ.";
+            response.Message = "Invalid session.";
         }
         return Task.FromResult(response);
     }

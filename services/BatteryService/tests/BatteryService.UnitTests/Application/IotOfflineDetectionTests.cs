@@ -1,33 +1,94 @@
 using BatteryService.Application.Services;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
+using BatteryService.Infrastructure.Implements.Repositories;
+using BatteryService.Infrastructure.Persistence;
 using BatteryService.UnitTests.Helpers;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using SharedContracts.Events;
 using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
+using SharedInfrastructure.Persistence.Interceptors;
+using SharedInfrastructure.Services;
 
 namespace BatteryService.UnitTests.Application;
 
-public class IotOfflineDetectionTests
+/// <summary>
+/// Uses SQLite because the production transition intentionally relies on relational
+/// ExecuteUpdate for an atomic Active/LastSeen claim; an IQueryable mock cannot validate that.
+/// </summary>
+public sealed class IotOfflineDetectionTests : IDisposable
 {
+    private readonly SqliteConnection _connection = new("DataSource=:memory:");
+
+    public IotOfflineDetectionTests() => _connection.Open();
+
+    public void Dispose() => _connection.Dispose();
+
     private sealed class CapturingOutbox : IIntegrationEventOutboxWriter
     {
-        public readonly List<IntegrationEvent> Events = new();
-        public Task WriteAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default) where TEvent : IntegrationEvent
+        public readonly List<IntegrationEvent> Events = [];
+
+        public Task WriteAsync<TEvent>(
+            TEvent @event,
+            CancellationToken cancellationToken = default)
+            where TEvent : IntegrationEvent
         {
             Events.Add(@event);
             return Task.CompletedTask;
         }
     }
 
-    [Fact]
-    public async Task Detect_MarksStaleDeviceOffline_AndPublishesEvent()
+    private ApplicationDbContext CreateDb()
     {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+        var interceptor = new AuditableEntityInterceptor(
+            new CurrentUserService(new HttpContextAccessor()));
+        var db = new ApplicationDbContext(options, interceptor);
+        db.Database.EnsureCreated();
+        return db;
+    }
+
+    [Fact]
+    public async Task Detect_MarksStaleDeviceOffline_CreatesOneIncident_AndPublishesOnce()
+    {
+        await using var db = CreateDb();
         var siteId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var typeId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var deviceId = Guid.NewGuid();
-        var staleDevice = new IotDevice
+
+        db.Sites.Add(new Site
+        {
+            Id = siteId,
+            Name = "Site B",
+            CustomerId = customerId,
+            InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
+        db.BatteryTypes.Add(new BatteryType
+        {
+            Id = typeId,
+            Name = "LiFePO4",
+            Manufacturer = "Test",
+            NominalVoltage = 48,
+            NominalCapacityAh = 100
+        });
+        db.BatteryAssets.Add(new BatteryAsset
+        {
+            Id = assetId,
+            SerialNumber = "BAT-Z",
+            SiteId = siteId,
+            CustomerId = customerId,
+            BatteryTypeId = typeId,
+            InstallDate = DateTime.UtcNow.AddYears(-1)
+        });
+        db.IotDevices.Add(new IotDevice
         {
             Id = deviceId,
             DeviceCode = "ESP-OFF",
@@ -38,52 +99,107 @@ public class IotOfflineDetectionTests
             ApiKeyLastFour = "abcd",
             ApiKeyScopes = IotApiKeyScopeEnum.EdgeDeviceDefault,
             LastSeenAt = DateTime.UtcNow.AddMinutes(-10),
-            HeartbeatIntervalSeconds = 60,
-            Site = new Site { Id = siteId, Name = "Site B", CustomerId = Guid.NewGuid() }
-        };
-
-        var uow = new MockUnitOfWorkBuilder()
-            .WithIotDevices(staleDevice)
-            .WithBatteryAssets(new BatteryAsset { Id = assetId, SerialNumber = "BAT-Z", SiteId = siteId });
+            HeartbeatIntervalSeconds = 60
+        });
+        db.IotDeviceCalibrations.Add(new IotDeviceCalibration
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = deviceId,
+            BatteryAssetId = assetId,
+            Channel = "primary"
+        });
+        await db.SaveChangesAsync();
 
         var outbox = new CapturingOutbox();
-        var svc = new IotDeviceOfflineDetectionService(uow.Build(), outbox, new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), NullLogger<IotDeviceOfflineDetectionService>.Instance);
+        var service = new IotDeviceOfflineDetectionService(
+            new UnitOfWork(db),
+            outbox,
+            new Helpers.NoopIotMetricsRecorder(),
+            NullLogger<IotDeviceOfflineDetectionService>.Instance);
 
-        var result = await svc.DetectAsync(offlineAfterSeconds: 300, batchSize: 10, default);
+        var first = await service.DetectAsync(300, 10, default);
+        var second = await service.DetectAsync(300, 10, default);
 
-        result.Scanned.Should().Be(1);
-        result.MarkedOffline.Should().Be(1);
-        staleDevice.Status.Should().Be(IotDeviceStatusEnum.Offline);
+        first.Scanned.Should().Be(1);
+        first.MarkedOffline.Should().Be(1);
+        second.MarkedOffline.Should().Be(0);
+        db.ChangeTracker.Clear();
+        (await db.IotDevices.SingleAsync()).Status.Should().Be(IotDeviceStatusEnum.Offline);
+        var alert = await db.Alerts.SingleAsync();
+        alert.IotDeviceId.Should().Be(deviceId);
+        alert.BatteryAssetId.Should().BeNull("offline is one device-level incident, not one alert per battery");
+
         outbox.Events.Should().ContainSingle(e => e is IotDeviceWentOfflineEvent);
         var evt = (IotDeviceWentOfflineEvent)outbox.Events.Single();
-        evt.DeviceCode.Should().Be("ESP-OFF");
         evt.AffectedBatteryCount.Should().Be(1);
-        evt.AlertId.Should().NotBeNull();
+        evt.AlertId.Should().Be(alert.Id);
+        evt.CustomerId.Should().Be(customerId);
     }
 
     [Fact]
-    public async Task Detect_SkipsDeviceNotYetStale()
+    public async Task Detect_UsesHeartbeatCadenceAndSkipsFreshDevice()
     {
-        var deviceId = Guid.NewGuid();
-        var freshDevice = new IotDevice
+        await using var db = CreateDb();
+        var siteId = Guid.NewGuid();
+        db.Sites.Add(new Site
         {
-            Id = deviceId,
+            Id = siteId,
+            Name = "Fresh Site",
+            CustomerId = Guid.NewGuid(),
+            InstallDate = DateTime.UtcNow
+        });
+        db.IotDevices.Add(new IotDevice
+        {
+            Id = Guid.NewGuid(),
             DeviceCode = "ESP-FRESH",
             DisplayName = "test",
-            SiteId = Guid.NewGuid(),
+            SiteId = siteId,
             Status = IotDeviceStatusEnum.Active,
             ApiKeyHash = "h",
             ApiKeyLastFour = "abcd",
-            LastSeenAt = DateTime.UtcNow.AddSeconds(-30)
-        };
+            LastSeenAt = DateTime.UtcNow.AddMinutes(-6),
+            HeartbeatIntervalSeconds = 600
+        });
+        await db.SaveChangesAsync();
 
-        var uow = new MockUnitOfWorkBuilder().WithIotDevices(freshDevice);
         var outbox = new CapturingOutbox();
-        var svc = new IotDeviceOfflineDetectionService(uow.Build(), outbox, new BatteryService.UnitTests.Helpers.NoopIotMetricsRecorder(), NullLogger<IotDeviceOfflineDetectionService>.Instance);
+        var service = new IotDeviceOfflineDetectionService(
+            new UnitOfWork(db),
+            outbox,
+            new Helpers.NoopIotMetricsRecorder(),
+            NullLogger<IotDeviceOfflineDetectionService>.Instance);
 
-        var result = await svc.DetectAsync(offlineAfterSeconds: 300, batchSize: 10, default);
+        var result = await service.DetectAsync(300, 10, default);
+
         result.MarkedOffline.Should().Be(0);
         outbox.Events.Should().BeEmpty();
-        freshDevice.Status.Should().Be(IotDeviceStatusEnum.Active);
+        (await db.IotDevices.SingleAsync()).Status.Should().Be(IotDeviceStatusEnum.Active);
+    }
+
+    [Fact]
+    public async Task Detect_MarksPendingCommandsOlderThanSixtySecondsTimedOut()
+    {
+        var command = new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = Guid.NewGuid(),
+            CmdId = "stale-command",
+            Type = "set_bms_switch",
+            ParamsJson = "{}",
+            Status = IotDeviceCommandStatusEnum.Pending,
+            CreatedAt = DateTime.UtcNow.AddSeconds(-61)
+        };
+        var uow = new MockUnitOfWorkBuilder().WithIotDeviceCommands(command);
+        var service = new IotDeviceOfflineDetectionService(
+            uow.Build(),
+            new CapturingOutbox(),
+            new NoopIotMetricsRecorder(),
+            NullLogger<IotDeviceOfflineDetectionService>.Instance);
+
+        await service.DetectAsync(offlineAfterSeconds: 300, batchSize: 10, default);
+
+        command.Status.Should().Be(IotDeviceCommandStatusEnum.TimedOut);
+        command.AckError.Should().Contain("60");
+        command.AckedAt.Should().NotBeNull();
     }
 }

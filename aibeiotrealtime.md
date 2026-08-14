@@ -247,12 +247,34 @@ Response: { soh_percent, risk_level, priority, action_code,
 
 ## II.4 Tasks theo phase
 
+> ### ⚠️ CẬP NHẬT NS-27 (#667) — chốt 2026-07-16 theo Sprint Bonus F2 (Q12=A)
+>
+> Kế hoạch **BE-AI-P2/P3 + G5 dưới đây ĐÃ LỖI THỜI** ở chỗ lưu kết quả AI. Quyết định chốt (spec §30.3):
+>
+> 1. **Kết quả AI đi vào bảng RIÊNG, KHÔNG đi thẳng vào `Alerts`.** NS-26 (#666) đã tạo sẵn 2 entity
+>    `AnomalyClassification` (Classification Normal/Degrading/Failed + AnomalyScore + Confidence +
+>    ModelVersion + LatencyMs + **StaffFeedback** loop) và `SohPrediction` (PredictedSohPercent +
+>    InputWindow + PredictedAt + RawResponse) + migration + DbSet + repo.
+> 2. **KHÔNG thêm `AnomalyType.PredictedSohDegradation = 16`** — giá trị 16 đã cấp cho
+>    **`AnomalyTypeEnum.Undertemp`** (NS-25 #665). `SohPredictionBackgroundService` khi chạy phải
+>    **insert `AnomalyClassification` + `SohPrediction`** (dùng repo `_uow.AnomalyClassifications` /
+>    `_uow.SohPredictions` đã có), KHÔNG tạo Alert với AnomalyType mới. Nếu vẫn cần raise Alert cho
+>    Failed, tái dùng type hiện có (vd `SohDegradation=8`) — đừng mint type mới.
+> 3. **Feedback loop ĐÃ có endpoint:** `POST /api/v1/anomaly-classifications/{id}/feedback`
+>    (JWT Admin/Manager/Staff) ghi `StaffFeedback` (Correct/FalsePositive/FalseNegative) — phục vụ
+>    đánh giá precision/recall + xuất retrain (§30.12).
+> 4. **§30.3 phần đã làm ở NS-26:** persistence (2 bảng + migration + repo) + feedback endpoint.
+>    **Phần còn lại của Sprint AI:** `IAiPredictionClient` + background service **insert vào 2 bảng
+>    này** (thay vì vào Alerts) + endpoint đọc history/soh (§30.7) + `/api/v1/ai/feedback-stats`.
+>
+> → Đọc các dòng có ~~gạch ngang~~ bên dưới là bản CŨ; thực thi theo callout này.
+
 | Task | Nội dung |
 |---|---|
 | **BE-AI-P0** — chốt + deploy | Chốt feature A/B (Gap 1) · chạy ai-module local (`create_dummy_artifacts.py` → `uvicorn main:app --port 8000` → `/health`) · thêm ai-module vào `docker-compose.yml` + env `Ai__BaseUrl=http://ai-module:8000` |
 | **BE-AI-P1** — cây cầu HTTP | `IAiPredictionClient` (clone `OpenMeteoClient`: `AddHttpClient` + Polly + timeout 2s) · `AiPredictionResult` DTO (parse `risk.priority`, `classification`, `soh_percent`, `rul_cycles_estimate`, `anomaly_score`) · `AiOptions` (`Ai:Enabled/BaseUrl/TimeoutSeconds/MinReadings=30/IntervalMinutes=5`) |
-| **BE-AI-P2** — job sinh Alert | `SohPredictionBackgroundService` (clone `WeatherSyncBackgroundService`): mỗi pin Active gom 30 reading mới nhất → `/predict` → nếu `risk.priority ∈ {P1,P2}` hoặc `classification ∈ {Failed,Degrading}` → tạo Alert (**`AnomalyType.PredictedSohDegradation = 16`** — thêm mới để phân biệt với `SohDegradation=8` threshold) → dùng lại dedup `FindActiveAlertToMergeAsync` → Critical ghi Outbox. **try/catch, `Ai:Enabled=false`→no-op.** |
-| **BE-AI-P3** — lưu & expose | Entity `BatteryHealthSnapshot` (`BatteryAssetId, Time, PredictedSohPercent, Classification, RulCyclesEstimate, AnomalyScore, Confidence`) + migration · trường latest trên `BatteryAsset` · endpoint `GET /api/batteries/{id}/health` + `/health/history` |
+| **BE-AI-P2** — job sinh classification ~~+ Alert~~ | `SohPredictionBackgroundService` (clone `WeatherSyncBackgroundService`): mỗi pin Active gom 30 reading mới nhất → `/predict` → **[NS-27] insert `AnomalyClassification` + `SohPrediction`** (score/confidence/latency/modelVersion) qua `_uow.AnomalyClassifications`/`_uow.SohPredictions`. Nếu `classification ∈ {Failed,Degrading}` cần raise Alert → tái dùng `SohDegradation=8` (⚠️ ~~`PredictedSohDegradation=16`~~ — 16 nay là `Undertemp`, NS-25) + dedup `FindActiveAlertToMergeAsync`. **try/catch, `Ai:Enabled=false`→no-op.** |
+| **BE-AI-P3** — lưu & expose | ~~Entity `BatteryHealthSnapshot`~~ → **[NS-27] dùng `AnomalyClassification` + `SohPrediction` đã tạo ở NS-26** (không tạo entity mới) · trường latest trên `BatteryAsset` (tùy chọn) · endpoint `GET /api/battery-assets/{id}/anomaly-classifications` + `/soh-history` (§30.7) · feedback endpoint `POST /api/v1/anomaly-classifications/{id}/feedback` **ĐÃ có (NS-26)** |
 | **BE-AI-P4** — prescription (CONTRACT ĐÃ SỬA) | Khi Alert P1/P2 tạo → gọi `POST /prescribe/` với **`{battery_id, readings[30], enrich:true}`** (async, không block) → nhận **`prescription, action_steps[], ppe_required[], sop_references[], safety_warnings[]`** → đổ vào ticket. Mở rộng `BatteryAnomalyDetectedV2Event` thêm field nullable (`Prescription`, `ActionSteps`) → `CreateTicketFromAlertConsumer` điền ticket. Feature-flag `Ai:PrescriptionEnabled`; thiếu `ANTHROPIC_API_KEY` → `/prescribe` tự fallback rule-based (`enriched=false`) vẫn có `action_steps`. |
 | **BE-AI-P5** — hardening | Circuit breaker (Polly) + metric `ai_predict_latency_ms`/`errors_total` · demo `iot-simulator --scenario soh_degradation` → Alert P1 → Ticket SLA 4h → push · fallback: AI down → threshold rule vẫn chạy |
 
@@ -266,7 +288,7 @@ Response: { soh_percent, risk_level, priority, action_code,
 | **G2** | Contract `/prescribe` từng bị hiểu sai (nhận `prediction`/trả `ticket_description`) | P1 | **ĐÃ sửa** ở Task P4 (dùng `readings`+`enrich`, trả `action_steps`). Khi code bám đúng II.2. |
 | **G3** | `SensorReading` thiếu `current_load`/`voltage_load`; scaler 6-feature → 3-feature **422** | P0 | Chốt Gap 1: **(A) AI retrain 3-feature** *(khuyến nghị)* hoặc **(B) backend bù cột**. Verify `scaler.n_features_in_` trước. |
 | **G4** | AI chỉ mount `/health` `/predict` `/prescribe/`. `/predict-long`, `/predict-rul`, `/predict-forecast` **chưa có router** + thiếu weights (`soh_mamba_long_v2.0.pth`, `scaler_long.pkl`, forecast) | P2 (không chặn) | **`/predict` đã trả `rul_cycles_estimate`** → đủ cho RUL cơ bản. Chỉ làm long/rul/forecast nếu cần độ chính xác cao: AI commit weights + viết router. |
-| **G5** | `AnomalyType.SohDegradation=8` đã tồn tại (threshold) | nhỏ | Thêm **`PredictedSohDegradation=16`** để phân biệt nguồn AI vs threshold (đừng tái dùng 8). |
+| **G5** ~~(cũ)~~ | `AnomalyType.SohDegradation=8` đã tồn tại (threshold) | nhỏ | **[NS-27 override]** ~~Thêm `PredictedSohDegradation=16`~~ — **KHÔNG** (16 nay là `Undertemp`, NS-25). Kết quả AI đi vào **`AnomalyClassification.Classification`** (bảng riêng, NS-26), KHÔNG vào `Alerts.AnomalyType`. Phân biệt nguồn AI vs threshold bằng bảng riêng, không bằng anomaly type mới. |
 | **G6** | Version `SCALER=1.1` vs `MODEL=1.2` | không phải bug | **Cố ý** — `load_models()` assert scaler=1.1. Đừng "sửa". |
 | **G7** | ai-module chưa vào `docker-compose.yml`, backend chưa có env `Ai__*` | P0 | Làm ở Task P0 (đã nằm trong plan). |
 
@@ -314,9 +336,9 @@ Response: { soh_percent, risk_level, priority, action_code,
 | P1 | `Application/Interfaces/IAiPredictionClient.cs` + `DTOs/AiPredictionResult.cs` | create |
 | P1 | `Infrastructure/Implements/Services/AiPredictionClient.cs` | create (copy `OpenMeteoClient`) |
 | P1 | `Application/Options/AiOptions.cs` + appsettings · DI `AddHttpClient` | create/modify |
-| P2 | `Infrastructure/BackgroundServices/SohPredictionBackgroundService.cs` | create (copy `WeatherSync`) |
-| P2 | `Domain/Enums/AnomalyTypeEnum.cs` thêm `PredictedSohDegradation=16` [G5] | modify |
-| P3 | `Domain/Entities/BatteryHealthSnapshot.cs` + migration + endpoint `/health` | create |
+| P2 | `Infrastructure/BackgroundServices/SohPredictionBackgroundService.cs` — insert `AnomalyClassification`+`SohPrediction` [NS-27] | create (copy `WeatherSync`) |
+| ~~P2~~ | ~~`AnomalyTypeEnum.cs` thêm `PredictedSohDegradation=16`~~ — **BỎ** (16=`Undertemp` NS-25; kết quả AI vào bảng riêng NS-26) | ~~modify~~ |
+| ~~P3~~ | ~~`BatteryHealthSnapshot.cs`~~ — **BỎ**, dùng `AnomalyClassification`+`SohPrediction` (NS-26 đã tạo entity+migration+repo+feedback endpoint) | dùng lại NS-26 |
 | P4 | `Infrastructure/.../AiPrescriptionClient.cs` (`POST /prescribe/`, `readings`+`enrich`) | create |
 | P4 | `SharedContracts/Events/BatteryAnomalyDetectedV2Event.cs` thêm `Prescription`/`ActionSteps` nullable · `CreateTicketFromAlertConsumer` điền ticket | modify |
 | (Gap 1) | **Chốt A/B** — AI retrain 3-feature *hoặc* `SensorReading` + handler bù cột [G3] | quyết định |

@@ -25,16 +25,16 @@ public class MarkNotificationReadCommand : IRequest<NotificationActionResponse>,
         var response = new NotificationActionResponse();
 
         if (Id == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Id notification không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Invalid notification Id." });
 
         if (UserId == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Không xác định được user." });
+            response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Unable to determine the current user." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

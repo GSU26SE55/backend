@@ -42,7 +42,7 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
     {
         var (accountId, jti, expiresAtUtc, error) = _jwtHelper.ValidateResetTokenDetailed(request.ResetToken);
         if (error != null || !accountId.HasValue)
-            return Fail(401, error ?? "Reset token không hợp lệ.");
+            return Fail(401, error ?? "Invalid reset token.");
 
         // #AUTH-06: enforce single-use bằng Redis SET NX.
         // TTL = thời gian còn lại của token để key tự dọn sau khi token expire.
@@ -54,18 +54,18 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
                 ? expiresAtUtc.Value - DateTime.UtcNow
                 : TimeSpan.FromMinutes(15);
             if (ttl <= TimeSpan.Zero)
-                return Fail(401, "Reset token đã hết hạn.");
+                return Fail(401, "Reset token has expired.");
 
             var acquired = await db.StringSetAsync(key, "1", ttl, When.NotExists);
             if (!acquired)
-                return Fail(401, "Reset token đã được sử dụng. Vui lòng yêu cầu OTP mới.");
+                return Fail(401, "Reset token has already been used. Please request a new OTP.");
         }
 
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
             .FirstOrDefaultAsync(a => a.Id == accountId.Value && !a.IsDeleted, cancellationToken);
         if (account == null)
-            return Fail(404, "Tài khoản không tồn tại.");
+            return Fail(404, "Account does not exist.");
 
         account.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         account.OtpCode = null;
@@ -103,7 +103,7 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.",
+            Message = "Password reset successful. Please log in again.",
             Data = account.Id.ToString()
         };
     }

@@ -1,0 +1,53 @@
+{
+  "state": "ĐÃ KẾT NỐI",
+  "connectionId": "FVOtPRVXrE38v2OpZa_PnQ",
+  "connected": true,
+  "createdCount": 2,
+  "unreadEvents": 2,
+  "unreadCount": 4,
+  "events": [
+    {
+      "type": "NotificationCreated",
+      "at": 1785421094733,
+      "payload": {
+        "id": "b863c3d7-820d-4f55-83a8-9d2ac6ddfaea",
+        "type": "SlaWarning",
+        "channel": "InApp",
+        "status": "Sent",
+        "title": "⏰ Cảnh báo SLA sắp hết hạn",
+        "body": "Ticket đã dùng 0% thời gian SLA (hạn 01/01 00:00). Cần xử lý sớm.",
+        "payloadJson": "{\"screen\": \"TicketDetail\", \"staffId\": \"32b0cdf7-1b8a-4487-940e-9602b64bd90b\", \"ticketId\": \"dd3884b3-384d-4cfe-9751-d005f01b58cb\", \"warningAt\": \"0001-01-01T00:00:00\", \"percentage\": 0}",
+        "entityType": "Ticket",
+        "entityId": "dd3884b3-384d-4cfe-9751-d005f01b58cb",
+        "createdAt": "2026-07-30T14:18:10.970689Z"
+      }
+    },
+    {
+      "type": "UnreadCountChanged",
+      "at": 1785421094754,
+      "payload": 4
+    },
+    {
+      "type": "NotificationCreated",
+      "at": 1785421094755,
+      "payload": {
+        "id": "7070a24c-4ee3-4160-bd69-1bf130af3802",
+        "type": "TicketCreated",
+        "channel": "InApp",
+        "status": "Sent",
+        "title": "Ticket mới: TK-DEMO-2 (ưu tiên P2)",
+        "body": "Ticket TK-DEMO-2 (ưu tiên P2) vừa được tạo và đang chờ phân công.",
+        "payloadJson": "{\"code\": \"TK-DEMO-2\", \"screen\": \"TicketDetail\", \"priority\": \"P2\", \"ticketId\": \"0be1631b-bcbb-4cae-8ace-ad77a2f7a6d3\", \"customerId\": \"e2e46e9c-8926-436a-95da-9568de096214\"}",
+        "entityType": "Ticket",
+        "entityId": "0be1631b-bcbb-4cae-8ace-ad77a2f7a6d3",
+        "createdAt": "2026-07-30T14:18:14.06505Z"
+      }
+    },
+    {
+      "type": "UnreadCountChanged",
+      "at": 1785421094755,
+      "payload": 4
+    }
+  ],
+  "logText": "[14:17:59.064] Bắt đầu — token có (1347 ký tự)\n[14:17:59.163] ✅ Kết nối thành công — connectionId=FVOtPRVXrE38v2OpZa_PnQ\n[14:18:14.733] ◀ NotificationCreated\n{\n  \"id\": \"b863c3d7-820d-4f55-83a8-9d2ac6ddfaea\",\n  \"type\": \"SlaWarning\",\n  \"channel\": \"InApp\",\n  \"status\": \"Sent\",\n  \"title\": \"⏰ Cảnh báo SLA sắp hết hạn\",\n  \"body\": \"Ticket đã dùng 0% thời gian SLA (hạn 01/01 00:00). Cần xử lý sớm.\",\n  \"payloadJson\": \"{\\\"screen\\\": \\\"TicketDetail\\\", \\\"staffId\\\": \\\"32b0cdf7-1b8a-4487-940e-9602b64bd90b\\\", \\\"ticketId\\\": \\\"dd3884b3-384d-4cfe-9751-d005f01b58cb\\\", \\\"warningAt\\\": \\\"0001-01-01T00:00:00\\\", \\\"percentage\\\": 0}\",\n  \"entityType\": \"Ticket\",\n  \"entityId\": \"dd3884b3-384d-4cfe-9751-d005f01b58cb\",\n  \"createdAt\": \"2026-07-30T14:18:10.970689Z\"\n}\n[14:18:14.754] ◀ UnreadCountChanged = 4\n[14:18:14.755] ◀ NotificationCreated\n{\n  \"id\": \"7070a24c-4ee3-4160-bd69-1bf130af3802\",\n  \"type\": \"TicketCreated\",\n  \"channel\": \"InApp\",\n  \"status\": \"Sent\",\n  \"title\": \"Ticket mới: TK-DEMO-2 (ưu tiên P2)\",\n  \"body\": \"Ticket TK-DEMO-2 (ưu tiên P2) vừa được tạo và đang chờ phân công.\",\n  \"payloadJson\": \"{\\\"code\\\": \\\"TK-DEMO-2\\\", \\\"screen\\\": \\\"TicketDetail\\\", \\\"priority\\\": \\\"P2\\\", \\\"ticketId\\\": \\\"0be1631b-bcbb-4cae-8ace-ad77a2f7a6d3\\\", \\\"customerId\\\": \\\"e2e46e9c-8926-436a-95da-9568de096214\\\"}\",\n  \"entityType\": \"Ticket\",\n  \"entityId\": \"0be1631b-bcbb-4cae-8ace-ad77a2f7a6d3\",\n  \"createdAt\": \"2026-07-30T14:18:14.06505Z\"\n}\n[14:18:14.755] ◀ UnreadCountChanged = 4\n"
+}

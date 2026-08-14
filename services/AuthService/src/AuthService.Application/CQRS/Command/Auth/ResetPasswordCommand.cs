@@ -15,15 +15,15 @@ public class ResetPasswordCommand : IRequest<CommonResponse<string>>, IValidatab
         var response = new CommonResponse<string>();
 
         if (string.IsNullOrWhiteSpace(ResetToken))
-            response.ListErrors.Add(new Errors { Field = "ResetToken", Detail = "Reset token không được để trống." });
+            response.ListErrors.Add(new Errors { Field = "ResetToken", Detail = "Reset token is required." });
 
-        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, NewPassword, nameof(NewPassword), "Mật khẩu mới");
+        PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, NewPassword, nameof(NewPassword), "New password");
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
         return Task.FromResult(response);
     }

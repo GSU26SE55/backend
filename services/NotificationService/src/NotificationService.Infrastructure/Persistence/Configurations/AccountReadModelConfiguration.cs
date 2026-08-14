@@ -18,6 +18,8 @@ public class AccountReadModelConfiguration : IEntityTypeConfiguration<AccountRea
         builder.Property(x => x.Role).HasColumnName("role").HasMaxLength(64).IsRequired();
         builder.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
         builder.Property(x => x.LastSyncedAtUtc).HasColumnName("last_synced_at_utc").IsRequired();
+        // Nullable: dòng đã tồn tại trước 02/08/2026 chưa từng đi qua snapshot nào.
+        builder.Property(x => x.LastSnapshotAtUtc).HasColumnName("last_snapshot_at_utc");
 
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.CreatedBy).HasColumnName("created_by");

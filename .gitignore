@@ -7,7 +7,12 @@
 .env.Production
 .env.Staging
 .env.local
+docker-compose.override.yml
 # COMMIT: .env.Docker.example (template, không có secret)
+
+# Production deployment secrets/image locks stay on the VPS, never in Git.
+deploy/production/*.env
+!deploy/production/*.env.example
 
 # ---------- .NET build outputs ----------
 bin/
@@ -30,9 +35,7 @@ coverage/
 # ---------- Gemini & Agents (Local only) ----------
 .gemini/
 AGENTS.md
-*.skill
 .claude.local/
-.claude/
 coverage.runsettings
 # ---------- Logs ----------
 *.log
@@ -46,3 +49,18 @@ deploy/helm/*/charts/
 
 # ---------- CodeGraph index (local code intelligence) ----------
 .codegraph/
+
+# ---------- Local Codex/agent scratch artifacts ----------
+# Hot-patch publish outputs are generated locally and must never enter source control.
+.tmp-codex/
+
+# ---------- Playwright MCP artifacts (local only) ----------
+.playwright-mcp/
+
+# loop-engine — sinh tự động, không commit
+.loop/out/
+.loop/cache/
+.loop/runs/
+.loop/guard.json
+.loop/last-run.json
+.loop/dispute.md

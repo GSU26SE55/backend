@@ -35,7 +35,7 @@ public class ClaimPendingMessagesCommandHandler
             {
                 IsSuccess = false,
                 StatusCode = 403,
-                Message = "Device không tồn tại hoặc đã bị thu hồi.",
+                Message = "Device not found or has been revoked.",
                 Data = new List<PendingSmsDto>()
             };
 

@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Command.Participants;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Participants;
@@ -15,18 +16,21 @@ namespace TicketService.Application.CQRS.Handler.Participants;
 public class ParticipantRemoveCommandHandler : IRequestHandler<ParticipantRemoveCommand, ParticipantActionResponse>
 {
     private readonly ITicketUnitOfWork _uow;
-    private readonly IMessageProducerService _producer;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly IActivityLogger _activityLogger;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
     private readonly ILogger<ParticipantRemoveCommandHandler> _logger;
 
     public ParticipantRemoveCommandHandler(
         ITicketUnitOfWork uow,
-        IMessageProducerService producer,
+        IIntegrationEventOutboxWriter producer,
+        IActivityLogger activityLogger,
         ITicketChatRealtimeNotifier realtimeNotifier,
         ILogger<ParticipantRemoveCommandHandler> logger)
     {
         _uow = uow;
-        _producer = producer;
+        _outboxWriter = producer;
+        _activityLogger = activityLogger;
         _realtimeNotifier = realtimeNotifier;
         _logger = logger;
     }
@@ -38,26 +42,26 @@ public class ParticipantRemoveCommandHandler : IRequestHandler<ParticipantRemove
             .AnyAsync(t => t.Id == request.TicketId && !t.IsDeleted, ct);
 
         if (!ticketExists)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         var participant = await _uow.TicketParticipants.GetAllAsync()
             .FirstOrDefaultAsync(p => p.TicketId == request.TicketId && p.UserId == request.UserId
                 && p.RemovedAt == null && !p.IsDeleted, ct);
 
         if (participant == null)
-            return Fail(404, "Không tìm thấy participant active của ticket.");
+            return Fail(404, "Active participant of the ticket not found.");
 
         var isManagerOrAdmin = request.ActorRole == ActorRoleEnum.Manager || request.ActorRole == ActorRoleEnum.Admin;
         if (!isManagerOrAdmin)
-            return Fail(403, "Không có quyền xóa participant của ticket này.");
+            return Fail(403, "You do not have permission to remove a participant from this ticket.");
 
         if (participant.ParticipantType == ParticipantTypeEnum.Owner)
         {
             if (request.ActorRole != ActorRoleEnum.Admin)
-                return Fail(403, "Chỉ Admin mới có quyền xóa Owner của ticket.");
+                return Fail(403, "Only Admin has permission to remove the ticket Owner.");
 
             if (string.IsNullOrWhiteSpace(request.RemoveReason))
-                return Fail(400, "Bắt buộc nhập lý do khi xóa Owner của ticket.");
+                return Fail(400, "A reason is required when removing the ticket Owner.");
 
             _logger.LogCritical(
                 "[ParticipantRemove] Admin {ActorUserId} removed Owner {OwnerUserId} from ticket {TicketId}. Reason: {Reason}",
@@ -69,13 +73,22 @@ public class ParticipantRemoveCommandHandler : IRequestHandler<ParticipantRemove
         participant.RemoveReason = request.RemoveReason;
         _uow.TicketParticipants.UpdateAsync(participant);
 
-        await _uow.SaveChangesAsync(ct);
-
-        await _producer.PublishAsync(new ParticipantRemovedEvent(
+        await _outboxWriter.WriteAsync(new ParticipantRemovedEvent(
             request.TicketId,
             participant.UserId,
             request.ActorUserId,
             request.RemoveReason ?? string.Empty), ct);
+
+        await _activityLogger.LogAsync(
+            request.TicketId,
+            request.ActorUserId,
+            request.ActorRole,
+            request.ActorName,
+            ActivityActionEnum.ParticipantRemoved,
+            oldValue: participant.ParticipantType.ToString(),
+            newValue: $"User {participant.UserId} removed from ticket.",
+            reason: request.RemoveReason);
+        await _uow.SaveChangesAsync(ct);
 
         try
         {
@@ -90,7 +103,7 @@ public class ParticipantRemoveCommandHandler : IRequestHandler<ParticipantRemove
         {
             IsSuccess = true,
             StatusCode = 200,
-            Message = "Xóa participant thành công."
+            Message = "Participant removed successfully."
         };
     }
 

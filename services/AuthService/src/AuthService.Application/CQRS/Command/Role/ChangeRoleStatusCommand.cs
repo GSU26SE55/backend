@@ -18,16 +18,16 @@ public class ChangeRoleStatusCommand : IRequest<RoleActionResponse>, IValidatabl
         var response = new RoleActionResponse();
 
         if (Id == Guid.Empty)
-            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Id role không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Id", Detail = "Invalid role Id." });
 
         if (!Enum.IsDefined(typeof(RoleStatusEnum), Status))
-            response.ListErrors.Add(new Errors { Field = "Status", Detail = "Trạng thái không hợp lệ." });
+            response.ListErrors.Add(new Errors { Field = "Status", Detail = "Invalid status." });
 
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Dữ liệu đầu vào không hợp lệ.";
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

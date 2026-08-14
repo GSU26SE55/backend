@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using SharedInfrastructure.RateLimiting;
 
 namespace AuthService.UnitTests.Infrastructure.RateLimiting;
 
@@ -25,6 +27,10 @@ public class RateLimitingExtensionsTests
                 .ConfigureServices(s =>
                 {
                     s.AddLogging();
+                    // Ráp GIỐNG production: hạn mức nền giữ OnRejected + RejectionStatusCode,
+                    // policy OTP chỉ khai giới hạn riêng. Thiếu dòng dưới thì response 429 rơi về
+                    // mặc định 503 của framework — đúng như lần đầu chạy sau khi gom OnRejected về một chỗ.
+                    s.AddStandardRateLimiting(new ConfigurationBuilder().Build());
                     s.AddOtpRateLimiting(window: TimeSpan.FromHours(1));
                     s.AddRouting();
                 })
@@ -61,9 +67,12 @@ public class RateLimitingExtensionsTests
         // Request thứ 6 → 429
         var rejected = await client.PostAsync("/test", new StringContent(""));
         rejected.StatusCode.Should().Be(System.Net.HttpStatusCode.TooManyRequests);
-        var body = await rejected.Content.ReadAsStringAsync();
-        body.Should().Contain("isSuccess").And.Contain("false");
-        body.Should().Contain("Quá nhiều yêu cầu");
+
+        var body = System.Text.Json.JsonDocument.Parse(await rejected.Content.ReadAsStringAsync()).RootElement;
+        body.GetProperty("isSuccess").GetBoolean().Should().BeFalse();
+        body.GetProperty("statusCode").GetInt32().Should().Be(429);
+        body.GetProperty("message").GetString().Should().Be("Too many requests. Please try again later.");
+        body.GetProperty("data").GetProperty("errorCode").GetString().Should().Be("RATE_LIMITED");
     }
 
     [Fact]

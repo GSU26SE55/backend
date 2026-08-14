@@ -27,7 +27,7 @@ public class GetMySessionsQueryHandler : IRequestHandler<GetMySessionsQuery, Ses
             {
                 IsSuccess = false,
                 StatusCode = 401,
-                Message = "Chưa đăng nhập."
+                Message = "Not logged in."
             };
         }
 

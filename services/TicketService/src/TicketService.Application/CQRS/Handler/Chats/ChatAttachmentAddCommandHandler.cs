@@ -26,31 +26,31 @@ public class ChatAttachmentAddCommandHandler : IRequestHandler<ChatAttachmentAdd
     {
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted || chat.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
 
         if (ticket.Status == TicketStatusEnum.Closed)
-            return Fail(400, "Không thể thêm đính kèm khi ticket đã đóng.");
+            return Fail(400, "Cannot add attachment because the ticket is closed.");
 
         var isAuthor = chat.AuthorUserId == request.UserId;
         var isManagerOrAdmin = request.UserRole == ActorRoleEnum.Manager || request.UserRole == ActorRoleEnum.Admin;
         if (!isAuthor && !isManagerOrAdmin)
-            return Fail(403, "Không có quyền thêm đính kèm vào bình luận này.");
+            return Fail(403, "You do not have permission to add attachments to this comment.");
 
         var currentCount = await _uow.TicketAttachments.GetAllAsync()
             .AsNoTracking()
             .CountAsync(a => a.ChatId == chat.Id && !a.IsDeleted, ct);
         if (currentCount >= _chatOptions.MaxAttachmentsPerChat)
-            return Fail(400, $"Đã đạt giới hạn tối đa {_chatOptions.MaxAttachmentsPerChat} đính kèm/bình luận.");
+            return Fail(400, $"Reached the maximum limit of {_chatOptions.MaxAttachmentsPerChat} attachments per comment.");
 
         if (request.SizeBytes > _chatOptions.MaxAttachmentSizeBytes)
-            return Fail(400, $"Kích thước file vượt giới hạn {_chatOptions.MaxAttachmentSizeBytes / 1024 / 1024}MB.");
+            return Fail(400, $"File size exceeds the limit of {_chatOptions.MaxAttachmentSizeBytes / 1024 / 1024}MB.");
 
         if (!IsMimeTypeAllowed(request.ContentType, _chatOptions.AllowedAttachmentMimeTypes))
-            return Fail(400, $"Loại file '{request.ContentType}' không được hỗ trợ.");
+            return Fail(400, $"File type '{request.ContentType}' is not supported.");
 
         var attachment = new TicketAttachment
         {
@@ -66,7 +66,8 @@ public class ChatAttachmentAddCommandHandler : IRequestHandler<ChatAttachmentAdd
             SizeBytes = request.SizeBytes,
             Source = request.UserRole == ActorRoleEnum.Customer
                 ? AttachmentSourceEnum.CustomerSubmission
-                : AttachmentSourceEnum.StaffWork
+                : AttachmentSourceEnum.StaffWork,
+            Url = request.Url
         };
 
         await _uow.TicketAttachments.AddAsync(attachment);
@@ -110,6 +111,7 @@ public class ChatAttachmentAddCommandHandler : IRequestHandler<ChatAttachmentAdd
         SizeBytes = a.SizeBytes,
         Source = a.Source,
         ThumbnailUrl = a.ThumbnailUrl,
+        Url = a.Url,
         IsInline = a.IsInline,
         DownloadCount = a.DownloadCount,
         VirusScanStatus = a.VirusScanStatus,

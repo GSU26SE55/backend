@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events.Chats;
@@ -22,6 +23,7 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly IChatRecipientResolver _recipientResolver;
     private readonly ILogger<ChatReplyCommandHandler> _logger;
 
     public ChatReplyCommandHandler(
@@ -29,12 +31,14 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter outboxWriter,
         ITicketChatRealtimeNotifier realtimeNotifier,
+        IChatRecipientResolver recipientResolver,
         ILogger<ChatReplyCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _outboxWriter = outboxWriter;
         _realtimeNotifier = realtimeNotifier;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
@@ -42,20 +46,28 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
     {
         var parent = await _uow.TicketChats.GetByIdAsync(request.ParentChatId);
         if (parent == null || parent.IsDeleted)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (parent.TicketId != request.TicketId)
-            return Fail(404, "Không tìm thấy bình luận.");
+            return Fail(404, "Comment not found.");
 
         if (parent.ParentChatId != null)
-            return Fail(400, "Không thể reply lồng cấp 2.");
+            return Fail(400, "Cannot reply to a second-level nested comment.");
 
         var ticket = await _uow.Tickets.GetByIdAsync(request.TicketId);
         if (ticket == null)
-            return Fail(404, "Không tìm thấy Ticket.");
+            return Fail(404, "Ticket not found.");
+
+        if (ticket.PrimaryHandlerStaffId == null && _uow.TicketAssignments != null)
+        {
+            ticket.PrimaryHandlerStaffId = await _uow.TicketAssignments.GetAllAsync()
+                .Where(a => a.TicketId == ticket.Id && !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
+                .Select(a => (Guid?)a.StaffId)
+                .FirstOrDefaultAsync(ct);
+        }
 
         if (ticket.Status == TicketStatusEnum.Closed)
-            return Fail(400, "Không thể trả lời bình luận khi ticket đã đóng.");
+            return Fail(400, "Cannot reply to a comment when the ticket is closed.");
 
         var reply = new TicketChat
         {
@@ -71,34 +83,43 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
             ThreadRootId = parent.ThreadRootId ?? parent.Id
         };
 
-        await _uow.TicketChats.AddAsync(reply);
+        await _uow.ExecuteInTransactionAsync(async transactionCt =>
+        {
+            await _uow.TicketChats.AddAsync(reply);
 
-        parent.ReplyCount += 1;
-        _uow.TicketChats.UpdateAsync(parent);
+            var affectedRows = await _uow.IncrementChatReplyCountAsync(parent.Id, transactionCt);
+            if (affectedRows == 0)
+            {
+                throw new DbUpdateConcurrencyException(
+                    "The original message was changed or deleted while replying.");
+            }
 
-        await _activityLogger.LogAsync(
-            ticket.Id,
-            request.UserId,
-            request.UserRole,
-            request.UserDisplayName,
-            ActivityActionEnum.ChatReplied,
-            null,
-            request.IsInternal ? "[Nội bộ]" : "[Công khai]",
-            $"Đã trả lời tin nhắn chat: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
+            await _activityLogger.LogAsync(
+                ticket.Id,
+                request.UserId,
+                request.UserRole,
+                request.UserDisplayName,
+                ActivityActionEnum.ChatReplied,
+                null,
+                request.IsInternal ? "[Internal]" : "[Public]",
+                $"Replied to chat message: {request.Body[..Math.Min(request.Body.Length, 50)]}...");
 
-        await _outboxWriter.WriteAsync(new ChatCreatedEvent(
-            reply.Id,
-            reply.TicketId,
-            reply.AuthorUserId,
-            (int)reply.AuthorRole,
-            reply.AuthorDisplayName,
-            reply.Body,
-            reply.IsInternal,
-            reply.AttachmentFileIds,
-            ticket.CustomerId,
-            ticket.AssignedStaffId), ct);
+            var recipientIds = await _recipientResolver.ResolveAsync(
+                ticket.Id, ticket.CustomerId, reply.AuthorUserId, reply.IsInternal, transactionCt);
 
-        await _uow.SaveChangesAsync(ct);
+            await _outboxWriter.WriteAsync(new ChatCreatedEvent(
+                reply.Id,
+                reply.TicketId,
+                reply.AuthorUserId,
+                (int)reply.AuthorRole,
+                reply.AuthorDisplayName,
+                reply.Body,
+                reply.IsInternal,
+                reply.AttachmentFileIds,
+                ticket.CustomerId,
+                ticket.PrimaryHandlerStaffId,
+                recipientIds), transactionCt);
+        }, ct);
 
         try
         {
@@ -125,7 +146,7 @@ public class ChatReplyCommandHandler : IRequestHandler<ChatReplyCommand, TicketA
         {
             IsSuccess = true,
             StatusCode = 201,
-            Message = "Trả lời bình luận thành công.",
+            Message = "Reply added successfully.",
             Data = new TicketActionDTO
             {
                 Id = reply.Id.ToString(),

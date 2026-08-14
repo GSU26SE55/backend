@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedInfrastructure.Extensions;
+using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Query.Chats;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -20,20 +22,26 @@ public class
 
     public async Task<MyMentionsResponse> Handle(MyMentionsQuery request, CancellationToken ct)
     {
+        var canViewInternal = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
+        var activeParticipants = _uow.TicketParticipants.GetAllAsync()
+            .AsNoTracking()
+            .Where(p => p.UserId == request.ActorUserId && p.RemovedAt == null && !p.IsDeleted);
+
         var query = _uow.TicketChatMentions.GetAllAsync()
             .AsNoTracking()
             .Include(m => m.Chat)
-            .Where(m => m.MentionedUserId == request.ActorUserId && !m.IsDeleted);
+            .Where(m => m.MentionedUserId == request.ActorUserId
+                && !m.IsDeleted
+                && !m.Chat.IsDeleted
+                && activeParticipants.Any(p => p.TicketId == m.Chat.TicketId)
+                && (!m.Chat.IsInternal || canViewInternal));
 
-        if (request.UnreadOnly)
-            query = query.Where(m => !m.IsAcknowledged);
-
-        var total = await query.CountAsync(ct);
-        var rawMentions = await query
+        // Phân trang trên entity: sau đó còn nạp dữ liệu con (mention/reaction) theo lô rồi mới dựng DTO.
+        var page = await query
             .OrderByDescending(m => m.CreatedAt)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToListAsync(ct);
+            .ThenBy(m => m.Id) // tie-breaker cố định — pagination ổn định
+            .ToPagedEntityListAsync(request.PageNumber, request.PageSize, ct);
+        var rawMentions = page.Items;
 
         var items = rawMentions.Select(m => new TicketChatMentionDTO
         {
@@ -43,8 +51,7 @@ public class
             MentionedUserId = m.MentionedUserId.ToString(),
             MentionedUserRole = m.MentionedUserRole,
             MentionedDisplayName = m.MentionedDisplayName,
-            IsAcknowledged = m.IsAcknowledged,
-            AcknowledgedAt = m.AcknowledgedAt,
+            IsInternal = m.Chat.IsInternal,
             CreatedAt = m.CreatedAt
         }).ToList();
 
@@ -52,13 +59,7 @@ public class
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = new PaginationResponse<TicketChatMentionDTO>
-            {
-                Items = items,
-                TotalItems = total,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
-            }
+            Data = page.WithItems(items)
         };
     }
 }

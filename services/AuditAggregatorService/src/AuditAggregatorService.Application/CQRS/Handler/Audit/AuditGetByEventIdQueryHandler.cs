@@ -23,7 +23,7 @@ public class AuditGetByEventIdQueryHandler
             {
                 IsSuccess = false,
                 StatusCode = 404,
-                Message = "Không tìm thấy audit event.",
+                Message = "Audit event not found.",
             };
 
         return new CommonResponse<AuditAggregateDto>

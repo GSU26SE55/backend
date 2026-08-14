@@ -19,7 +19,7 @@ public static class SwaggerExtensions
             // 2. CẤU HÌNH NÚT AUTHORIZE (Ổ KHÓA) - Dùng chung cho tất cả Service
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
-                Description = "Nhập token JWT vào bên dưới (Không cần gõ 'Bearer '):",
+                Description = "Enter your JWT token below (no need to type 'Bearer '):",
                 Name = "Authorization",
                 In = ParameterLocation.Header,
                 Type = SecuritySchemeType.Http,
