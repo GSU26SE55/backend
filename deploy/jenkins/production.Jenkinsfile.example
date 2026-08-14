@@ -31,7 +31,6 @@ pipeline {
         REPOSITORY_URL = 'https://github.com/GSU26SE55/backend.git'
         REGISTRY_HOST = 'ghcr.io'
         REGISTRY_NAMESPACE = 'ghcr.io/gsu26se55'
-        ALERT_RELAY_UPSTREAM = 'benjojo/alertmanager-discord@sha256:7d27cd8494b269fe592cf6a9d7f6bdf14ac628bba34c381dc43cf533eaa95158'
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
         DOCKER_BUILDKIT = '1'
@@ -72,7 +71,7 @@ pipeline {
                     }
                     git diff --check
 
-                    for tool in git docker shellcheck trivy syft cosign helm ssh scp; do
+                    for tool in git docker shellcheck trivy syft cosign helm ssh scp base64; do
                       command -v "${tool}" >/dev/null 2>&1 || {
                         echo "Missing required Jenkins production tool: ${tool}" >&2
                         exit 1
@@ -133,20 +132,6 @@ pipeline {
                         -o "cyclonedx-json=security-artifacts/sbom-${service}.cdx.json"
                     done
 
-                    docker pull "${ALERT_RELAY_UPSTREAM}"
-                    docker tag \
-                      "${ALERT_RELAY_UPSTREAM}" \
-                      "${REGISTRY_NAMESPACE}/alertmanager-discord:${RELEASE_SHA}"
-
-                    trivy image \
-                      --ignore-unfixed \
-                      --exit-code 1 \
-                      --severity HIGH,CRITICAL \
-                      --format json \
-                      --output security-artifacts/trivy-alertmanager-discord.json \
-                      "${REGISTRY_NAMESPACE}/alertmanager-discord:${RELEASE_SHA}"
-                    syft "${REGISTRY_NAMESPACE}/alertmanager-discord:${RELEASE_SHA}" \
-                      -o cyclonedx-json=security-artifacts/sbom-alertmanager-discord.cdx.json
                 '''
             }
 
@@ -227,22 +212,7 @@ pipeline {
                           cosign verify --key "${COSIGN_PUBLIC_KEY}" "${image_ref}"
                         done
 
-                        relay_tag="${REGISTRY_NAMESPACE}/alertmanager-discord:${RELEASE_SHA}"
-                        docker push "${relay_tag}"
-                        docker pull "${relay_tag}"
-                        relay_ref="$(
-                          docker image inspect "${relay_tag}" \
-                            --format '{{range .RepoDigests}}{{println .}}{{end}}' |
-                            grep -E "^${REGISTRY_NAMESPACE}/alertmanager-discord@sha256:[0-9a-f]{64}$" |
-                            head -n 1
-                        )"
-                        test -n "${relay_ref}"
-                        printf 'ALERTMANAGER_DISCORD_IMAGE=%s\n' "${relay_ref}" >> "${lock_file}"
-                        COSIGN_PASSWORD="${COSIGN_PASSWORD}" \
-                          cosign sign --yes --key "${COSIGN_PRIVATE_KEY}" "${relay_ref}"
-                        cosign verify --key "${COSIGN_PUBLIC_KEY}" "${relay_ref}"
-
-                        test "$(wc -l < "${lock_file}" | tr -d ' ')" = 10
+                        test "$(wc -l < "${lock_file}" | tr -d ' ')" = 9
                     '''
                 }
 
@@ -312,6 +282,9 @@ pipeline {
                       echo 'AI application base URL must not point to documentation' >&2
                       exit 1
                     fi
+
+                    ./ci/scripts/verify-alertmanager-native-discord.sh \
+                      rendered-production.yaml
 
                     tar -czf "backend-deployment-${RELEASE_SHA}.tar.gz" deploy
                 '''
@@ -383,8 +356,7 @@ pipeline {
                   for service in \
                     apigateway authservice emailservice smsservice \
                     filestorageservice batteryservice ticketservice \
-                    notificationservice auditaggregatorservice \
-                    alertmanager-discord
+                    notificationservice auditaggregatorservice
                   do
                     docker image rm \
                       "${REGISTRY_NAMESPACE}/${service}:${RELEASE_SHA}" \
