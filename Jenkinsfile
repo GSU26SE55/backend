@@ -55,7 +55,7 @@ pipeline {
                             set -eu
 
                             for tool in \
-                              git dotnet docker shellcheck trivy syft helm
+                              git dotnet docker shellcheck trivy syft helm jq sha256sum
                             do
                               command -v "${tool}" >/dev/null 2>&1 || {
                                 echo "Missing required Jenkins tool: ${tool}" >&2
@@ -184,19 +184,34 @@ pipeline {
                     }
                 }
 
-                stage('Filesystem security scan') {
+                stage('Filesystem vulnerability and secret scan') {
                     steps {
                         sh '''
                             set -eu
 
-                            trivy fs \
+                            if ! trivy fs \
                               --ignore-unfixed \
                               --exit-code 1 \
                               --severity HIGH,CRITICAL \
-                              --scanners vuln,secret,misconfig \
+                              --scanners vuln,secret \
                               --format json \
                               --output trivy-fs.json \
                               .
+                            then
+                              echo 'Blocking filesystem findings:' >&2
+                              jq -r '
+                                (.Results // [])[] as $result |
+                                (($result.Vulnerabilities // [])[] |
+                                  ["VULNERABILITY", .Severity, .VulnerabilityID,
+                                   .PkgName, (.InstalledVersion // ""),
+                                   (.FixedVersion // ""), $result.Target]) ,
+                                (($result.Secrets // [])[] |
+                                  ["SECRET", .Severity, (.RuleID // ""),
+                                   $result.Target, ((.StartLine // 0) | tostring)]) |
+                                @tsv
+                              ' trivy-fs.json >&2
+                              exit 1
+                            fi
                         '''
                     }
 
@@ -205,6 +220,36 @@ pipeline {
                             archiveArtifacts(
                                 allowEmptyArchive: true,
                                 artifacts: 'trivy-fs.json'
+                            )
+                        }
+                    }
+                }
+
+                stage('Kubernetes security baseline') {
+                    steps {
+                        sh '''
+                            set -eu
+
+                            # Scan the dependency-complete manifest that will actually be
+                            # packaged by the trusted production job. The checked baseline
+                            # makes all known findings explicit and rejects any silent drift.
+                            trivy config \
+                              --severity HIGH,CRITICAL \
+                              --format json \
+                              --output trivy-k8s-misconfig.json \
+                              rendered-production.yaml
+
+                            ./ci/scripts/verify-trivy-k8s-baseline.sh \
+                              trivy-k8s-misconfig.json \
+                              ci/security/trivy-k8s-baseline.env
+                        '''
+                    }
+
+                    post {
+                        always {
+                            archiveArtifacts(
+                                allowEmptyArchive: true,
+                                artifacts: 'trivy-k8s-misconfig.json'
                             )
                         }
                     }
