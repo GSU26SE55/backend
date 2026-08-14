@@ -49,12 +49,6 @@ for key in "${required_digest_keys[@]}"; do
   }
 done
 
-alert_relay_image="$(read_env ALERTMANAGER_DISCORD_IMAGE "${image_lock}")"
-[[ "${alert_relay_image}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] || {
-  printf 'ALERTMANAGER_DISCORD_IMAGE must be an immutable image reference\n' >&2
-  exit 1
-}
-
 image_namespace="ghcr.io/gsu26se55"
 for specification in \
   "apigateway|APIGATEWAY_DIGEST" \
@@ -72,7 +66,6 @@ do
   image_ref="${image_namespace}/${service}@$(read_env "${key}" "${image_lock}")"
   cosign verify --key "${root}/config/cosign.pub" "${image_ref}" >/dev/null
 done
-cosign verify --key "${root}/config/cosign.pub" "${alert_relay_image}" >/dev/null
 
 platform_domain="$(read_env PLATFORM_PUBLIC_DOMAIN "${host_env}")"
 frontend_origin="$(read_env FRONTEND_PUBLIC_ORIGIN "${host_env}")"
@@ -158,7 +151,6 @@ helm_args=(
   --set-string "config.TicketAi__AiGrpcAddress=${ai_grpc_address}"
   --set-string "iot.mqttNodeIp=${mqtt_node_ip}"
   --set-string "iot.mqttPasswordSync.hostPath=${mqtt_auth_dir}"
-  --set-string "monitoring.alertmanagerDiscord.image=${alert_relay_image}"
 )
 
 helm_args+=(--set-string "services.apigateway.digest=$(read_env APIGATEWAY_DIGEST "${image_lock}")")
