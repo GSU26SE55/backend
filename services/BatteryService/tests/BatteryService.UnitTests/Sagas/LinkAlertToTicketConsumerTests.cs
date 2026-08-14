@@ -15,10 +15,38 @@ using SharedKernels.Interfaces;
 namespace BatteryService.UnitTests.Sagas;
 
 /// <summary>
+/// MassTransit harnesses start background bus workers. Running these tests in parallel with the
+/// rest of the large BatteryService suite can starve those workers on a small CI executor and make
+/// <c>Consumed.Any&lt;T&gt;()</c> time out even though the consumer is wired correctly.
+/// </summary>
+[CollectionDefinition("LinkAlertToTicketConsumerHarness", DisableParallelization = true)]
+public sealed class LinkAlertToTicketConsumerTestCollection;
+
+/// <summary>
 /// Sprint 5B #238 — idempotency + conflict tests cho LinkAlertToTicketConsumer.
 /// </summary>
+[Collection("LinkAlertToTicketConsumerHarness")]
 public class LinkAlertToTicketConsumerTests
 {
+    private sealed class HarnessScope : IAsyncDisposable
+    {
+        private readonly ServiceProvider _provider;
+
+        public HarnessScope(ServiceProvider provider, ITestHarness harness)
+        {
+            _provider = provider;
+            Harness = harness;
+        }
+
+        public ITestHarness Harness { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Harness.Stop();
+            await _provider.DisposeAsync();
+        }
+    }
+
     private static Mock<IBatteryUnitOfWork> BuildUow(List<Alert> alerts)
     {
         var uow = new Mock<IBatteryUnitOfWork>();
@@ -29,7 +57,7 @@ public class LinkAlertToTicketConsumerTests
         return uow;
     }
 
-    private static async Task<ITestHarness> StartHarness(IBatteryUnitOfWork uow)
+    private static async Task<HarnessScope> StartHarness(IBatteryUnitOfWork uow)
     {
         var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x =>
@@ -49,24 +77,23 @@ public class LinkAlertToTicketConsumerTests
 
         var harness = provider.GetRequiredService<ITestHarness>();
         await harness.Start();
-        return harness;
+        return new HarnessScope(provider, harness);
     }
 
     [Fact]
     public async Task AlertNotFound_ShouldRejectWithReason()
     {
         var uow = BuildUow(new List<Alert>());
-        var harness = await StartHarness(uow.Object);
+        await using var scope = await StartHarness(uow.Object);
+        var harness = scope.Harness;
+        var consumerHarness = harness.GetConsumerHarness<LinkAlertToTicketConsumer>();
 
         var cmd = new LinkAlertToTicketCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "T1");
         await harness.Bus.Publish(cmd);
-        (await harness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
+        (await consumerHarness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
 
-        var rejected = harness.Published.Select<AlertLinkToTicketRejected>().ToList();
-        rejected.Should().ContainSingle();
-        rejected[0].Context.Message.ErrorCode.Should().Be("ALERT_NOT_FOUND");
-
-        await harness.Stop();
+        var rejected = harness.Published.Select<AlertLinkToTicketRejected>().First();
+        rejected.Context.Message.ErrorCode.Should().Be("ALERT_NOT_FOUND");
     }
 
     [Fact]
@@ -89,19 +116,18 @@ public class LinkAlertToTicketConsumerTests
             CreatedAt = DateTime.UtcNow
         };
         var uow = BuildUow(new List<Alert> { alert });
-        var harness = await StartHarness(uow.Object);
+        await using var scope = await StartHarness(uow.Object);
+        var harness = scope.Harness;
+        var consumerHarness = harness.GetConsumerHarness<LinkAlertToTicketConsumer>();
 
         await harness.Bus.Publish(new LinkAlertToTicketCommand(alertId, alertId, ticketId, "T1"));
-        (await harness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
+        (await consumerHarness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
 
-        var linked = harness.Published.Select<AlertLinkedToTicketResponse>().ToList();
-        linked.Should().ContainSingle();
-        linked[0].Context.Message.TicketId.Should().Be(ticketId);
+        var linked = harness.Published.Select<AlertLinkedToTicketResponse>().First();
+        linked.Context.Message.TicketId.Should().Be(ticketId);
 
         // KHÔNG được update / save lại nữa.
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
-
-        await harness.Stop();
     }
 
     [Fact]
@@ -125,16 +151,15 @@ public class LinkAlertToTicketConsumerTests
             CreatedAt = DateTime.UtcNow
         };
         var uow = BuildUow(new List<Alert> { alert });
-        var harness = await StartHarness(uow.Object);
+        await using var scope = await StartHarness(uow.Object);
+        var harness = scope.Harness;
+        var consumerHarness = harness.GetConsumerHarness<LinkAlertToTicketConsumer>();
 
         await harness.Bus.Publish(new LinkAlertToTicketCommand(alertId, alertId, newTicketId, "T-NEW"));
-        (await harness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
+        (await consumerHarness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
 
-        var rejected = harness.Published.Select<AlertLinkToTicketRejected>().ToList();
-        rejected.Should().ContainSingle();
-        rejected[0].Context.Message.ErrorCode.Should().Be("ALERT_ALREADY_LINKED_TO_DIFFERENT_TICKET");
-
-        await harness.Stop();
+        var rejected = harness.Published.Select<AlertLinkToTicketRejected>().First();
+        rejected.Context.Message.ErrorCode.Should().Be("ALERT_ALREADY_LINKED_TO_DIFFERENT_TICKET");
     }
 
     [Fact]
@@ -157,20 +182,19 @@ public class LinkAlertToTicketConsumerTests
             CreatedAt = DateTime.UtcNow
         };
         var uow = BuildUow(new List<Alert> { alert });
-        var harness = await StartHarness(uow.Object);
+        await using var scope = await StartHarness(uow.Object);
+        var harness = scope.Harness;
+        var consumerHarness = harness.GetConsumerHarness<LinkAlertToTicketConsumer>();
 
         await harness.Bus.Publish(new LinkAlertToTicketCommand(alertId, alertId, ticketId, "T1"));
-        (await harness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
+        (await consumerHarness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
 
-        var linked = harness.Published.Select<AlertLinkedToTicketResponse>().ToList();
-        linked.Should().ContainSingle();
-        linked[0].Context.Message.TicketId.Should().Be(ticketId);
+        var linked = harness.Published.Select<AlertLinkedToTicketResponse>().First();
+        linked.Context.Message.TicketId.Should().Be(ticketId);
 
         alert.TicketId.Should().Be(ticketId);
         uow.Verify(u => u.Alerts.UpdateAsync(It.IsAny<Alert>()), Times.Once);
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
-
-        await harness.Stop();
     }
 
     [Fact]
@@ -193,15 +217,14 @@ public class LinkAlertToTicketConsumerTests
             CreatedAt = DateTime.UtcNow
         };
         var uow = BuildUow(new List<Alert> { alert });
-        var harness = await StartHarness(uow.Object);
+        await using var scope = await StartHarness(uow.Object);
+        var harness = scope.Harness;
+        var consumerHarness = harness.GetConsumerHarness<LinkAlertToTicketConsumer>();
 
         await harness.Bus.Publish(new LinkAlertToTicketCommand(alertId, alertId, Guid.NewGuid(), "T1"));
-        (await harness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
+        (await consumerHarness.Consumed.Any<LinkAlertToTicketCommand>()).Should().BeTrue();
 
-        var rejected = harness.Published.Select<AlertLinkToTicketRejected>().ToList();
-        rejected.Should().ContainSingle();
-        rejected[0].Context.Message.ErrorCode.Should().Be("ALERT_NOT_FOUND");
-
-        await harness.Stop();
+        var rejected = harness.Published.Select<AlertLinkToTicketRejected>().First();
+        rejected.Context.Message.ErrorCode.Should().Be("ALERT_NOT_FOUND");
     }
 }
