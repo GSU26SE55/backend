@@ -14,7 +14,7 @@
         <!-- GH-793 — tính nguyên tử của lease chỉ chứng minh được trên Redis THẬT.
              Mock luôn trả đúng thứ ta bảo nó trả, nên nó không thể phát hiện chính lỗi
              "GET rồi SET có khe hở" mà thay đổi này ra đời để xoá bỏ. -->
-        <PackageReference Include="Testcontainers.Redis" Version="4.12.0" />
+        <PackageReference Include="Testcontainers.Redis" Version="4.14.0" />
         <PackageReference Include="xunit" Version="2.7.0" />
         <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

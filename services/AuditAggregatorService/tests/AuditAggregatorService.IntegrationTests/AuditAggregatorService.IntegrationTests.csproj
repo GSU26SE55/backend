@@ -18,7 +18,7 @@
         <PackageReference Include="FluentAssertions" Version="6.12.0" />
         <PackageReference Include="Moq" Version="4.20.70" />
         <PackageReference Include="MockQueryable.Moq" Version="7.0.0" />
-        <PackageReference Include="Testcontainers.PostgreSql" Version="3.8.0" />
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
         <!-- AuditCreatedConsumer là đường vào duy nhất của read-store. Không có harness thì
              không kiểm được nó, và nhánh idempotent/geo-enrichment/race sẽ không ai chạm. -->
         <PackageReference Include="MassTransit" Version="8.5.9" />

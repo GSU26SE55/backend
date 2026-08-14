@@ -108,7 +108,7 @@ public sealed class MosquittoBrokerFixture : IAsyncLifetime
             .WithPortBinding(1883, true)
             .WithEntrypoint("/bin/sh", "-c")
             .WithCommand(bootstrap)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(1883))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(1883))
             .Build();
 
         await _container.StartAsync();
