@@ -28,6 +28,9 @@ namespace FileStorageService.IntegrationTests.ObjectStorage;
 /// </remarks>
 public sealed class MinioFixture : IAsyncLifetime
 {
+    private const string DefaultMinioImage = "minio/minio:RELEASE.2025-04-22T22-12-26Z";
+    private const string DefaultMcImage = "minio/mc:RELEASE.2025-04-16T18-13-26Z";
+
     public const string RootUser = "gh788-root-user";
     public const string RootPassword = "gh788-root-password-du-dai";
     public const string Bucket = "solar-battery-files";
@@ -42,10 +45,15 @@ public sealed class MinioFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        var minioImage = Environment.GetEnvironmentVariable("FILESTORAGE_TEST_MINIO_IMAGE")
+            ?? DefaultMinioImage;
+        var mcImage = Environment.GetEnvironmentVariable("FILESTORAGE_TEST_MC_IMAGE")
+            ?? DefaultMcImage;
+
         _network = new NetworkBuilder().Build();
 
         _minio = new ContainerBuilder()
-            .WithImage("minio/minio:latest")
+            .WithImage(minioImage)
             .WithNetwork(_network)
             .WithNetworkAliases("minio")
             .WithEnvironment("MINIO_ROOT_USER", RootUser)
@@ -61,7 +69,7 @@ public sealed class MinioFixture : IAsyncLifetime
         BaseUrl = $"http://{_minio.Hostname}:{_minio.GetMappedPublicPort(9000)}";
 
         _mc = new ContainerBuilder()
-            .WithImage("minio/mc:latest")
+            .WithImage(mcImage)
             .WithNetwork(_network)
             .WithEntrypoint("/bin/sh", "-c")
             .WithCommand("sleep 900")

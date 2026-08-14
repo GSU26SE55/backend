@@ -19,6 +19,8 @@ pipeline {
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
         NUGET_XMLDOC_MODE = 'skip'
         DOCKER_BUILDKIT = '1'
+        FILESTORAGE_TEST_MINIO_IMAGE = 'minio/minio:RELEASE.2025-04-22T22-12-26Z'
+        FILESTORAGE_TEST_MC_IMAGE = 'minio/mc:RELEASE.2025-04-16T18-13-26Z'
     }
 
     stages {
@@ -87,6 +89,12 @@ pipeline {
                             dotnet build SolarBatteryMaintainance.slnx \
                               --configuration Release \
                               --no-restore
+
+                            # Make dependency acquisition explicit on clean Jenkins executors.
+                            # Use the same immutable releases exercised by production.
+                            docker pull "${FILESTORAGE_TEST_MINIO_IMAGE}"
+                            docker pull "${FILESTORAGE_TEST_MC_IMAGE}"
+
                             dotnet test SolarBatteryMaintainance.slnx \
                               --configuration Release \
                               --no-build \
