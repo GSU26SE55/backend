@@ -55,7 +55,7 @@ pipeline {
                             set -eu
 
                             for tool in \
-                              git dotnet docker shellcheck trivy syft helm jq sha256sum
+                              git dotnet docker shellcheck trivy syft helm jq sha256sum base64
                             do
                               command -v "${tool}" >/dev/null 2>&1 || {
                                 echo "Missing required Jenkins tool: ${tool}" >&2
@@ -180,6 +180,9 @@ pipeline {
                               echo 'AI application base URL must not point to documentation' >&2
                               exit 1
                             fi
+
+                            ./ci/scripts/verify-alertmanager-native-discord.sh \
+                              rendered-production.yaml
                         '''
                     }
                 }

@@ -523,9 +523,9 @@ secrets:
   externalSecretName: ""
 
 # --------------------------------------------------------------------
-# Monitoring — alertmanager-discord relay (convert AM webhook → Discord)
-# Subchart kube-prometheus-stack + loki-stack đề xuất cài SAU khi stack chạy ổn,
-# không bao gồm trong chart này để giữ chart nhẹ + linh hoạt.
+# Monitoring
+# Alertmanager sends Discord notifications natively. The webhook remains in
+# solar-secrets and is mounted as a file; it is never rendered into a manifest.
 # --------------------------------------------------------------------
 # Sprint 7 #116 — Grafana Tempo (distributed tracing). Bật để deploy Tempo + auto-wire OTLP endpoint.
 tempo:
@@ -539,10 +539,6 @@ tempo:
   retention: 48h
 
 monitoring:
-  alertmanagerDiscord:
-    enabled: false              # bật khi đã cài Alertmanager + có DISCORD_WEBHOOK trong Secret
-    image: benjojo/alertmanager-discord:latest
-
   prometheusRules:
     enabled: false              # bật khi đã cài kube-prometheus-stack (CRD PrometheusRule)
 
@@ -605,9 +601,12 @@ kube-prometheus-stack:
         receiver: discord
       receivers:
       - name: discord
-        webhook_configs:
-        - url: http://alertmanager-discord:9094
+        discord_configs:
+        - webhook_url_file: /etc/alertmanager/secrets/solar-secrets/DISCORD_WEBHOOK
           send_resolved: true
+    alertmanagerSpec:
+      secrets:
+      - solar-secrets
 
 loki-stack:
   enabled: false
