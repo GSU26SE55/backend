@@ -22,7 +22,7 @@ public sealed class RedisFixture : IAsyncLifetime
         _container = new ContainerBuilder()
             .WithImage("redis:7-alpine")
             .WithPortBinding(6379, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(6379))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(6379))
             .Build();
 
         await _container.StartAsync();

@@ -50,6 +50,10 @@ deploy/helm/*/charts/
 # ---------- CodeGraph index (local code intelligence) ----------
 .codegraph/
 
+# ---------- Local Codex/agent scratch artifacts ----------
+# Hot-patch publish outputs are generated locally and must never enter source control.
+.tmp-codex/
+
 # ---------- Playwright MCP artifacts (local only) ----------
 .playwright-mcp/
 

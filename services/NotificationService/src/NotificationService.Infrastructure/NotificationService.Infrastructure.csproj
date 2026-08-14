@@ -23,7 +23,9 @@
         </PackageReference>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.3" />
-        <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="8.0.2" />
+        <!-- 8.0.29 resolves MessagePack 2.5.302, which fixes the HIGH severity
+             decompression and unbounded-recursion advisories in 2.5.108. -->
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="8.0.29" />
         <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="8.0.0" />
     </ItemGroup>
 

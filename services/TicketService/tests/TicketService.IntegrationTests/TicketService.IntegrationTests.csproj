@@ -21,11 +21,11 @@
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="8.10.0" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0" />
         <PackageReference Include="Moq" Version="4.20.72" />
-        <PackageReference Include="Testcontainers.PostgreSql" Version="4.12.0" />
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
         <!-- Broadcast SignalR trong production đi qua Redis backplane. Test phải giữ nguyên
              backplane (bỏ đi thì số đo đẹp hơn thực tế) nhưng trỏ vào Redis container cục bộ,
              KHÔNG dùng Upstash trong .env. -->
-        <PackageReference Include="Testcontainers.Redis" Version="4.12.0" />
+        <PackageReference Include="Testcontainers.Redis" Version="4.14.0" />
         <!-- GH-790 — dựng máy chủ gRPC THẬT trong test để chạy VirusScanWorker qua đúng kênh nội bộ
              mà production dùng; mock client thì không chứng minh được gì về đường dây. -->
         <PackageReference Include="Grpc.AspNetCore" Version="2.63.0" />
