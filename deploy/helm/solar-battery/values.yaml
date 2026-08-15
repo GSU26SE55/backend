@@ -524,8 +524,9 @@ secrets:
 
 # --------------------------------------------------------------------
 # Monitoring
-# Alertmanager sends Discord notifications natively. The webhook remains in
-# solar-secrets and is mounted as a file; it is never rendered into a manifest.
+# Alertmanager sends Discord notifications natively through an
+# AlertmanagerConfig SecretKeySelector. The webhook is never rendered into a
+# manifest or mounted into the Alertmanager Pod.
 # --------------------------------------------------------------------
 # Sprint 7 #116 — Grafana Tempo (distributed tracing). Bật để deploy Tempo + auto-wire OTLP endpoint.
 tempo:
@@ -539,6 +540,12 @@ tempo:
   retention: 48h
 
 monitoring:
+  alertmanagerDiscord:
+    enabled: false
+    name: solar-discord
+    secretName: solar-secrets
+    secretKey: DISCORD_WEBHOOK
+
   prometheusRules:
     enabled: false              # bật khi đã cài kube-prometheus-stack (CRD PrometheusRule)
 
@@ -583,6 +590,11 @@ kube-prometheus-stack:
   grafana:
     enabled: true
     adminPassword: changeme        # ← override trong values-staging
+    # Upstream test Pod reuses Grafana's Service selector labels and can become
+    # an endpoint of the Service it probes. The chart-owned smoke Pod tests
+    # Grafana with a dedicated non-matching label instead.
+    testFramework:
+      enabled: false
     sidecar:
       datasources:
         enabled: true
@@ -598,15 +610,9 @@ kube-prometheus-stack:
   alertmanager:
     config:
       route:
-        receiver: discord
+        receiver: "null"
       receivers:
-      - name: discord
-        discord_configs:
-        - webhook_url_file: /etc/alertmanager/secrets/solar-secrets/DISCORD_WEBHOOK
-          send_resolved: true
-    alertmanagerSpec:
-      secrets:
-      - solar-secrets
+      - name: "null"
 
 loki-stack:
   enabled: false

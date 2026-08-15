@@ -87,6 +87,11 @@ minio:
 # Monitoring stack for VPS staging. Resource requests stay low so the stack
 # can fit on the current single-node k3s VPS while preserving sane limits.
 monitoring:
+  alertmanagerDiscord:
+    enabled: true
+    name: solar-discord
+    secretName: solar-secrets
+    secretKey: DISCORD_WEBHOOK
   prometheusRules:
     enabled: true
   grafanaDashboards:
@@ -143,17 +148,13 @@ kube-prometheus-stack:
                 storage: 5Gi
   alertmanager:
     alertmanagerSpec:
-      secrets:
-      - solar-secrets
+      alertmanagerConfiguration:
+        name: solar-discord
       resources:
         requests: { cpu: 10m, memory: 32Mi }
         limits:   { cpu: 100m, memory: 128Mi }
   grafana:
     adminPassword: "Admin@123"
-    testFramework:
-      resources:
-        requests: { cpu: 10m, memory: 32Mi }
-        limits:   { cpu: 100m, memory: 128Mi }
     resources:
       requests: { cpu: 25m, memory: 96Mi }
       limits:   { cpu: 250m, memory: 384Mi }

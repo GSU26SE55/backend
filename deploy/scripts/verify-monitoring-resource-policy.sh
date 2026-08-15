@@ -248,8 +248,8 @@ verify_resource_value() {
 grafana_deployment="${temporary_directory}/grafana-deployment.yaml"
 prometheus_operator="${temporary_directory}/prometheus-operator.yaml"
 grafana_service_monitor="${temporary_directory}/grafana-service-monitor.yaml"
-grafana_test="${temporary_directory}/grafana-test.yaml"
-grafana_test_network_policy="${temporary_directory}/grafana-test-network-policy.yaml"
+grafana_smoke_network_policy="${temporary_directory}/grafana-smoke-network-policy.yaml"
+tempo_smoke_network_policy="${temporary_directory}/tempo-smoke-network-policy.yaml"
 tempo_deployment="${temporary_directory}/tempo-deployment.yaml"
 tempo_container="${temporary_directory}/tempo-container.yaml"
 solar_smoke_test="${temporary_directory}/solar-smoke-test.yaml"
@@ -266,9 +266,6 @@ extract_source \
   'kube-prometheus-stack/charts/grafana/templates/servicemonitor.yaml' \
   "${grafana_service_monitor}"
 extract_source \
-  'kube-prometheus-stack/charts/grafana/templates/tests/test.yaml' \
-  "${grafana_test}"
-extract_source \
   'solar-battery/templates/tests/smoke-test.yaml' \
   "${solar_smoke_test}"
 extract_source \
@@ -279,8 +276,12 @@ extract_source \
   "${admission_patch_job}"
 extract_named_resource \
   'NetworkPolicy' \
-  'allow-grafana-test-to-grafana' \
-  "${grafana_test_network_policy}"
+  'allow-helm-smoke-to-grafana' \
+  "${grafana_smoke_network_policy}"
+extract_named_resource \
+  'NetworkPolicy' \
+  'allow-helm-smoke-to-tempo' \
+  "${tempo_smoke_network_policy}"
 
 extract_named_resource \
   'Deployment' \
@@ -325,7 +326,6 @@ do
     "${container_block}"
   verify_complete_resources "${container_block}" "${container_name}"
 done <<CONTAINERS
-${grafana_test} containers solar-test
 ${solar_smoke_test} containers smoke
 ${admission_create_job} containers create
 ${admission_patch_job} containers patch
@@ -334,6 +334,14 @@ CONTAINERS
 if grep -Eq '^# Source: .*loki-stack/templates/tests/' "${rendered_manifest}"
 then
   printf 'Loki test Pod must be disabled because it has no resource configuration\n' >&2
+  exit 1
+fi
+
+if grep -Fq \
+  '# Source: solar-battery/charts/kube-prometheus-stack/charts/grafana/templates/tests/test.yaml' \
+  "${rendered_manifest}"
+then
+  printf 'upstream Grafana test Pod must be disabled to avoid Service selector collision\n' >&2
   exit 1
 fi
 
@@ -359,49 +367,54 @@ grep -Eq '^[[:space:]]+scrapeTimeout: 10s$' "${grafana_service_monitor}" || {
   exit 1
 }
 
-grafana_name_label_count="$(
-  awk '
-    $1 == "app.kubernetes.io/name:" && $2 == "grafana" { count += 1 }
-    END { print count + 0 }
-  ' "${grafana_test_network_policy}"
-)"
-grafana_instance_label_count="$(
-  awk '
-    $1 == "app.kubernetes.io/instance:" && NF == 2 { count += 1 }
-    END { print count + 0 }
-  ' "${grafana_test_network_policy}"
-)"
-grafana_instance_value_count="$(
-  awk '
-    $1 == "app.kubernetes.io/instance:" && NF == 2 { print $2 }
-  ' "${grafana_test_network_policy}" |
-    sort -u |
-    wc -l |
-    tr -d '[:space:]'
-)"
-
-[[ "${grafana_name_label_count}" -ge 2 ]] || {
-  printf 'Grafana Helm test NetworkPolicy must select Grafana as both source and target\n' >&2
+grep -Eq '^[[:space:]]+app[.]kubernetes[.]io/component: helm-smoke-test$' \
+  "${solar_smoke_test}" || {
+  printf 'Solar smoke test must use the dedicated helm-smoke-test label\n' >&2
   exit 1
 }
 
-[[ "${grafana_instance_label_count}" -ge 2 &&
-   "${grafana_instance_value_count}" == '1' ]] || {
-  printf 'Grafana Helm test NetworkPolicy must use one release instance for source and target\n' >&2
+if grep -Eq '^[[:space:]]+app[.]kubernetes[.]io/name: grafana$' \
+  "${solar_smoke_test}"
+then
+  printf 'Solar smoke test must not match the Grafana Service selector\n' >&2
   exit 1
-}
+fi
 
-grep -Eq '^[[:space:]]+- protocol: TCP$' \
-  "${grafana_test_network_policy}" || {
-    printf 'Grafana Helm test NetworkPolicy must allow TCP\n' >&2
+for specification in \
+  "${grafana_smoke_network_policy}|app.kubernetes.io/name: grafana|3000|Grafana" \
+  "${tempo_smoke_network_policy}|app: tempo|3200|Tempo"
+do
+  policy_file="${specification%%|*}"
+  remainder="${specification#*|}"
+  target_label="${remainder%%|*}"
+  remainder="${remainder#*|}"
+  target_port="${remainder%%|*}"
+  target_name="${remainder#*|}"
+
+  for expected in \
+    "${target_label}" \
+    'app.kubernetes.io/component: helm-smoke-test' \
+    'app.kubernetes.io/instance: solar' \
+    'protocol: TCP' \
+    "port: ${target_port}"
+  do
+    grep -Fq "${expected}" "${policy_file}" || {
+      printf '%s smoke NetworkPolicy contract is missing: %s\n' \
+        "${target_name}" "${expected}" >&2
+      exit 1
+    }
+  done
+done
+
+for expected_url in \
+  'http://solar-grafana:80/api/health' \
+  'http://tempo:3200/ready'
+do
+  grep -Fq "${expected_url}" "${solar_smoke_test}" || {
+    printf 'Solar smoke test endpoint is missing: %s\n' "${expected_url}" >&2
     exit 1
   }
-
-grep -Eq '^[[:space:]]+port: 3000$' \
-  "${grafana_test_network_policy}" || {
-    printf 'Grafana Helm test NetworkPolicy must allow Grafana port 3000\n' >&2
-    exit 1
-  }
+done
 
 grep -Eq '^[[:space:]]+"?helm[.]sh/hook-delete-policy"?:[[:space:]]+"?before-hook-creation"?$' \
   "${solar_smoke_test}" || {

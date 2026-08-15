@@ -1,0 +1,25 @@
+{{- if and (index .Values "kube-prometheus-stack" "enabled") .Values.monitoring.alertmanagerDiscord.enabled }}
+{{- $configName := required "monitoring.alertmanagerDiscord.name is required" .Values.monitoring.alertmanagerDiscord.name -}}
+{{- $secretName := required "monitoring.alertmanagerDiscord.secretName is required" .Values.monitoring.alertmanagerDiscord.secretName -}}
+{{- $secretKey := required "monitoring.alertmanagerDiscord.secretKey is required" .Values.monitoring.alertmanagerDiscord.secretKey -}}
+{{- $selectedConfigName := required "kube-prometheus-stack.alertmanager.alertmanagerSpec.alertmanagerConfiguration.name is required" (index .Values "kube-prometheus-stack" "alertmanager" "alertmanagerSpec" "alertmanagerConfiguration" "name") -}}
+{{- if ne $configName $selectedConfigName -}}
+{{- fail "AlertmanagerConfig name must match kube-prometheus-stack.alertmanager.alertmanagerSpec.alertmanagerConfiguration.name" -}}
+{{- end -}}
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: {{ $configName }}
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+spec:
+  route:
+    receiver: discord
+  receivers:
+    - name: discord
+      discordConfigs:
+        - apiURL:
+            name: {{ $secretName }}
+            key: {{ $secretKey }}
+          sendResolved: true
+{{- end }}

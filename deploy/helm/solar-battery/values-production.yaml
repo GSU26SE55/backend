@@ -160,6 +160,11 @@ tempo:
   retention: 48h
 
 monitoring:
+  alertmanagerDiscord:
+    enabled: true
+    name: solar-discord
+    secretName: solar-secrets
+    secretKey: DISCORD_WEBHOOK
   prometheusRules:
     enabled: true
   grafanaDashboards:
@@ -224,8 +229,8 @@ kube-prometheus-stack:
               requests: { storage: 10Gi }
   alertmanager:
     alertmanagerSpec:
-      secrets:
-      - solar-secrets
+      alertmanagerConfiguration:
+        name: solar-discord
       resources:
         requests: { cpu: 15m, memory: 48Mi }
         limits:   { cpu: 150m, memory: 192Mi }
@@ -234,10 +239,6 @@ kube-prometheus-stack:
       existingSecret: solar-monitoring-secrets
       userKey: admin-user
       passwordKey: admin-password
-    testFramework:
-      resources:
-        requests: { cpu: 10m, memory: 32Mi }
-        limits:   { cpu: 100m, memory: 128Mi }
     resources:
       requests: { cpu: 30m, memory: 128Mi }
       limits:   { cpu: 300m, memory: 512Mi }
