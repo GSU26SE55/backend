@@ -8,6 +8,7 @@ metadata:
   name: {{ .Release.Name }}-smoke-test
   labels:
     {{- include "solar.labels" . | nindent 4 }}
+    app.kubernetes.io/component: helm-smoke-test
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation
@@ -29,8 +30,27 @@ spec:
           set -e
           fail=0
           check() {
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" || echo 000)
-            if [ "$code" = "200" ]; then echo "OK   $1 ($code)"; else echo "FAIL $1 ($code)"; fail=1; fi
+            url="$1"
+            response_file="$(mktemp)"
+            error_file="$(mktemp)"
+            if code="$(curl --silent --show-error --output "${response_file}" \
+              --write-out '%{http_code}' --max-time 10 "${url}" 2>"${error_file}")"; then
+              if [ "${code}" = "200" ]; then
+                echo "OK   ${url} (${code})"
+              else
+                echo "FAIL ${url} (HTTP ${code})"
+                head -c 512 "${response_file}" || true
+                echo
+                fail=1
+              fi
+            else
+              curl_status="$?"
+              echo "FAIL ${url} (curl exit ${curl_status})"
+              head -c 512 "${error_file}" || true
+              echo
+              fail=1
+            fi
+            rm -f "${response_file}" "${error_file}"
           }
           echo "== Smoke test: /health các service =="
           check http://apigateway:80/health
@@ -40,6 +60,9 @@ spec:
           check http://notificationservice:80/health
           check http://filestorageservice:80/health
           check http://smsservice:80/health
+          {{- if (index .Values "kube-prometheus-stack" "enabled") }}
+          check http://{{ .Release.Name }}-grafana:80/api/health
+          {{- end }}
           {{- if .Values.tempo.enabled }}
           check http://tempo:3200/ready
           {{- end }}

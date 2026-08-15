@@ -286,6 +286,9 @@ pipeline {
                     ./ci/scripts/verify-alertmanager-native-discord.sh \
                       rendered-production.yaml
 
+                    ./deploy/scripts/verify-monitoring-resource-policy.sh \
+                      rendered-production.yaml
+
                     tar -czf "backend-deployment-${RELEASE_SHA}.tar.gz" deploy
                 '''
             }
@@ -347,7 +350,7 @@ pipeline {
             echo "Backend production deployment succeeded for ${params.GIT_SHA}"
         }
         failure {
-            echo 'Backend production deployment failed; Helm attempted an atomic rollback'
+            echo 'Backend production deployment failed; inspect the deploy-stage diagnostics. Helm atomic rollback only applies to upgrade/install failures.'
         }
         always {
             sh '''
