@@ -176,11 +176,82 @@ verify_complete_resources() {
   }
 }
 
+verify_resource_value() {
+  local input_file="$1"
+  local resource_section="$2"
+  local resource_key="$3"
+  local expected_value="$4"
+  local resource_name="$5"
+  local actual_value
+
+  actual_value="$(
+    awk \
+      -v expected_section="${resource_section}" \
+      -v expected_key="${resource_key}" '
+        function indentation(line, prefix) {
+          prefix = line
+          sub(/[^ ].*$/, "", prefix)
+          return length(prefix)
+        }
+
+        {
+          stripped = $0
+          sub(/^[[:space:]]+/, "", stripped)
+          current_indent = indentation($0)
+
+          if (in_value_section &&
+              stripped != "" &&
+              current_indent <= value_section_indent) {
+            in_value_section = 0
+          }
+
+          if (in_resources &&
+              stripped != "" &&
+              current_indent <= resources_indent) {
+            in_resources = 0
+          }
+
+          if (in_value_section &&
+              stripped ~ ("^" expected_key ":[[:space:]]*")) {
+            sub("^[^:]+:[[:space:]]*", "", stripped)
+            gsub(/^"|"$/, "", stripped)
+            print stripped
+            exit
+          }
+
+          if (in_resources && stripped == expected_section ":") {
+            in_value_section = 1
+            value_section_indent = current_indent
+            next
+          }
+
+          if (stripped == "resources:") {
+            in_resources = 1
+            resources_indent = current_indent
+          }
+        }
+      ' "${input_file}"
+  )"
+
+  if [[ "${actual_value}" != "${expected_value}" ]]
+  then
+    printf '%s resources.%s.%s must equal %s (got %s)\n' \
+      "${resource_name}" \
+      "${resource_section}" \
+      "${resource_key}" \
+      "${expected_value}" \
+      "${actual_value:-missing}" >&2
+    exit 1
+  fi
+}
+
 grafana_deployment="${temporary_directory}/grafana-deployment.yaml"
 prometheus_operator="${temporary_directory}/prometheus-operator.yaml"
 grafana_service_monitor="${temporary_directory}/grafana-service-monitor.yaml"
 grafana_test="${temporary_directory}/grafana-test.yaml"
 grafana_test_network_policy="${temporary_directory}/grafana-test-network-policy.yaml"
+tempo_deployment="${temporary_directory}/tempo-deployment.yaml"
+tempo_container="${temporary_directory}/tempo-container.yaml"
 solar_smoke_test="${temporary_directory}/solar-smoke-test.yaml"
 admission_create_job="${temporary_directory}/admission-create-job.yaml"
 admission_patch_job="${temporary_directory}/admission-patch-job.yaml"
@@ -210,6 +281,23 @@ extract_named_resource \
   'NetworkPolicy' \
   'allow-grafana-test-to-grafana' \
   "${grafana_test_network_policy}"
+
+extract_named_resource \
+  'Deployment' \
+  'tempo' \
+  "${tempo_deployment}"
+
+extract_container_block \
+  "${tempo_deployment}" \
+  'containers' \
+  'tempo' \
+  "${tempo_container}"
+
+verify_complete_resources "${tempo_container}" 'tempo'
+verify_resource_value "${tempo_container}" 'requests' 'cpu' '50m' 'tempo'
+verify_resource_value "${tempo_container}" 'requests' 'memory' '256Mi' 'tempo'
+verify_resource_value "${tempo_container}" 'limits' 'cpu' '500m' 'tempo'
+verify_resource_value "${tempo_container}" 'limits' 'memory' '1Gi' 'tempo'
 
 while read -r section_name container_name
 do
