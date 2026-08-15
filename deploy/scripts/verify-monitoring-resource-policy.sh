@@ -407,6 +407,9 @@ do
 done
 
 for expected_url in \
+  'http://notificationservice:80/metrics' \
+  'http://filestorageservice:80/metrics' \
+  'http://smsservice:80/metrics' \
   'http://solar-grafana:80/api/health' \
   'http://tempo:3200/ready'
 do
@@ -414,6 +417,18 @@ do
     printf 'Solar smoke test endpoint is missing: %s\n' "${expected_url}" >&2
     exit 1
   }
+done
+
+for forbidden_url in \
+  'http://notificationservice:80/health' \
+  'http://filestorageservice:80/health' \
+  'http://smsservice:80/health'
+do
+  if grep -Fq "${forbidden_url}" "${solar_smoke_test}"
+  then
+    printf 'Solar smoke test uses an unsupported endpoint: %s\n' "${forbidden_url}" >&2
+    exit 1
+  fi
 done
 
 grep -Eq '^[[:space:]]+"?helm[.]sh/hook-delete-policy"?:[[:space:]]+"?before-hook-creation"?$' \
