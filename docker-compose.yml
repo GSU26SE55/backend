@@ -37,6 +37,11 @@ volumes:
   #      phản hồi của kỹ thuật viên mất trắng mà UI vẫn báo thành công.
   #   2. Nửa số ca "accepted" vô hình với nửa còn lại ⇒ few-shot học trên nửa dữ liệu.
   ai-prescription-history:
+  # Knowledge base do entrypoint seed từ /app/models/embeddings vào /data/kb/releases/{sha}.
+  # Cần volume vì `/data` nằm trên lớp ghi read-only-by-non-root: mount sẵn thì Docker tạo
+  # thư mục cha với quyền ghi, entrypoint mới mkdir subdir được. Dùng chung 2 transport để
+  # cả hai trỏ tới cùng một release, không seed lệch nhau.
+  ai-kb:
   postgres-data:
   mosquitto-data:   # Sprint IoT-1 #253 — chỉ dùng khi bật profile `mqtt`
   mosquitto-log:
@@ -404,6 +409,13 @@ services:
     command: ["python", "-m", "src.grpc_server"]
     environment:
       GRPC_PORT: "50051"
+      # Image chạy USER 10001 (non-root) — entrypoint KHÔNG mkdir được `/data` từ root fs.
+      # Mount từng subdir để `/data` do Docker tạo sẵn, entrypoint chỉ mkdir bên trong.
+      AI_DATA_DIR: /data
+      AI_KB_ROOT: /data/kb
+      AI_KB_DIR: /data/kb/current
+      AI_PRESCRIPTION_HISTORY_DIR: /data/prescription-history
+      AI_CLASSIFICATION_FEEDBACK_DIR: /data/classification-feedback
       # LLM keys optional — chỉ cần cho /prescribe enrich=true. Thiếu → rule-based fallback.
       DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
       GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
@@ -412,8 +424,9 @@ services:
     volumes:
       # Dùng CHUNG với ai-module-http: hai transport phải ghi vào một store, nếu không
       # precision/recall khác nhau tuỳ hỏi bên nào.
-      - ai-classification-feedback:/app/models/classification_feedback
-      - ai-prescription-history:/app/models/prescription_history
+      - ai-classification-feedback:/data/classification-feedback
+      - ai-prescription-history:/data/prescription-history
+      - ai-kb:/data/kb
     networks: [solar-net]
     restart: unless-stopped
 
@@ -424,6 +437,12 @@ services:
       dockerfile: Dockerfile
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
+      # Giống ai-module-grpc — xem ghi chú ở đó về non-root + `/data`.
+      AI_DATA_DIR: /data
+      AI_KB_ROOT: /data/kb
+      AI_KB_DIR: /data/kb/current
+      AI_PRESCRIPTION_HISTORY_DIR: /data/prescription-history
+      AI_CLASSIFICATION_FEEDBACK_DIR: /data/classification-feedback
       DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
       GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
     ports:
@@ -431,8 +450,9 @@ services:
     volumes:
       # Dùng CHUNG với ai-module-grpc: hai transport phải ghi vào một store, nếu không
       # precision/recall khác nhau tuỳ hỏi bên nào.
-      - ai-classification-feedback:/app/models/classification_feedback
-      - ai-prescription-history:/app/models/prescription_history
+      - ai-classification-feedback:/data/classification-feedback
+      - ai-prescription-history:/data/prescription-history
+      - ai-kb:/data/kb
     # Dùng python chứ KHÔNG phải curl: image base là python:3.11-slim, Dockerfile chỉ
     # `pip install`, không hề `apt-get install curl` — healthcheck bằng curl sẽ luôn đỏ.
     # start_period rộng vì lúc boot AI nạp torch + tối đa 8 bộ artifact.
