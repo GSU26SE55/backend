@@ -4,7 +4,7 @@ description: Solar Battery Maintenance — 9 ASP.NET services, data infrastructu
 type: application
 
 # Version chart — bump khi thay đổi template structure
-version: 0.2.0
+version: 0.2.1
 
 # Phiên bản app — hiển thị trong helm list, không liên quan image tag thực tế
 appVersion: "1.0.0"

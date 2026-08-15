@@ -183,6 +183,9 @@ pipeline {
 
                             ./ci/scripts/verify-alertmanager-native-discord.sh \
                               rendered-production.yaml
+
+                            ./deploy/scripts/verify-monitoring-resource-policy.sh \
+                              rendered-production.yaml
                         '''
                     }
                 }

@@ -182,6 +182,15 @@ kube-prometheus-stack:
     resources:
       requests: { cpu: 25m, memory: 64Mi }
       limits:   { cpu: 200m, memory: 256Mi }
+    admissionWebhooks:
+      patch:
+        resources:
+          requests: { cpu: 10m, memory: 32Mi }
+          limits:   { cpu: 100m, memory: 128Mi }
+    prometheusConfigReloader:
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits:   { cpu: 100m, memory: 128Mi }
   kube-state-metrics:
     resources:
       requests: { cpu: 20m, memory: 48Mi }
@@ -218,9 +227,24 @@ kube-prometheus-stack:
       existingSecret: solar-monitoring-secrets
       userKey: admin-user
       passwordKey: admin-password
+    testFramework:
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits:   { cpu: 100m, memory: 128Mi }
     resources:
       requests: { cpu: 30m, memory: 128Mi }
       limits:   { cpu: 300m, memory: 512Mi }
+    initChownData:
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits:   { cpu: 100m, memory: 128Mi }
+    sidecar:
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits:   { cpu: 100m, memory: 128Mi }
+    serviceMonitor:
+      interval: 15s
+      scrapeTimeout: 10s
     persistence:
       enabled: true
       storageClassName: local-path
@@ -241,6 +265,10 @@ kube-prometheus-stack:
 
 loki-stack:
   enabled: true
+  # The upstream test Pod has no resource values and is rejected by the
+  # production ResourceQuota. Solar's own smoke test covers Loki readiness.
+  test_pod:
+    enabled: false
   loki:
     persistence:
       enabled: true

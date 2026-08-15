@@ -127,20 +127,7 @@ if kubectl -n "${namespace}" get cronjob postgres-backup >/dev/null 2>&1; then
   fi
 fi
 
-helm lint "${chart_dir}" \
-  -f "${chart_dir}/values.yaml" \
-  -f "${chart_dir}/values-vps-small.yaml" \
-  -f "${chart_dir}/values-production.yaml" \
-  --set-string iot.mqttNodeIp="${mqtt_node_ip}"
-
-helm_args=(
-  upgrade --install "${helm_release}" "${chart_dir}"
-  --namespace "${namespace}"
-  --atomic
-  --cleanup-on-fail
-  --wait
-  --timeout 25m
-  --history-max 10
+helm_value_args=(
   -f "${chart_dir}/values.yaml"
   -f "${chart_dir}/values-vps-small.yaml"
   -f "${chart_dir}/values-production.yaml"
@@ -153,15 +140,41 @@ helm_args=(
   --set-string "iot.mqttPasswordSync.hostPath=${mqtt_auth_dir}"
 )
 
-helm_args+=(--set-string "services.apigateway.digest=$(read_env APIGATEWAY_DIGEST "${image_lock}")")
-helm_args+=(--set-string "services.authservice.digest=$(read_env AUTHSERVICE_DIGEST "${image_lock}")")
-helm_args+=(--set-string "services.emailservice.digest=$(read_env EMAILSERVICE_DIGEST "${image_lock}")")
-helm_args+=(--set-string "services.smsservice.digest=$(read_env SMSSERVICE_DIGEST "${image_lock}")")
-helm_args+=(--set-string "services.filestorageservice.digest=$(read_env FILESTORAGESERVICE_DIGEST "${image_lock}")")
-helm_args+=(--set-string "services.batteryservice.digest=$(read_env BATTERYSERVICE_DIGEST "${image_lock}")")
-helm_args+=(--set-string "services.ticketservice.digest=$(read_env TICKETSERVICE_DIGEST "${image_lock}")")
-helm_args+=(--set-string "services.notificationservice.digest=$(read_env NOTIFICATIONSERVICE_DIGEST "${image_lock}")")
-helm_args+=(--set-string "services.auditaggregatorservice.digest=$(read_env AUDITAGGREGATORSERVICE_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.apigateway.digest=$(read_env APIGATEWAY_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.authservice.digest=$(read_env AUTHSERVICE_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.emailservice.digest=$(read_env EMAILSERVICE_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.smsservice.digest=$(read_env SMSSERVICE_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.filestorageservice.digest=$(read_env FILESTORAGESERVICE_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.batteryservice.digest=$(read_env BATTERYSERVICE_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.ticketservice.digest=$(read_env TICKETSERVICE_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.notificationservice.digest=$(read_env NOTIFICATIONSERVICE_DIGEST "${image_lock}")")
+helm_value_args+=(--set-string "services.auditaggregatorservice.digest=$(read_env AUDITAGGREGATORSERVICE_DIGEST "${image_lock}")")
+
+helm lint "${chart_dir}" "${helm_value_args[@]}"
+
+rendered_manifest="$(mktemp)"
+cleanup_rendered_manifest() {
+  rm -f "${rendered_manifest}"
+}
+trap cleanup_rendered_manifest EXIT
+
+helm template "${helm_release}" "${chart_dir}" \
+  --namespace "${namespace}" \
+  "${helm_value_args[@]}" \
+  > "${rendered_manifest}"
+
+"${script_dir}/verify-monitoring-resource-policy.sh" "${rendered_manifest}"
+
+helm_args=(
+  upgrade --install "${helm_release}" "${chart_dir}"
+  --namespace "${namespace}"
+  --atomic
+  --cleanup-on-fail
+  --wait
+  --timeout 25m
+  --history-max 10
+  "${helm_value_args[@]}"
+)
 
 helm "${helm_args[@]}"
 
