@@ -1,6 +1,6 @@
 {{- /*
   Sprint 7 #596 — Helm smoke test. Chạy bằng `helm test <release>`.
-  Curl /health của mọi ASP.NET service (qua in-cluster DNS) — fail nếu service nào không 200.
+  Curl readiness endpoint của mọi ASP.NET service (qua in-cluster DNS) — fail nếu service nào không 200.
 */ -}}
 apiVersion: v1
 kind: Pod
@@ -52,14 +52,14 @@ spec:
             fi
             rm -f "${response_file}" "${error_file}"
           }
-          echo "== Smoke test: /health các service =="
+          echo "== Smoke test: readiness endpoint các service =="
           check http://apigateway:80/health
           check http://authservice:80/health
           check http://batteryservice:80/api/battery/health
           check http://ticketservice:80/api/ticket/health
-          check http://notificationservice:80/health
-          check http://filestorageservice:80/health
-          check http://smsservice:80/health
+          check http://notificationservice:80/metrics
+          check http://filestorageservice:80/metrics
+          check http://smsservice:80/metrics
           {{- if (index .Values "kube-prometheus-stack" "enabled") }}
           check http://{{ .Release.Name }}-grafana:80/api/health
           {{- end }}
