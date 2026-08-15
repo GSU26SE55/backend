@@ -183,10 +183,68 @@ helm "${helm_args[@]}"
 # become Ready (a completed Pod never has Ready=True).
 while IFS= read -r resource; do
   [[ -n "${resource}" ]] || continue
-  kubectl -n "${namespace}" rollout status "${resource}" --timeout=10m
+  if ! kubectl -n "${namespace}" rollout status "${resource}" --timeout=10m; then
+    kubectl -n "${namespace}" describe "${resource}" >&2 || true
+    kubectl -n "${namespace}" get event \
+      --sort-by=.metadata.creationTimestamp >&2 || true
+    printf 'workload rollout failed after Helm upgrade: %s\n' "${resource}" >&2
+    exit 1
+  fi
 done < <(kubectl -n "${namespace}" get deployment,statefulset,daemonset -o name)
 
-helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m
+# Helm does not wait for Prometheus Operator custom-resource conditions. In
+# particular, Alertmanager can exist while its StatefulSet was never created.
+wait_for_operator_resource() {
+  local resource_type="$1"
+  local display_name="$2"
+  local resource
+  local -a resources=()
+
+  mapfile -t resources < <(
+    kubectl -n "${namespace}" get "${resource_type}" \
+      -l "app.kubernetes.io/instance=${helm_release}" \
+      -o name
+  )
+
+  if [[ "${#resources[@]}" -ne 1 ]]; then
+    kubectl -n "${namespace}" get "${resource_type}" -o wide >&2 || true
+    printf 'expected exactly one %s custom resource for Helm release %s; found %s\n' \
+      "${display_name}" "${helm_release}" "${#resources[@]}" >&2
+    exit 1
+  fi
+
+  resource="${resources[0]}"
+  if ! kubectl -n "${namespace}" wait \
+    --for=condition=Available "${resource}" --timeout=10m; then
+    kubectl -n "${namespace}" describe "${resource}" >&2 || true
+    kubectl -n "${namespace}" get pod,statefulset -o wide >&2 || true
+    kubectl -n "${namespace}" logs deployment/monitoring-operator \
+      --since=15m --tail=200 >&2 || true
+    kubectl -n "${namespace}" get event \
+      --sort-by=.metadata.creationTimestamp >&2 || true
+    printf '%s did not become Available after Helm upgrade: %s\n' \
+      "${display_name}" "${resource}" >&2
+    exit 1
+  fi
+}
+
+wait_for_operator_resource 'alertmanagers.monitoring.coreos.com' 'Alertmanager'
+wait_for_operator_resource 'prometheuses.monitoring.coreos.com' 'Prometheus'
+
+if ! helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m; then
+  helm status "${helm_release}" --namespace "${namespace}" >&2 || true
+  kubectl -n "${namespace}" describe pod "${helm_release}-smoke-test" >&2 || true
+  kubectl -n "${namespace}" logs pod/"${helm_release}-smoke-test" \
+    --all-containers=true >&2 || true
+  kubectl -n "${namespace}" get service "${helm_release}-grafana" -o wide >&2 || true
+  kubectl -n "${namespace}" get endpointslice \
+    -l "kubernetes.io/service-name=${helm_release}-grafana" -o wide >&2 || true
+  kubectl -n "${namespace}" get networkpolicy \
+    allow-helm-smoke-to-grafana allow-helm-smoke-to-tempo -o yaml >&2 || true
+  printf '%s\n' \
+    'Helm test failed after a successful upgrade; the deployed release was not automatically rolled back.' >&2
+  exit 1
+fi
 
 tls_attempts=0
 until curl --fail --silent --show-error "https://api.${platform_domain}/health" >/dev/null \

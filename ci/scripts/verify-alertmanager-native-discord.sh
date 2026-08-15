@@ -28,46 +28,102 @@ temporary_directory="$(mktemp -d)"
 trap 'rm -rf "${temporary_directory}"' EXIT
 decoded_config="${temporary_directory}/alertmanager.yaml"
 alertmanager_resource="${temporary_directory}/alertmanager-resource.yaml"
+alertmanager_config_resource="${temporary_directory}/alertmanager-config-resource.yaml"
 printf '%s' "${encoded_config}" | base64 --decode > "${decoded_config}"
 
-awk '
-  /^---$/ {
-    if (capture) {
-      exit
-    }
-    next
-  }
-  /^kind: Alertmanager$/ {
-    capture = 1
-  }
-  capture {
-    print
-  }
-' "${rendered_manifest}" > "${alertmanager_resource}"
+extract_named_resource() {
+  local expected_kind="$1"
+  local expected_name="$2"
+  local output_file="$3"
 
-[[ -s "${alertmanager_resource}" ]] || {
-  printf 'rendered Alertmanager custom resource is missing\n' >&2
-  exit 1
+  awk -v expected_kind="${expected_kind}" -v expected_name="${expected_name}" '
+    function reset_document() {
+      document = ""
+      kind_matches = 0
+      name_matches = 0
+    }
+
+    function flush_document() {
+      if (kind_matches && name_matches) {
+        printf "%s", document
+        found = 1
+      }
+      reset_document()
+    }
+
+    BEGIN { reset_document() }
+
+    /^---$/ {
+      flush_document()
+      next
+    }
+
+    {
+      document = document $0 ORS
+      if ($0 ~ "^kind:[[:space:]]*" expected_kind "[[:space:]]*$") {
+        kind_matches = 1
+      }
+      if ($0 ~ "^[[:space:]]*name:[[:space:]]*" expected_name "[[:space:]]*$") {
+        name_matches = 1
+      }
+    }
+
+    END {
+      flush_document()
+      if (!found) exit 1
+    }
+  ' "${rendered_manifest}" > "${output_file}" || {
+    printf 'required rendered resource is missing: %s/%s\n' \
+      "${expected_kind}" "${expected_name}" >&2
+    exit 1
+  }
 }
 
-for expected in \
-  'discord_configs:' \
-  'webhook_url_file: /etc/alertmanager/secrets/solar-secrets/DISCORD_WEBHOOK'
+extract_named_resource \
+  'Alertmanager' \
+  'monitoring-alertmanager' \
+  "${alertmanager_resource}"
+extract_named_resource \
+  'AlertmanagerConfig' \
+  'solar-discord' \
+  "${alertmanager_config_resource}"
+
+if grep -Eq 'webhook_url(_file)?:' "${decoded_config}"
+then
+  printf 'base Alertmanager configuration must not contain an unresolved Discord webhook\n' >&2
+  exit 1
+fi
+
+for expected in 'receiver: "null"' '- name: "null"'
 do
-  grep -Fq "${expected}" "${decoded_config}" || {
-    printf 'native Alertmanager Discord contract is missing: %s\n' "${expected}" >&2
+  grep -Fq -- "${expected}" "${decoded_config}" || {
+    printf 'safe fallback Alertmanager configuration is missing: %s\n' "${expected}" >&2
     exit 1
   }
 done
 
-grep -Eq '^  secrets:$' "${alertmanager_resource}" || {
-  printf 'Alertmanager Secret mounts are missing from the rendered manifest\n' >&2
+grep -Eq '^  alertmanagerConfiguration:$' "${alertmanager_resource}" || {
+  printf 'Alertmanager does not select the global AlertmanagerConfig\n' >&2
   exit 1
 }
 
-grep -Eq '^    - solar-secrets$' "${alertmanager_resource}" || {
-  printf 'solar-secrets is not mounted into Alertmanager\n' >&2
+grep -Eq '^    name: solar-discord$' "${alertmanager_resource}" || {
+  printf 'Alertmanager global configuration name is not solar-discord\n' >&2
   exit 1
 }
+
+for expected in \
+  'discordConfigs:' \
+  'apiURL:' \
+  'name: solar-secrets' \
+  'key: DISCORD_WEBHOOK' \
+  'sendResolved: true'
+do
+  grep -Fq "${expected}" "${alertmanager_config_resource}" || {
+    printf 'native Alertmanager Discord SecretKeySelector contract is missing: %s\n' \
+      "${expected}" >&2
+    exit 1
+  }
+done
 
 printf 'ALERTMANAGER_NATIVE_DISCORD_OK\n'
