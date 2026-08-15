@@ -267,6 +267,30 @@ spec:
     - { protocol: TCP, port: 9090 }
     - { protocol: TCP, port: 3100 }
 ---
+# Grafana's Helm test pod uses the Grafana application labels and probes the
+# in-cluster health endpoint. The namespace default-deny policy would otherwise
+# block the test pod from reaching the Grafana service on TCP 3000.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-grafana-test-to-grafana
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      ports:
+        - protocol: TCP
+          port: 3000
+---
 # Traefik -> Grafana UI from kube-prometheus-stack.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
