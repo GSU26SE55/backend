@@ -150,6 +150,13 @@ tempo:
   image: grafana/tempo:2.6.1
   storage: 5Gi
   storageClass: local-path
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
   retention: 48h
 
 monitoring:
