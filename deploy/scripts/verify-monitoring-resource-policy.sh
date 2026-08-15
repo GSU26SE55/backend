@@ -38,6 +38,62 @@ extract_source() {
   }
 }
 
+extract_named_resource() {
+  local expected_kind="$1"
+  local expected_name="$2"
+  local output_file="$3"
+
+  awk -v expected_kind="${expected_kind}" -v expected_name="${expected_name}" '
+    function reset_document() {
+      document = ""
+      kind_matches = 0
+      name_matches = 0
+    }
+
+    function flush_document() {
+      if (kind_matches && name_matches) {
+        printf "%s", document
+        found = 1
+      }
+      reset_document()
+    }
+
+    BEGIN { reset_document() }
+
+    /^---$/ {
+      flush_document()
+      next
+    }
+
+    {
+      document = document $0 ORS
+
+      if ($0 ~ "^kind:[[:space:]]*" expected_kind "[[:space:]]*$") {
+        kind_matches = 1
+      }
+
+      if ($0 ~ "^[[:space:]]*name:[[:space:]]*" expected_name "[[:space:]]*$") {
+        name_matches = 1
+      }
+    }
+
+    END {
+      flush_document()
+      if (!found) exit 1
+    }
+  ' "${rendered_manifest}" > "${output_file}" || {
+    printf 'required rendered resource is missing: %s/%s\n' \
+      "${expected_kind}" "${expected_name}" >&2
+    exit 1
+  }
+
+  [[ -s "${output_file}" ]] || {
+    printf 'rendered resource block is empty: %s/%s\n' \
+      "${expected_kind}" "${expected_name}" >&2
+    exit 1
+  }
+}
+
 extract_container_block() {
   local input_file="$1"
   local section_name="$2"
@@ -124,6 +180,7 @@ grafana_deployment="${temporary_directory}/grafana-deployment.yaml"
 prometheus_operator="${temporary_directory}/prometheus-operator.yaml"
 grafana_service_monitor="${temporary_directory}/grafana-service-monitor.yaml"
 grafana_test="${temporary_directory}/grafana-test.yaml"
+grafana_test_network_policy="${temporary_directory}/grafana-test-network-policy.yaml"
 solar_smoke_test="${temporary_directory}/solar-smoke-test.yaml"
 admission_create_job="${temporary_directory}/admission-create-job.yaml"
 admission_patch_job="${temporary_directory}/admission-patch-job.yaml"
@@ -149,6 +206,10 @@ extract_source \
 extract_source \
   'kube-prometheus-stack/templates/prometheus-operator/admission-webhooks/job-patch/job-patchWebhook.yaml' \
   "${admission_patch_job}"
+extract_named_resource \
+  'NetworkPolicy' \
+  'allow-grafana-test-to-grafana' \
+  "${grafana_test_network_policy}"
 
 while read -r section_name container_name
 do
@@ -209,5 +270,61 @@ grep -Eq '^[[:space:]]+scrapeTimeout: 10s$' "${grafana_service_monitor}" || {
   printf 'Grafana ServiceMonitor scrapeTimeout must be 10s\n' >&2
   exit 1
 }
+
+grafana_name_label_count="$(
+  awk '
+    $1 == "app.kubernetes.io/name:" && $2 == "grafana" { count += 1 }
+    END { print count + 0 }
+  ' "${grafana_test_network_policy}"
+)"
+grafana_instance_label_count="$(
+  awk '
+    $1 == "app.kubernetes.io/instance:" && NF == 2 { count += 1 }
+    END { print count + 0 }
+  ' "${grafana_test_network_policy}"
+)"
+grafana_instance_value_count="$(
+  awk '
+    $1 == "app.kubernetes.io/instance:" && NF == 2 { print $2 }
+  ' "${grafana_test_network_policy}" |
+    sort -u |
+    wc -l |
+    tr -d '[:space:]'
+)"
+
+[[ "${grafana_name_label_count}" -ge 2 ]] || {
+  printf 'Grafana Helm test NetworkPolicy must select Grafana as both source and target\n' >&2
+  exit 1
+}
+
+[[ "${grafana_instance_label_count}" -ge 2 &&
+   "${grafana_instance_value_count}" == '1' ]] || {
+  printf 'Grafana Helm test NetworkPolicy must use one release instance for source and target\n' >&2
+  exit 1
+}
+
+grep -Eq '^[[:space:]]+- protocol: TCP$' \
+  "${grafana_test_network_policy}" || {
+    printf 'Grafana Helm test NetworkPolicy must allow TCP\n' >&2
+    exit 1
+  }
+
+grep -Eq '^[[:space:]]+port: 3000$' \
+  "${grafana_test_network_policy}" || {
+    printf 'Grafana Helm test NetworkPolicy must allow Grafana port 3000\n' >&2
+    exit 1
+  }
+
+grep -Eq '^[[:space:]]+"?helm[.]sh/hook-delete-policy"?:[[:space:]]+"?before-hook-creation"?$' \
+  "${solar_smoke_test}" || {
+    printf 'Solar smoke test must retain successful pods for diagnostics\n' >&2
+    exit 1
+  }
+
+if grep -Fq 'hook-succeeded' "${solar_smoke_test}"
+then
+  printf 'Solar smoke test must not delete successful diagnostic pods\n' >&2
+  exit 1
+fi
 
 printf 'MONITORING_RESOURCE_POLICY_OK\n'
