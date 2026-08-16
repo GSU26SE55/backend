@@ -420,6 +420,7 @@ if ! helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m;
   kubectl -n "${namespace}" get endpointslice \
     -l "kubernetes.io/service-name=${helm_release}-grafana" -o wide >&2 || true
   kubectl -n "${namespace}" get networkpolicy \
+    allow-monitoring-stack \
     allow-helm-smoke-to-grafana \
     allow-helm-smoke-to-tempo \
     allow-grafana-to-kubernetes-api \
