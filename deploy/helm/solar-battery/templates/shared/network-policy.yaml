@@ -229,8 +229,9 @@ spec:
     - { protocol: TCP, port: 4318 }
 ---
 # Monitoring internal traffic:
-# - Prometheus scrapes app, infra, exporter, Loki, Promtail, cAdvisor metrics.
-# - Grafana reads Prometheus/Loki.
+# - Prometheus scrapes app, infra, exporter, Grafana, Alertmanager, Loki,
+#   Promtail, and cAdvisor metrics; it also delivers alerts to Alertmanager.
+# - Grafana reads Prometheus, Alertmanager, Loki, and Tempo.
 # - Promtail pushes logs to Loki.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -250,6 +251,8 @@ spec:
     - { protocol: TCP, port: 9187 }
     - { protocol: TCP, port: 9121 }
     - { protocol: TCP, port: 9100 }
+    - { protocol: TCP, port: 3000 }
+    - { protocol: TCP, port: 9093 }
     - { protocol: TCP, port: 3100 }
     - { protocol: TCP, port: 3101 }
     - { protocol: TCP, port: 9115 }
@@ -266,6 +269,13 @@ spec:
     ports:
     - { protocol: TCP, port: 9090 }
     - { protocol: TCP, port: 3100 }
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: grafana
+    ports:
+    - { protocol: TCP, port: 9093 }
+    - { protocol: TCP, port: 3200 }
 ---
 # The chart-owned smoke Pod has a dedicated label that cannot match Grafana's
 # Service selector. Allow only that Pod to probe Grafana's container port.

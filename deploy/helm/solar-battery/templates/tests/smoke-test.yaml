@@ -66,7 +66,7 @@ spec:
             fi
             rm -f "${response_file}" "${error_file}"
           }
-          check_grafana_resource() {
+          check_grafana_api() {
             resource_path="$1"
             resource_name="$2"
             if [ "${grafana_failed}" -ne 0 ]; then
@@ -79,13 +79,13 @@ spec:
                 --max-time 10 \
                 "http://{{ .Release.Name }}-grafana:80${resource_path}" \
                 >/dev/null 2>&1; then
-                echo "OK   Grafana provisioned ${resource_name}"
+                echo "OK   Grafana ${resource_name}"
                 return
               fi
 
               attempts=$((attempts + 1))
               if [ "${attempts}" -ge 30 ]; then
-                echo "FAIL Grafana did not provision ${resource_name}"
+                echo "FAIL Grafana could not make ${resource_name} available"
                 fail=1
                 grafana_failed=1
                 return
@@ -103,18 +103,18 @@ spec:
           check http://smsservice:80/metrics
           {{- if (index .Values "kube-prometheus-stack" "enabled") }}
           check http://{{ .Release.Name }}-grafana:80/api/health
-          check_grafana_resource /api/datasources/uid/prometheus "Prometheus datasource"
-          check_grafana_resource /api/datasources/uid/alertmanager "Alertmanager datasource"
+          check_grafana_api /api/datasources/uid/prometheus/health "queried Prometheus datasource"
+          check_grafana_api /api/datasources/uid/alertmanager/health "queried Alertmanager datasource"
           {{- if (index .Values "loki-stack" "enabled") }}
-          check_grafana_resource /api/datasources/uid/loki "Loki datasource"
+          check_grafana_api /api/datasources/uid/loki/health "queried Loki datasource"
           {{- end }}
           {{- if .Values.tempo.enabled }}
-          check_grafana_resource /api/datasources/uid/tempo "Tempo datasource"
+          check_grafana_api /api/datasources/uid/tempo/health "queried Tempo datasource"
           {{- end }}
           {{- if .Values.monitoring.grafanaDashboards.enabled }}
           {{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
           {{- $dashboard := $.Files.Get $path | fromJson }}
-          check_grafana_resource /api/dashboards/uid/{{ $dashboard.uid }} "dashboard {{ $dashboard.title }}"
+          check_grafana_api /api/dashboards/uid/{{ $dashboard.uid }} "provisioned dashboard {{ $dashboard.title }}"
           {{- end }}
           {{- end }}
           {{- end }}

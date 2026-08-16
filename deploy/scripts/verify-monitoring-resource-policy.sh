@@ -294,6 +294,49 @@ verify_application_service_monitor_contract() {
   }
 }
 
+verify_network_policy_ingress_port() {
+  local input_file="$1"
+  local source_label="$2"
+  local target_port="$3"
+  local contract_name="$4"
+
+  awk \
+    -v expected_source="${source_label}" \
+    -v expected_port="port: ${target_port}" '
+      function flush_rule() {
+        if (has_source && has_port) {
+          found = 1
+        }
+        has_source = 0
+        has_port = 0
+      }
+
+      /^  - from:[[:space:]]*$/ {
+        flush_rule()
+        in_rule = 1
+        next
+      }
+
+      in_rule {
+        if (index($0, expected_source) > 0) {
+          has_source = 1
+        }
+        if (index($0, expected_port) > 0) {
+          has_port = 1
+        }
+      }
+
+      END {
+        flush_rule()
+        exit(found ? 0 : 1)
+      }
+    ' "${input_file}" || {
+    printf '%s NetworkPolicy ingress contract is missing: source=%s port=%s\n' \
+      "${contract_name}" "${source_label}" "${target_port}" >&2
+    exit 1
+  }
+}
+
 for application_service in \
   apigateway \
   auditaggregatorservice \
@@ -311,6 +354,7 @@ done
 grafana_deployment="${temporary_directory}/grafana-deployment.yaml"
 prometheus_operator="${temporary_directory}/prometheus-operator.yaml"
 grafana_service_monitor="${temporary_directory}/grafana-service-monitor.yaml"
+monitoring_network_policy="${temporary_directory}/monitoring-network-policy.yaml"
 grafana_smoke_network_policy="${temporary_directory}/grafana-smoke-network-policy.yaml"
 grafana_kubernetes_api_network_policy="${temporary_directory}/grafana-kubernetes-api-network-policy.yaml"
 grafana_datasource_configmap="${temporary_directory}/grafana-datasource-configmap.yaml"
@@ -341,6 +385,10 @@ extract_source \
 extract_source \
   'kube-prometheus-stack/templates/prometheus-operator/admission-webhooks/job-patch/job-patchWebhook.yaml' \
   "${admission_patch_job}"
+extract_named_resource \
+  'NetworkPolicy' \
+  'allow-monitoring-stack' \
+  "${monitoring_network_policy}"
 extract_named_resource \
   'NetworkPolicy' \
   'allow-helm-smoke-to-grafana' \
@@ -482,6 +530,23 @@ do
   }
 done
 
+while read -r source_name target_port
+do
+  verify_network_policy_ingress_port \
+    "${monitoring_network_policy}" \
+    "app.kubernetes.io/name: ${source_name}" \
+    "${target_port}" \
+    'monitoring stack'
+done <<'MONITORING_INGRESS'
+prometheus 3000
+prometheus 9093
+grafana 9090
+grafana 9093
+grafana 3100
+grafana 3200
+promtail 3100
+MONITORING_INGRESS
+
 default_datasource_count="$(
   awk '/^[[:space:]]+isDefault:[[:space:]]+true[[:space:]]*$/ { count += 1 }
        END { print count + 0 }' \
@@ -582,10 +647,10 @@ do
 done
 
 for expected_grafana_resource in \
-  '/api/datasources/uid/prometheus' \
-  '/api/datasources/uid/alertmanager' \
-  '/api/datasources/uid/loki' \
-  '/api/datasources/uid/tempo' \
+  '/api/datasources/uid/prometheus/health' \
+  '/api/datasources/uid/alertmanager/health' \
+  '/api/datasources/uid/loki/health' \
+  '/api/datasources/uid/tempo/health' \
   '/api/dashboards/uid/alert-ticket-saga' \
   '/api/dashboards/uid/audit-pipeline' \
   '/api/dashboards/uid/auth-security' \
