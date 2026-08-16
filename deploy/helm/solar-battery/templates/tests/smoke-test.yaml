@@ -24,11 +24,25 @@ spec:
         limits:
           cpu: 100m
           memory: 128Mi
+      {{- if (index .Values "kube-prometheus-stack" "enabled") }}
+      env:
+        - name: GRAFANA_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ dig "admin" "existingSecret" "" (index .Values "kube-prometheus-stack" "grafana") | default (printf "%s-grafana" .Release.Name) }}
+              key: admin-user
+        - name: GRAFANA_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ dig "admin" "existingSecret" "" (index .Values "kube-prometheus-stack" "grafana") | default (printf "%s-grafana" .Release.Name) }}
+              key: admin-password
+      {{- end }}
       command: ["/bin/sh", "-c"]
       args:
         - |
           set -e
           fail=0
+          grafana_failed=0
           check() {
             url="$1"
             response_file="$(mktemp)"
@@ -52,6 +66,33 @@ spec:
             fi
             rm -f "${response_file}" "${error_file}"
           }
+          check_grafana_resource() {
+            resource_path="$1"
+            resource_name="$2"
+            if [ "${grafana_failed}" -ne 0 ]; then
+              return
+            fi
+            attempts=0
+            while :; do
+              if curl --fail --silent --show-error \
+                --user "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
+                --max-time 10 \
+                "http://{{ .Release.Name }}-grafana:80${resource_path}" \
+                >/dev/null 2>&1; then
+                echo "OK   Grafana provisioned ${resource_name}"
+                return
+              fi
+
+              attempts=$((attempts + 1))
+              if [ "${attempts}" -ge 30 ]; then
+                echo "FAIL Grafana did not provision ${resource_name}"
+                fail=1
+                grafana_failed=1
+                return
+              fi
+              sleep 2
+            done
+          }
           echo "== Smoke test: readiness endpoint các service =="
           check http://apigateway:80/health
           check http://authservice:80/health
@@ -62,6 +103,20 @@ spec:
           check http://smsservice:80/metrics
           {{- if (index .Values "kube-prometheus-stack" "enabled") }}
           check http://{{ .Release.Name }}-grafana:80/api/health
+          check_grafana_resource /api/datasources/uid/prometheus "Prometheus datasource"
+          check_grafana_resource /api/datasources/uid/alertmanager "Alertmanager datasource"
+          {{- if (index .Values "loki-stack" "enabled") }}
+          check_grafana_resource /api/datasources/uid/loki "Loki datasource"
+          {{- end }}
+          {{- if .Values.tempo.enabled }}
+          check_grafana_resource /api/datasources/uid/tempo "Tempo datasource"
+          {{- end }}
+          {{- if .Values.monitoring.grafanaDashboards.enabled }}
+          {{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+          {{- $dashboard := $.Files.Get $path | fromJson }}
+          check_grafana_resource /api/dashboards/uid/{{ $dashboard.uid }} "dashboard {{ $dashboard.title }}"
+          {{- end }}
+          {{- end }}
           {{- end }}
           {{- if .Values.tempo.enabled }}
           check http://tempo:3200/ready

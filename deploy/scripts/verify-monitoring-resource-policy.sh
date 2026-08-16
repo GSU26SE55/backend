@@ -312,6 +312,10 @@ grafana_deployment="${temporary_directory}/grafana-deployment.yaml"
 prometheus_operator="${temporary_directory}/prometheus-operator.yaml"
 grafana_service_monitor="${temporary_directory}/grafana-service-monitor.yaml"
 grafana_smoke_network_policy="${temporary_directory}/grafana-smoke-network-policy.yaml"
+grafana_kubernetes_api_network_policy="${temporary_directory}/grafana-kubernetes-api-network-policy.yaml"
+grafana_datasource_configmap="${temporary_directory}/grafana-datasource-configmap.yaml"
+loki_datasource_configmap="${temporary_directory}/loki-datasource-configmap.yaml"
+tempo_datasource_configmap="${temporary_directory}/tempo-datasource-configmap.yaml"
 tempo_smoke_network_policy="${temporary_directory}/tempo-smoke-network-policy.yaml"
 tempo_deployment="${temporary_directory}/tempo-deployment.yaml"
 tempo_container="${temporary_directory}/tempo-container.yaml"
@@ -343,8 +347,24 @@ extract_named_resource \
   "${grafana_smoke_network_policy}"
 extract_named_resource \
   'NetworkPolicy' \
+  'allow-grafana-to-kubernetes-api' \
+  "${grafana_kubernetes_api_network_policy}"
+extract_named_resource \
+  'NetworkPolicy' \
   'allow-helm-smoke-to-tempo' \
   "${tempo_smoke_network_policy}"
+extract_named_resource \
+  'ConfigMap' \
+  'monitoring-grafana-datasource' \
+  "${grafana_datasource_configmap}"
+extract_named_resource \
+  'ConfigMap' \
+  'solar-loki-stack' \
+  "${loki_datasource_configmap}"
+extract_named_resource \
+  'ConfigMap' \
+  'tempo-grafana-datasource' \
+  "${tempo_datasource_configmap}"
 
 extract_named_resource \
   'Deployment' \
@@ -430,6 +450,85 @@ grep -Eq '^[[:space:]]+scrapeTimeout: 10s$' "${grafana_service_monitor}" || {
   exit 1
 }
 
+for sidecar_name in grafana-sc-dashboard grafana-sc-datasources
+do
+  sidecar_manifest="${temporary_directory}/${sidecar_name}.yaml"
+
+  grep -Fq 'value: "configmap"' "${sidecar_manifest}" || {
+    printf 'Grafana sidecar must watch ConfigMaps only: %s\n' \
+      "${sidecar_name}" >&2
+    exit 1
+  }
+
+  if grep -Fq 'value: "ALL"' "${sidecar_manifest}"
+  then
+    printf 'Grafana sidecar must be scoped to the release namespace: %s\n' \
+      "${sidecar_name}" >&2
+    exit 1
+  fi
+done
+
+for expected in \
+  'app.kubernetes.io/name: grafana' \
+  'app.kubernetes.io/instance: solar' \
+  'protocol: TCP' \
+  'port: 443' \
+  'port: 6443'
+do
+  grep -Fq "${expected}" "${grafana_kubernetes_api_network_policy}" || {
+    printf 'Grafana Kubernetes API NetworkPolicy contract is missing: %s\n' \
+      "${expected}" >&2
+    exit 1
+  }
+done
+
+default_datasource_count="$(
+  awk '/^[[:space:]]+isDefault:[[:space:]]+true[[:space:]]*$/ { count += 1 }
+       END { print count + 0 }' \
+    "${grafana_datasource_configmap}" \
+    "${loki_datasource_configmap}" \
+    "${tempo_datasource_configmap}"
+)"
+
+[[ "${default_datasource_count}" == '1' ]] || {
+  printf 'Grafana must have exactly one default datasource (got %s)\n' \
+    "${default_datasource_count}" >&2
+  exit 1
+}
+
+for expected in \
+  'uid: prometheus' \
+  'isDefault: true'
+do
+  grep -Fq "${expected}" "${grafana_datasource_configmap}" || {
+    printf 'Grafana datasource provisioning is missing: %s\n' \
+      "${expected}" >&2
+    exit 1
+  }
+done
+for expected in \
+  'uid: tempo' \
+  'url: http://tempo:3200' \
+  'isDefault: false'
+do
+  grep -Fq "${expected}" "${tempo_datasource_configmap}" || {
+    printf 'Tempo datasource provisioning is missing: %s\n' \
+      "${expected}" >&2
+    exit 1
+  }
+done
+
+for expected in \
+  'uid: "loki"' \
+  'isDefault: false'
+do
+  grep -Fq "${expected}" "${loki_datasource_configmap}" || {
+    printf 'Loki datasource provisioning is missing: %s\n' \
+      "${expected}" >&2
+    exit 1
+  }
+done
+
 grep -Eq '^[[:space:]]+app[.]kubernetes[.]io/component: helm-smoke-test$' \
   "${solar_smoke_test}" || {
   printf 'Solar smoke test must use the dedicated helm-smoke-test label\n' >&2
@@ -478,6 +577,41 @@ for expected_url in \
 do
   grep -Fq "${expected_url}" "${solar_smoke_test}" || {
     printf 'Solar smoke test endpoint is missing: %s\n' "${expected_url}" >&2
+    exit 1
+  }
+done
+
+for expected_grafana_resource in \
+  '/api/datasources/uid/prometheus' \
+  '/api/datasources/uid/alertmanager' \
+  '/api/datasources/uid/loki' \
+  '/api/datasources/uid/tempo' \
+  '/api/dashboards/uid/alert-ticket-saga' \
+  '/api/dashboards/uid/audit-pipeline' \
+  '/api/dashboards/uid/auth-security' \
+  '/api/dashboards/uid/solar-battery-health' \
+  '/api/dashboards/uid/chat-hub-wave6' \
+  '/api/dashboards/uid/solar-environmental-monitoring' \
+  '/api/dashboards/uid/infrastructure' \
+  '/api/dashboards/uid/solar-iot-fleet' \
+  '/api/dashboards/uid/logs-overview' \
+  '/api/dashboards/uid/messaging-reliability' \
+  '/api/dashboards/uid/notification-ops' \
+  '/api/dashboards/uid/services-overview' \
+  '/api/dashboards/uid/solar-sla-ops'
+do
+  grep -Fq "${expected_grafana_resource}" "${solar_smoke_test}" || {
+    printf 'Solar smoke test does not verify Grafana resource: %s\n' \
+      "${expected_grafana_resource}" >&2
+    exit 1
+  }
+done
+
+for expected_secret_key in admin-user admin-password
+do
+  grep -Fq "key: ${expected_secret_key}" "${solar_smoke_test}" || {
+    printf 'Solar smoke test Grafana credential reference is missing: %s\n' \
+      "${expected_secret_key}" >&2
     exit 1
   }
 done

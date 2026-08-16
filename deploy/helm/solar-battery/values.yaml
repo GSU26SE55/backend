@@ -613,6 +613,11 @@ kube-prometheus-stack:
   grafana:
     enabled: true
     adminPassword: changeme        # ← override trong values-staging
+    # Dashboard/datasource sidecars only watch ConfigMaps in their own release
+    # namespace. This avoids unnecessary cluster-wide reads and keeps the RBAC
+    # contract namespaced.
+    rbac:
+      namespaced: true
     # Upstream test Pod reuses Grafana's Service selector labels and can become
     # an endpoint of the Service it probes. The chart-owned smoke Pod tests
     # Grafana with a dedicated non-matching label instead.
@@ -623,9 +628,13 @@ kube-prometheus-stack:
         enabled: true
         defaultDatasourceEnabled: true
         uid: prometheus
+        resource: configmap
+        searchNamespace: []
       dashboards:
         enabled: true
         label: grafana_dashboard   # match label trong grafana-dashboards-cm.yaml
+        resource: configmap
+        searchNamespace: []
     ingress:
       enabled: true
       ingressClassName: traefik
@@ -641,6 +650,9 @@ loki-stack:
   enabled: false
   loki:
     fullnameOverride: loki
+    # Prometheus is the single default datasource. Grafana rejects datasource
+    # provisioning when both Prometheus and Loki declare isDefault=true.
+    isDefault: false
     datasource:
       uid: loki
     persistence:

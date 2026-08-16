@@ -1,10 +1,6 @@
 {{/*
-  ConfigMap chứa 5 dashboard JSON:
-  - Services Overview
-  - Messaging & Reliability
-  - Infrastructure
-  - Logs Overview
-  - Alert-Ticket Saga (Sprint 5B #239)
+  Mỗi file dashboards/*.json được render thành một ConfigMap. Production
+  hiện có 13 dashboard Solar; Grafana sidecar tự động discover tất cả.
 
   Grafana sidecar (built-in trong kube-prometheus-stack) auto-discover ConfigMap
   có label `grafana_dashboard: "1"` rồi load vào Grafana.
