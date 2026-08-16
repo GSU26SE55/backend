@@ -22,12 +22,12 @@ namespace AuthService.IntegrationTests.Outbox;
 /// (read → publish → mark processed) verified end-to-end. RabbitMQ-specific edge cases (broker
 /// reconnect, dead letter) thuộc về MassTransit lib test, không phải app logic.
 /// </summary>
-[Collection("Integration")]
+[Collection("RelayIntegration")]
 public class OutboxRelayIntegrationTests
 {
-    private readonly AuthApiFactory _factory;
+    private readonly RelayEnabledAuthApiFactory _factory;
 
-    public OutboxRelayIntegrationTests(AuthApiFactory factory) => _factory = factory;
+    public OutboxRelayIntegrationTests(RelayEnabledAuthApiFactory factory) => _factory = factory;
 
     [Fact]
     public async Task OutboxMessage_Pending_GetsPublishedAndMarkedProcessed()
