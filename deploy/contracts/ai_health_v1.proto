@@ -1,0 +1,26 @@
+// Minimal production probe for the application-level AI gRPC contract.
+// Field numbers mirror services/*/Protos/ai_service.proto. Keeping only Health
+// avoids packaging the full inference schema into the deployment payload.
+syntax = "proto3";
+
+package aimodule.v1;
+
+service AiService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string model_version = 2;
+  bool scaler_loaded = 3;
+  bool mamba_loaded = 4;
+  bool isolation_forest_loaded = 5;
+  bool lfp_loaded = 6;
+  string lfp_model_version = 7;
+  string soc_mode = 8;
+  string lfp_soc_mode = 9;
+  bool long_loaded = 10;
+  string long_model_version = 11;
+}

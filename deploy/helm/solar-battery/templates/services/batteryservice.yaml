@@ -46,13 +46,22 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
-      {{- if .Values.iot.mqttNodeIp }}
+      {{- if or .Values.iot.mqttNodeIp (and .Values.wireguard.enabled .Values.wireguard.aiIpv4) }}
       # Keep the public MQTT DNS name for certificate verification while routing
       # same-VPS traffic over the Droplet/VPC address (avoids Reserved-IP hairpin).
+      # Keep the public AI name for TLS verification while resolving it to the
+      # WireGuard peer, so both gRPC and HTTPS fallback remain encrypted end-to-end.
       hostAliases:
+      {{- if .Values.iot.mqttNodeIp }}
       - ip: {{ .Values.iot.mqttNodeIp | quote }}
         hostnames:
         - {{ printf "mqtt.%s" .Values.global.domain | quote }}
+      {{- end }}
+      {{- if and .Values.wireguard.enabled .Values.wireguard.aiIpv4 }}
+      - ip: {{ .Values.wireguard.aiIpv4 | quote }}
+        hostnames:
+        - {{ printf "ai.%s" .Values.global.domain | quote }}
+      {{- end }}
       {{- end }}
       securityContext:
         {{- include "solar.podSecurityContext" . | nindent 8 }}

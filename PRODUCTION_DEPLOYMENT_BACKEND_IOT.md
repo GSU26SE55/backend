@@ -277,7 +277,7 @@ Mỗi thiết bị vẫn phải được provision `deviceCode`, API key, MQTT c
 AP/portal riêng qua NVS/khâu lắp đặt trước khi giao khách. Không dùng các placeholder compile-time
 trong `config.example.h` làm credential vận hành.
 
-## 8. TLS MQTT và WireGuard AI -> Loki
+## 8. TLS MQTT và WireGuard Backend <-> AI
 
 Backend Helm tạo Certificate `mqtt-public-tls`. Sau lần backend deploy đầu tiên, cài script đồng bộ và timer bằng root:
 
@@ -293,12 +293,20 @@ sudo systemctl enable --now solar-mqtt-tls-sync.timer
 sudo systemctl start solar-mqtt-tls-sync.service
 ```
 
-Tạo WireGuard site-to-site:
+Runbook đầy đủ, gồm thứ tự không gây deadlock giữa hai pipeline, nằm tại
+`docs/runbooks/ai-wireguard-observability.md`. Contract bắt buộc:
 
 - Platform: `10.20.0.1/32`.
 - AI: `10.20.0.2/32`.
 - Chỉ route hai địa chỉ `/32`, không mở toàn bộ private network.
-- UFW cho UDP WireGuard chỉ từ public IP peer.
+- Nếu hai Droplet cùng DigitalOcean VPC, dùng private VPC IPv4 làm WireGuard
+  endpoint. Chỉ fallback sang primary public IPv4 sau khi xác nhận VPC route không dùng được.
+- DigitalOcean Cloud Firewall và UFW chỉ cho UDP `51820` từ đúng endpoint peer.
+- Backend gọi cả gRPC primary và HTTPS fallback tới hostname
+  `ai.solars.io.vn`; pod resolve hostname này thành `10.20.0.2`, nhờ đó vẫn giữ
+  đúng TLS SNI/certificate nhưng traffic không đi qua Internet.
+- Prometheus scrape application, node-exporter, cAdvisor và Alloy qua tunnel.
+- Alloy đẩy log sang Loki bridge `10.20.0.1:3100`; Loki không được public.
 
 Sau khi `wg show` và ping hai chiều thành công, cài Loki bridge trên Platform:
 
@@ -313,10 +321,16 @@ AI host env dùng:
 
 ```text
 AI_MONITORING_BIND_IP=10.20.0.2
+PLATFORM_WIREGUARD_IPV4=10.20.0.1
 LOKI_PUSH_URL=http://10.20.0.1:3100/loki/api/v1/push
 ```
 
-Nếu WireGuard chưa hoàn thành thì vẫn deploy backend/IoT được, nhưng Alloy AI không gửi log sang Loki. Không đổi Loki thành public để né bước này.
+Sau khi các gate mới được merge, WireGuard không còn là optional: cả backend và
+AI production preflight đều dừng trước khi đổi release nếu route qua tunnel hoặc
+các probe end-to-end không đạt. Jenkins deploy user không cần `CAP_NET_ADMIN` và
+không được cấp `sudo` chỉ để gọi `wg show`; HTTPS/gRPC qua peer `/32` cùng Loki
+bridge là bằng chứng chức năng. Cấu hình tunnel trước, deploy AI trước, rồi deploy
+backend. Không đổi Loki hoặc exporter thành public để né bước này.
 
 ## 9. Jenkins executor requirements
 
@@ -401,14 +415,17 @@ Production job cố ý tách khỏi Multibranch để tránh deadlock executor v
 2. Hoàn tất OS, Docker, K3s, Helm, cert-manager, Cosign, deploy user, kubeconfig và firewall.
 3. Tạo thư mục, host env, backend env, monitoring env, IoT runtime env, Cosign public key và GHCR login/pull secret.
 4. Cấu hình Jenkins credentials, labels, lock và bốn jobs.
-5. Merge backend vào `main`.
-6. Chờ backend Multibranch xanh và `solar-backend-production` xanh.
-7. Xác nhận certificate cho API/files/Grafana/MQTT Ready.
-8. Cài và chạy MQTT TLS sync timer; xác nhận `/opt/solar-iot/secrets/mosquitto/tls/tls.crt` và `tls.key` tồn tại, khớp nhau.
-9. Merge IoT vào `main`.
-10. Chờ IoT Multibranch và `solar-iot-production` xanh.
-11. Cấu hình WireGuard và Loki bridge; cập nhật/redeploy AI Alloy nếu trước đó bind loopback.
-12. Chạy toàn bộ smoke check ở mục 13.
+5. Cấu hình WireGuard và Loki bridge theo
+    `docs/runbooks/ai-wireguard-observability.md`.
+6. Deploy AI để exporter/Alloy bind lên `10.20.0.2`.
+7. Merge backend vào `main`.
+8. Chờ backend Multibranch xanh và `solar-backend-production` xanh; lần deploy
+   này tạo bốn Prometheus target và ép kết nối gRPC/HTTPS qua tunnel.
+9. Xác nhận certificate cho API/files/Grafana/MQTT Ready.
+10. Cài và chạy MQTT TLS sync timer; xác nhận `/opt/solar-iot/secrets/mosquitto/tls/tls.crt` và `tls.key` tồn tại, khớp nhau.
+11. Merge IoT vào `main`.
+12. Chờ IoT Multibranch và `solar-iot-production` xanh.
+13. Chạy toàn bộ smoke check ở mục 13 và acceptance matrix trong runbook WireGuard.
 
 Không deploy IoT trước khi cert MQTT được cấp và đồng bộ; preflight sẽ chặn.
 

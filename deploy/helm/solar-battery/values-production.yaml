@@ -18,6 +18,11 @@ global:
     maxUnavailable: 1
     maxSurge: 0
 
+wireguard:
+  enabled: true
+  platformIpv4: 10.20.0.1
+  aiIpv4: 10.20.0.2
+
 services:
   apigateway:
     replicas: 1
@@ -160,6 +165,15 @@ tempo:
   retention: 48h
 
 monitoring:
+  ai:
+    enabled: true
+    domain: ai.solars.io.vn
+    scrapeInterval: 15s
+    scrapeTimeout: 10s
+    applicationPort: 443
+    nodeExporterPort: 9100
+    cadvisorPort: 8082
+    alloyPort: 12345
   alertmanagerDiscord:
     enabled: true
     name: solar-discord
@@ -213,6 +227,15 @@ kube-prometheus-stack:
       limits:   { cpu: 100m, memory: 128Mi }
   prometheus:
     prometheusSpec:
+      # Preserve ai.solars.io.vn as the TLS SNI/HTTP authority while routing the
+      # scrape through wg0 instead of the public Reserved IP.
+      hostAliases:
+      - ip: 10.20.0.2
+        hostnames: [ai.solars.io.vn]
+      scrapeConfigSelectorNilUsesHelmValues: false
+      scrapeConfigSelector:
+        matchLabels:
+          prometheus: monitoring
       retention: 7d
       retentionSize: 8GB
       scrapeInterval: 15s
