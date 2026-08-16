@@ -358,13 +358,7 @@ verify_ai_observability_targets() {
     kubectl -n "${namespace}" get service \
       -l app.kubernetes.io/name=prometheus \
       -o json |
-      jq -er '
-        [.items[] | select(any(.spec.ports[]?; .port == 9090))] as $items
-        | if ($items | length) == 1
-          then $items[0].metadata.name
-          else error("expected exactly one Prometheus service on port 9090")
-          end
-      '
+      jq -er -f "${script_dir}/select-prometheus-service.jq"
   )" || {
     kubectl -n "${namespace}" get service -o wide >&2 || true
     printf 'unable to identify the Prometheus service\n' >&2
@@ -406,6 +400,9 @@ verify_ai_observability_targets() {
       jq '.data.activeTargets[] | select(.labels.job | startswith("ai-"))
           | {job: .labels.job, health, lastError, scrapeUrl}' >&2 || true
     cat "${port_forward_log}" >&2 || true
+  else
+    printf '%s\n' \
+      'AI Prometheus targets are UP: ai-alloy, ai-application, ai-cadvisor, ai-node'
   fi
 
   kill "${port_forward_pid}" 2>/dev/null || true
