@@ -37,6 +37,11 @@ volumes:
   #      phản hồi của kỹ thuật viên mất trắng mà UI vẫn báo thành công.
   #   2. Nửa số ca "accepted" vô hình với nửa còn lại ⇒ few-shot học trên nửa dữ liệu.
   ai-prescription-history:
+  # Store runtime của entrypoint (kb/releases, prescription-history, classification-feedback).
+  # Entrypoint mặc định AI_DATA_DIR=/data, nhưng image chạy USER 10001 nên không mkdir được
+  # ở root filesystem — ta trỏ AI_DATA_DIR sang /app/data và mount volume này vào đó.
+  # Dùng CHUNG cho cả hai transport, cùng lý do như hai store ở trên.
+  ai-data:
   postgres-data:
   mosquitto-data:   # Sprint IoT-1 #253 — chỉ dùng khi bật profile `mqtt`
   mosquitto-log:
@@ -407,11 +412,16 @@ services:
       # LLM keys optional — chỉ cần cho /prescribe enrich=true. Thiếu → rule-based fallback.
       DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
       GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+      # Entrypoint mặc định /data, nhưng image chạy USER 10001 nên `mkdir /data` bị
+      # Permission denied và `set -eu` giết luôn container trước khi server lên.
+      # /app/data nằm trong WORKDIR và được mount volume ai-data bên dưới.
+      AI_DATA_DIR: /app/data
     expose:
       - "50051"
     volumes:
       # Dùng CHUNG với ai-module-http: hai transport phải ghi vào một store, nếu không
       # precision/recall khác nhau tuỳ hỏi bên nào.
+      - ai-data:/app/data
       - ai-classification-feedback:/app/models/classification_feedback
       - ai-prescription-history:/app/models/prescription_history
     networks: [solar-net]
@@ -426,11 +436,14 @@ services:
     environment:
       DEEPSEEK_API_KEY: ${AI_DEEPSEEK_API_KEY:-}
       GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+      # Xem ghi chú ở ai-module-grpc: /data không ghi được với USER 10001.
+      AI_DATA_DIR: /app/data
     ports:
       - "4015:8000"   # expose HTTP fallback ra host cho debug/Swagger (:4015/docs)
     volumes:
       # Dùng CHUNG với ai-module-grpc: hai transport phải ghi vào một store, nếu không
       # precision/recall khác nhau tuỳ hỏi bên nào.
+      - ai-data:/app/data
       - ai-classification-feedback:/app/models/classification_feedback
       - ai-prescription-history:/app/models/prescription_history
     # Dùng python chứ KHÔNG phải curl: image base là python:3.11-slim, Dockerfile chỉ
@@ -464,7 +477,7 @@ services:
       AnomalyEngine__ScanIntervalSeconds: ${BATTERY_ANOMALY_SCAN_INTERVAL_SECONDS:-10}   # IOT3-80 — 30→10 s
       AnomalyEngine__DedupWindowMinutes: ${BATTERY_ANOMALY_DEDUP_WINDOW_MINUTES:-30}
       AnomalyEngine__OfflineThresholdMinutes: ${BATTERY_ANOMALY_OFFLINE_THRESHOLD_MINUTES:-10}
-      AnomalyEngine__EscalationAfterMinutes: ${BATTERY_ANOMALY_ESCALATION_AFTER_MINUTES:-5}
+      AnomalyEngine__EscalationAfterMinutes: ${BATTERY_ANOMALY_ESCALATION_AFTER_MINUTES:-1}
       AnomalyEngine__EscalationIntervalSeconds: ${BATTERY_ANOMALY_ESCALATION_INTERVAL_SECONDS:-60}
       AnomalyEngine__OutboxRelayIntervalSeconds: ${BATTERY_ANOMALY_OUTBOX_RELAY_INTERVAL_SECONDS:-5}
       AnomalyEngine__OutboxRelayBatchSize: ${BATTERY_ANOMALY_OUTBOX_RELAY_BATCH_SIZE:-100}
