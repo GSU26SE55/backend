@@ -12,6 +12,15 @@ public class TicketSensorSnapshotDto
     public double Temperature { get; set; }
     public double SocPercent { get; set; }
     public bool HasActiveAlert { get; set; }
+
+    /// <summary>
+    /// Ngưỡng của loại pin, đi kèm số đo để AI verify chấm bằng đúng giới hạn mà
+    /// <c>AnomalyRules</c> đã áp. 0 = chưa cấu hình ⇒ AI bỏ qua luật tương ứng.
+    /// </summary>
+    public double TemperatureMax { get; set; }
+    public double TemperatureMin { get; set; }
+    public double SocWarningThreshold { get; set; }
+    public double SohWarningThreshold { get; set; }
 }
 
 /// <summary>1 ticket ứng viên để so trùng mô tả (đang mở, cùng pin).</summary>

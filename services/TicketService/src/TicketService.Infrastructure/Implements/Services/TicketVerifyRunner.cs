@@ -68,6 +68,25 @@ public class TicketVerifyRunner : ITicketVerifyRunner
         }
 
         // Dò candidate trùng: ticket khác cùng pin, cùng customer, còn mở, chưa merge.
+        //
+        // Lọc theo `Category` chỉ đúng khi CẢ HAI ticket đều do máy sinh, và khi đó là bắt buộc:
+        // mô tả auto dùng CHUNG một template ("Measured value X, exceeding the allowed threshold
+        // Y. Detected at … on device …"), phần khác nhau duy nhất là con số lại bị Jaccard tách
+        // thành token rời ("00", "18") nên gần như vô hình. Đo thật: Overheat 72°C và Undertemp
+        // −18°C trên cùng viên pin ra 58% tương đồng, vượt DUPLICATE_THRESHOLD 0.45 ⇒ hai lỗi
+        // ngược hẳn nhau bị gắn "Suspected duplicate". AI chỉ CỘNG 0.15 khi cùng category, KHÔNG
+        // trừ khi khác, nên nó không tự loại được ứng viên khác loại.
+        //
+        // Nhưng áp cùng luật đó cho ticket NGƯỜI tạo thì lại bỏ sót đúng ca cần merge nhất:
+        // Customer chỉ chọn được 4 mục thô (Charging / Overheat / NoPower / Other) trong khi máy
+        // gán 6 category tinh. Người thấy pin chai chọn "Other", máy phát hiện SohDegradation gán
+        // "Performance" — cùng một sự cố, khác category, và filter cứng sẽ loại thẳng ứng viên
+        // đó. Hệ quả là hai ticket song song cho một sự cố, không ai biết chúng trùng nhau.
+        //
+        // Vì vậy: máy-với-máy thì so category; hễ một bên do người tạo thì bỏ ràng buộc và để AI
+        // phán trên mô tả — mô tả người viết bằng lời của họ, không dính bẫy template ở trên.
+        var isMachinePair = ticket.Origin == TicketOriginEnum.AutoFromAlert;
+
         var candidates = new List<DuplicateCandidateDto>();
         if (ticket.BatteryAssetId != Guid.Empty)
         {
@@ -77,6 +96,9 @@ public class TicketVerifyRunner : ITicketVerifyRunner
                     && t.Id != ticket.Id
                     && t.BatteryAssetId == ticket.BatteryAssetId
                     && t.CustomerId == ticket.CustomerId
+                    && (!isMachinePair
+                        || t.Origin != TicketOriginEnum.AutoFromAlert
+                        || t.Category == ticket.Category)
                     && t.MergedIntoTicketId == null
                     && OpenStatuses.Contains(t.Status))
                 .OrderByDescending(t => t.CreatedAt)
@@ -97,7 +119,11 @@ public class TicketVerifyRunner : ITicketVerifyRunner
         TicketSensorSnapshotDto? sensor = null;
         if (ticket.BatteryAssetId != Guid.Empty)
         {
-            sensor = await _sensorClient.GetSnapshotAsync(ticket.BatteryAssetId, ct);
+            // Truyền `DetectedAt` để snapshot bám vào lúc XẢY RA sự cố, không phải lúc chạy
+            // verify. Ticket máy sinh mang đúng mốc alert nên không đổi hành vi; ticket người
+            // tạo mới là chỗ khác biệt — họ khai báo muộn, pin đã trở lại bình thường.
+            sensor = await _sensorClient.GetSnapshotAsync(
+                ticket.BatteryAssetId, ticket.DetectedAt, ct);
             if (sensor is not null)
                 _logger.LogInformation(
                     "TicketVerify: {Code} — đọc sensor pin thật (SOH={Soh:F0}% Temp={Temp:F0}°C Alert={Alert}).",

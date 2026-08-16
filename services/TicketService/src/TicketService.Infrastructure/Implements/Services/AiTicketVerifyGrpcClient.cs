@@ -56,7 +56,13 @@ public class AiTicketVerifyGrpcClient : IAiTicketVerifyClient
                     Current = sensor.Current,
                     Temperature = sensor.Temperature,
                     SocPercent = sensor.SocPercent,
-                    HasActiveAlert = sensor.HasActiveAlert
+                    HasActiveAlert = sensor.HasActiveAlert,
+                    // Ngưỡng thật của loại pin — thiếu chúng thì AI quay về hardcode và chấm
+                    // bằng giới hạn khác với giới hạn backend đã áp.
+                    TemperatureMax = sensor.TemperatureMax,
+                    TemperatureMin = sensor.TemperatureMin,
+                    SocWarningThreshold = sensor.SocWarningThreshold,
+                    SohWarningThreshold = sensor.SohWarningThreshold
                 };
             }
 
