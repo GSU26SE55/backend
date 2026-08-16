@@ -364,21 +364,28 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Rule 11: Prometheus discovery must ignore the operator-managed headless
-# service. kube-prometheus-stack exposes both `monitoring-prometheus` and
-# `prometheus-operated` with app.kubernetes.io/name=prometheus and port 9090.
-# Port-forward requires the routable ClusterIP service; selecting by label and
-# port alone makes every otherwise-successful production deployment fail.
+# Rule 11: Prometheus discovery must inspect spec.selector and ignore the
+# operator-managed headless service. The client service selects pods with
+# app.kubernetes.io/name=prometheus but does not carry that metadata label, so
+# a kubectl `-l` prefilter silently removes it before jq can inspect it.
 # ---------------------------------------------------------------------------
+PROMETHEUS_DEPLOY="deploy/scripts/deploy-production.sh"
 PROMETHEUS_SELECTOR="deploy/scripts/select-prometheus-service.jq"
 PROMETHEUS_SELECTOR_FIXTURE='{
   "items": [
     {
-      "metadata": {"name": "monitoring-prometheus"},
+      "metadata": {
+        "name": "monitoring-prometheus",
+        "labels": {"app": "kube-prometheus-stack-prometheus"}
+      },
       "spec": {
         "type": "ClusterIP",
         "clusterIP": "10.43.52.54",
-        "ports": [{"port": 9090}, {"port": 8080}]
+        "ports": [{"port": 9090}, {"port": 8080}],
+        "selector": {
+          "app.kubernetes.io/name": "prometheus",
+          "operator.prometheus.io/name": "monitoring-prometheus"
+        }
       }
     },
     {
@@ -386,20 +393,53 @@ PROMETHEUS_SELECTOR_FIXTURE='{
       "spec": {
         "type": "ClusterIP",
         "clusterIP": "None",
-        "ports": [{"port": 9090}]
+        "ports": [{"port": 9090}],
+        "selector": {"app.kubernetes.io/name": "prometheus"}
+      }
+    },
+    {
+      "metadata": {
+        "name": "unrelated-metrics",
+        "labels": {"app.kubernetes.io/name": "unrelated"}
+      },
+      "spec": {
+        "type": "ClusterIP",
+        "clusterIP": "10.43.52.99",
+        "ports": [{"port": 9090}],
+        "selector": {"app.kubernetes.io/name": "unrelated"}
       }
     }
   ]
 }'
 
+PROMETHEUS_SELECTED="$(printf '%s' "${PROMETHEUS_SELECTOR_FIXTURE}" |
+  jq -er -f "${PROMETHEUS_SELECTOR}" 2>/dev/null || true)"
+PROMETHEUS_MISSING_REJECTED=0
+PROMETHEUS_AMBIGUOUS_REJECTED=0
+
+if ! printf '%s' "${PROMETHEUS_SELECTOR_FIXTURE}" |
+  jq '{items: [.items[] | select(.metadata.name == "prometheus-operated")]}' |
+  jq -er -f "${PROMETHEUS_SELECTOR}" >/dev/null 2>&1; then
+  PROMETHEUS_MISSING_REJECTED=1
+fi
+if ! printf '%s' "${PROMETHEUS_SELECTOR_FIXTURE}" |
+  jq '(.items[] | select(.metadata.name == "prometheus-operated") | .spec.clusterIP) = "10.43.52.55"' |
+  jq -er -f "${PROMETHEUS_SELECTOR}" >/dev/null 2>&1; then
+  PROMETHEUS_AMBIGUOUS_REJECTED=1
+fi
+
 if [ ! -f "${PROMETHEUS_SELECTOR}" ]; then
   echo "FAIL: missing Prometheus service selector: ${PROMETHEUS_SELECTOR}"
   FAILED=1
-elif [ "$(printf '%s' "${PROMETHEUS_SELECTOR_FIXTURE}" |
-  jq -er -f "${PROMETHEUS_SELECTOR}" 2>/dev/null || true)" = 'monitoring-prometheus' ]; then
-  echo "PASS: Prometheus discovery selects the routable service and ignores the headless service"
+elif grep -Fq -- '-l app.kubernetes.io/name=prometheus' "${PROMETHEUS_DEPLOY}"; then
+  echo "FAIL: ${PROMETHEUS_DEPLOY} must not prefilter services by a pod-selector-only metadata label"
+  FAILED=1
+elif [ "${PROMETHEUS_SELECTED}" = 'monitoring-prometheus' ] &&
+  [ "${PROMETHEUS_MISSING_REJECTED}" -eq 1 ] &&
+  [ "${PROMETHEUS_AMBIGUOUS_REJECTED}" -eq 1 ]; then
+  echo "PASS: Prometheus discovery uses spec.selector and rejects headless, unrelated and ambiguous services"
 else
-  echo "FAIL: Prometheus discovery must select monitoring-prometheus from the production topology"
+  echo "FAIL: Prometheus discovery does not enforce the production service topology"
   FAILED=1
 fi
 
