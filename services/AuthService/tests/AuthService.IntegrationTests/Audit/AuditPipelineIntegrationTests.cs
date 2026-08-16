@@ -62,6 +62,18 @@ public class AuditPipelineIntegrationTests
         evt!.ActionCode.Should().Be("LoginSuccess");
         evt.ServiceName.Should().Be("AuthService");
     }
+}
+
+/// <summary>
+/// E2E riêng cho relay audit thật. Dùng factory bật background relay để không tạo race với test
+/// kiểm tra trạng thái Pending ngay sau khi command ghi outbox.
+/// </summary>
+[Collection("RelayIntegration")]
+public class AuditOutboxRelayIntegrationTests
+{
+    private readonly RelayEnabledAuthApiFactory _factory;
+
+    public AuditOutboxRelayIntegrationTests(RelayEnabledAuthApiFactory factory) => _factory = factory;
 
     [Fact]
     public async Task AuditOutbox_Pending_GetsPublishedByRelay()

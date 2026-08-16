@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using AuthService.Api.Extensions;
 using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Services;
+using AuthService.Infrastructure.BackgroundJobs;
 using AuthService.Infrastructure.Persistence;
 using MassTransit;
 using Microsoft.AspNetCore.Hosting;
@@ -88,6 +89,18 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
                             && (d.ImplementationType?.FullName?.Contains("MassTransit") == true))
                 .ToList();
             foreach (var d in hostedServiceDescriptors)
+                services.Remove(d);
+
+            // Các test kiểm tra trạng thái trung gian của outbox (Pending/claim ownership) phải
+            // tự điều khiển thời điểm xử lý. Nếu relay thật chạy cùng factory, nó có thể claim hoặc
+            // publish row giữa SaveChangesAsync và assertion, khiến test phụ thuộc timing của CI.
+            // Relay E2E được bật lại trong RelayEnabledAuthApiFactory ở collection riêng.
+            var outboxRelayDescriptors = services
+                .Where(d => d.ServiceType == typeof(IHostedService)
+                            && (d.ImplementationType == typeof(OutboxRelayBackgroundService)
+                                || d.ImplementationType == typeof(AuditOutboxRelayBackgroundService)))
+                .ToList();
+            foreach (var d in outboxRelayDescriptors)
                 services.Remove(d);
 
             // Re-add MassTransit InMemory (no RabbitMQ).
@@ -198,6 +211,24 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         foreach (var key in CreateTestConfiguration().Keys)
             Environment.SetEnvironmentVariable(key.Replace(":", "__"), null);
+    }
+}
+
+/// <summary>
+/// Factory dành riêng cho test E2E của background outbox relay. Factory mặc định chủ động tắt
+/// relay để các test claim/Pending deterministic; collection này bật lại đúng hai relay production.
+/// </summary>
+public sealed class RelayEnabledAuthApiFactory : AuthApiFactory
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+
+        builder.ConfigureServices(services =>
+        {
+            services.AddHostedService<OutboxRelayBackgroundService>();
+            services.AddHostedService<AuditOutboxRelayBackgroundService>();
+        });
     }
 }
 
