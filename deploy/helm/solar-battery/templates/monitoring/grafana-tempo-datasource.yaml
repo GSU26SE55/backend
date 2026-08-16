@@ -1,0 +1,22 @@
+{{- if and .Values.tempo.enabled (index .Values "kube-prometheus-stack" "enabled") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-grafana-datasource
+  labels:
+    {{- include "solar.labels" . | nindent 4 }}
+    grafana_datasource: "1"
+data:
+  tempo-datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        access: proxy
+        url: http://tempo:3200
+        isDefault: false
+        editable: false
+        jsonData:
+          httpMethod: GET
+{{- end }}
