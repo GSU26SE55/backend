@@ -326,4 +326,41 @@ else
   echo "PASS: không có tên class consumer trùng giữa các service"
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 10: production WireGuard gate must work under the unprivileged Jenkins
+# deploy account. `wg show` requires CAP_NET_ADMIN and previously caused a
+# healthy tunnel to be reported as missing. End-to-end HTTPS and gRPC probes to
+# the peer /32 are the fail-closed proof and must remain bounded by timeouts.
+# ---------------------------------------------------------------------------
+AI_PREFLIGHT="deploy/scripts/preflight-production.sh"
+AI_PREFLIGHT_FAILED=0
+# These are intentionally literal shell fragments from the preflight source.
+# shellcheck disable=SC2016
+AI_HTTPS_RESOLVE_CONTRACT='--resolve "${ai_host}:443:${AI_WIREGUARD_IPV4}"'
+# shellcheck disable=SC2016
+AI_GRPC_TARGET_CONTRACT='"${AI_WIREGUARD_IPV4}:443"'
+
+if grep -Fq 'latest-handshakes' "${AI_PREFLIGHT}"; then
+  echo "FAIL: ${AI_PREFLIGHT} must not query privileged WireGuard handshake state."
+  AI_PREFLIGHT_FAILED=1
+fi
+if ! grep -Fq -- "${AI_HTTPS_RESOLVE_CONTRACT}" "${AI_PREFLIGHT}"; then
+  echo "FAIL: ${AI_PREFLIGHT} must force AI HTTPS through the WireGuard peer while preserving TLS SNI."
+  AI_PREFLIGHT_FAILED=1
+fi
+if ! grep -Fq -- '--connect-timeout 5 --max-time 10' "${AI_PREFLIGHT}"; then
+  echo "FAIL: ${AI_PREFLIGHT} WireGuard HTTPS probe must have explicit timeouts."
+  AI_PREFLIGHT_FAILED=1
+fi
+if [ "$(grep -Fc "${AI_GRPC_TARGET_CONTRACT}" "${AI_PREFLIGHT}")" -lt 2 ]; then
+  echo "FAIL: ${AI_PREFLIGHT} must retain both standard and application gRPC probes over WireGuard."
+  AI_PREFLIGHT_FAILED=1
+fi
+
+if [ "${AI_PREFLIGHT_FAILED}" -eq 0 ]; then
+  echo "PASS: AI WireGuard preflight is unprivileged, bounded and end-to-end"
+else
+  FAILED=1
+fi
+
 exit "$FAILED"

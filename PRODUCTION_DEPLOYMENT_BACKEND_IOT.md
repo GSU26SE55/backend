@@ -326,9 +326,11 @@ LOKI_PUSH_URL=http://10.20.0.1:3100/loki/api/v1/push
 ```
 
 Sau khi các gate mới được merge, WireGuard không còn là optional: cả backend và
-AI production preflight đều dừng trước khi đổi release nếu tunnel/handshake hoặc
-Loki bridge không đạt. Cấu hình tunnel trước, deploy AI trước, rồi deploy backend.
-Không đổi Loki hoặc exporter thành public để né bước này.
+AI production preflight đều dừng trước khi đổi release nếu route qua tunnel hoặc
+các probe end-to-end không đạt. Jenkins deploy user không cần `CAP_NET_ADMIN` và
+không được cấp `sudo` chỉ để gọi `wg show`; HTTPS/gRPC qua peer `/32` cùng Loki
+bridge là bằng chứng chức năng. Cấu hình tunnel trước, deploy AI trước, rồi deploy
+backend. Không đổi Loki hoặc exporter thành public để né bước này.
 
 ## 9. Jenkins executor requirements
 

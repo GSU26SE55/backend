@@ -7,7 +7,7 @@ host_env="${root}/config/host.env"
 backend_env="${root}/secrets/backend.env"
 monitoring_env="${root}/secrets/monitoring.env"
 
-for tool in docker kubectl helm curl openssl base64 getent jq cosign ip wg grpcurl systemctl date; do
+for tool in docker kubectl helm curl openssl base64 getent jq cosign ip grpcurl systemctl; do
   command -v "${tool}" >/dev/null 2>&1 || {
     printf 'missing required production tool: %s\n' "${tool}" >&2
     exit 1
@@ -81,18 +81,12 @@ ip -4 route get "${AI_WIREGUARD_IPV4}" | grep -Eq '(^|[[:space:]])dev wg0([[:spa
   exit 1
 }
 
-latest_handshake="$({ wg show wg0 latest-handshakes || true; } |
-  awk 'BEGIN { latest = 0 } $2 > latest { latest = $2 } END { print latest }')"
-[[ "${latest_handshake}" =~ ^[0-9]+$ && "${latest_handshake}" -gt 0 ]] || {
-  printf 'wg0 has no completed peer handshake\n' >&2
-  exit 1
-}
-handshake_age="$(( $(date +%s) - latest_handshake ))"
-(( handshake_age >= 0 && handshake_age <= 180 )) || {
-  printf 'wg0 peer handshake is stale: %ss old (maximum 180s)\n' \
-    "${handshake_age}" >&2
-  exit 1
-}
+# The deploy account intentionally has no CAP_NET_ADMIN, so it cannot query
+# handshake timestamps with `wg show`. The /32 route above and the bounded
+# HTTPS plus gRPC probes below prove that the configured peer, encrypted data
+# path, TLS/SNI routing and AI application are all usable now. The first probe
+# also initiates a fresh WireGuard handshake when an otherwise healthy tunnel
+# has been idle.
 
 [[ "${FRONTEND_PUBLIC_ORIGIN}" == "https://${PLATFORM_PUBLIC_DOMAIN}" ]] || {
   printf 'FRONTEND_PUBLIC_ORIGIN must equal https://%s (no path or trailing slash)\n' \
@@ -159,7 +153,8 @@ getent ahostsv4 "${ai_host}" >/dev/null || {
   printf 'AI hostname does not resolve from the platform VPS: %s\n' "${ai_host}" >&2
   exit 1
 }
-curl --fail --silent --show-error "${AI_HTTP_BASE_URL}/ready" |
+curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+  "${AI_HTTP_BASE_URL}/ready" |
   jq -e '.ready == true' >/dev/null || {
     printf 'AI HTTPS readiness check failed: %s/ready\n' "${AI_HTTP_BASE_URL}" >&2
     exit 1
@@ -167,7 +162,7 @@ curl --fail --silent --show-error "${AI_HTTP_BASE_URL}/ready" |
 
 # Resolve the public certificate name directly to the WireGuard peer. This
 # proves HTTPS fallback uses wg0 while still validating the public TLS chain.
-curl --fail --silent --show-error \
+curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
   --resolve "${ai_host}:443:${AI_WIREGUARD_IPV4}" \
   "${AI_HTTP_BASE_URL}/ready" |
   jq -e '.ready == true' >/dev/null || {
