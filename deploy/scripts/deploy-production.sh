@@ -420,7 +420,20 @@ if ! helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m;
   kubectl -n "${namespace}" get endpointslice \
     -l "kubernetes.io/service-name=${helm_release}-grafana" -o wide >&2 || true
   kubectl -n "${namespace}" get networkpolicy \
-    allow-helm-smoke-to-grafana allow-helm-smoke-to-tempo -o yaml >&2 || true
+    allow-helm-smoke-to-grafana \
+    allow-helm-smoke-to-tempo \
+    allow-grafana-to-kubernetes-api \
+    -o yaml >&2 || true
+  kubectl -n "${namespace}" get configmap \
+    -l grafana_datasource=1 -o name >&2 || true
+  kubectl -n "${namespace}" get configmap \
+    -l grafana_dashboard=1 -o name >&2 || true
+  kubectl -n "${namespace}" logs deployment/"${helm_release}-grafana" \
+    -c grafana-sc-datasources --since=15m --tail=200 >&2 || true
+  kubectl -n "${namespace}" logs deployment/"${helm_release}-grafana" \
+    -c grafana-sc-dashboard --since=15m --tail=200 >&2 || true
+  kubectl -n "${namespace}" logs deployment/"${helm_release}-grafana" \
+    -c grafana --since=15m --tail=200 >&2 || true
   printf '%s\n' \
     'Helm test failed after a successful upgrade; the deployed release was not automatically rolled back.' >&2
   exit 1
