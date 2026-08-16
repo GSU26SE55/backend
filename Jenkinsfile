@@ -186,6 +186,9 @@ pipeline {
 
                             ./deploy/scripts/verify-monitoring-resource-policy.sh \
                               rendered-production.yaml
+
+                            ./deploy/scripts/verify-postgres-backup-policy.sh \
+                              rendered-production.yaml
                         '''
                     }
                 }
