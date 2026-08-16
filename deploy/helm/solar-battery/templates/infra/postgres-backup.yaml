@@ -49,6 +49,14 @@ spec:
                 {{ .Values.postgres.notificationDatabase }}
                 {{ .Values.postgres.smsDatabase }}
                 {{ .Values.postgres.auditAggregatorDatabase }}
+            - name: PG_DUMP_LOCK_WAIT_TIMEOUT
+              value: {{ .Values.postgres.backup.lockWaitTimeout | quote }}
+            - name: PG_DUMP_TIMEOUT_SECONDS
+              value: {{ .Values.postgres.backup.databaseTimeoutSeconds | quote }}
+            - name: PG_DUMP_MAX_ATTEMPTS
+              value: {{ .Values.postgres.backup.maxAttempts | quote }}
+            - name: PG_DUMP_RETRY_DELAY_SECONDS
+              value: {{ .Values.postgres.backup.retryDelaySeconds | quote }}
             command: ["/bin/sh", "-ec"]
             args:
             - |
@@ -58,9 +66,33 @@ spec:
 
               for database in ${DATABASES}; do
                 archive="${destination}/${database}.dump"
-                echo "Backing up ${database}"
-                pg_dump --format=custom --compress=6 --file="${archive}" "${database}"
-                pg_restore --list "${archive}" >/dev/null
+                attempt=1
+
+                while [ "${attempt}" -le "${PG_DUMP_MAX_ATTEMPTS}" ]; do
+                  rm -f "${archive}"
+                  echo "Backing up ${database} (attempt ${attempt}/${PG_DUMP_MAX_ATTEMPTS})"
+
+                  if timeout -k 15 "${PG_DUMP_TIMEOUT_SECONDS}" \
+                    pg_dump --verbose --format=custom --compress=6 \
+                      --lock-wait-timeout="${PG_DUMP_LOCK_WAIT_TIMEOUT}" \
+                      --file="${archive}" "${database}" \
+                    && pg_restore --list "${archive}" >/dev/null; then
+                    echo "Verified backup for ${database}"
+                    break
+                  else
+                    dump_status="$?"
+                  fi
+
+                  rm -f "${archive}"
+                  if [ "${attempt}" -ge "${PG_DUMP_MAX_ATTEMPTS}" ]; then
+                    echo "Backup failed for ${database} after ${attempt} attempts (exit ${dump_status})" >&2
+                    exit "${dump_status}"
+                  fi
+
+                  echo "Backup attempt ${attempt} failed for ${database} (exit ${dump_status}); retrying" >&2
+                  attempt="$((attempt + 1))"
+                  sleep "${PG_DUMP_RETRY_DELAY_SECONDS}"
+                done
               done
 
               (cd "${destination}" && sha256sum ./*.dump > SHA256SUMS)

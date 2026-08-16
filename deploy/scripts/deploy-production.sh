@@ -115,17 +115,94 @@ kubectl -n "${namespace}" get secret ghcr-pull >/dev/null || {
   exit 1
 }
 
-if kubectl -n "${namespace}" get cronjob postgres-backup >/dev/null 2>&1; then
-  backup_job="postgres-predeploy-${release_sha:0:12}"
+print_backup_diagnostics() {
+  local backup_job="$1"
+  local pod
+  local -a backup_pods=()
+
+  printf 'Pre-deployment PostgreSQL backup diagnostics for %s\n' "${backup_job}" >&2
+  kubectl -n "${namespace}" get job "${backup_job}" -o wide >&2 || true
+  kubectl -n "${namespace}" describe job "${backup_job}" >&2 || true
+
+  mapfile -t backup_pods < <(
+    kubectl -n "${namespace}" get pod \
+      -l "job-name=${backup_job}" -o name 2>/dev/null
+  )
+
+  if [[ "${#backup_pods[@]}" -eq 0 ]]; then
+    printf 'No Pod currently exists for backup Job %s\n' "${backup_job}" >&2
+  fi
+
+  for pod in "${backup_pods[@]}"; do
+    kubectl -n "${namespace}" describe "${pod}" >&2 || true
+    kubectl -n "${namespace}" logs "${pod}" \
+      -c dump --timestamps >&2 || true
+    kubectl -n "${namespace}" logs "${pod}" \
+      -c dump --previous --timestamps >&2 || true
+    kubectl -n "${namespace}" logs "${pod}" \
+      -c upload --timestamps >&2 || true
+    kubectl -n "${namespace}" logs "${pod}" \
+      -c upload --previous --timestamps >&2 || true
+  done
+
+  kubectl -n "${namespace}" get resourcequota solar-quota >&2 || true
+  kubectl -n "${namespace}" get event \
+    --sort-by=.metadata.creationTimestamp | tail -n 100 >&2 || true
+}
+
+run_predeployment_backup() {
+  local backup_active_deadline
+  local backup_completed
+  local backup_conditions
+  local backup_job="postgres-predeploy-${release_sha:0:12}"
+  local backup_wait_deadline
+
   kubectl -n "${namespace}" delete job "${backup_job}" --ignore-not-found >/dev/null
   kubectl -n "${namespace}" create job "${backup_job}" --from=cronjob/postgres-backup
-  if ! kubectl -n "${namespace}" wait \
-    --for=condition=complete "job/${backup_job}" --timeout=15m; then
-    kubectl -n "${namespace}" logs "job/${backup_job}" --all-containers=true >&2 || true
-    printf 'pre-deployment database backup failed\n' >&2
+
+  backup_active_deadline="$(
+    kubectl -n "${namespace}" get job "${backup_job}" \
+      -o jsonpath='{.spec.activeDeadlineSeconds}'
+  )"
+  [[ "${backup_active_deadline}" =~ ^[0-9]+$ ]] || {
+    print_backup_diagnostics "${backup_job}"
+    printf 'pre-deployment database backup has an invalid active deadline\n' >&2
+    exit 1
+  }
+
+  backup_wait_deadline="$((SECONDS + backup_active_deadline + 30))"
+  backup_completed=false
+  while (( SECONDS < backup_wait_deadline )); do
+    if ! backup_conditions="$(
+      kubectl -n "${namespace}" get job "${backup_job}" \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}'
+    )"; then
+      print_backup_diagnostics "${backup_job}"
+      printf 'pre-deployment database backup Job disappeared\n' >&2
+      exit 1
+    fi
+
+    if grep -qx 'Complete=True' <<< "${backup_conditions}"; then
+      printf 'Pre-deployment PostgreSQL backup completed: %s\n' "${backup_job}"
+      backup_completed=true
+      break
+    fi
+
+    if grep -Eq '^(Failed|FailureTarget)=True$' <<< "${backup_conditions}"; then
+      print_backup_diagnostics "${backup_job}"
+      printf 'pre-deployment database backup failed\n' >&2
+      exit 1
+    fi
+
+    sleep 5
+  done
+
+  if [[ "${backup_completed}" != true ]]; then
+    print_backup_diagnostics "${backup_job}"
+    printf 'pre-deployment database backup exceeded its active deadline\n' >&2
     exit 1
   fi
-fi
+}
 
 helm_value_args=(
   -f "${chart_dir}/values.yaml"
@@ -153,8 +230,9 @@ helm_value_args+=(--set-string "services.auditaggregatorservice.digest=$(read_en
 helm lint "${chart_dir}" "${helm_value_args[@]}"
 
 rendered_manifest="$(mktemp)"
+backup_cronjob_manifest="$(mktemp)"
 cleanup_rendered_manifest() {
-  rm -f "${rendered_manifest}"
+  rm -f "${rendered_manifest}" "${backup_cronjob_manifest}"
 }
 trap cleanup_rendered_manifest EXIT
 
@@ -164,6 +242,36 @@ helm template "${helm_release}" "${chart_dir}" \
   > "${rendered_manifest}"
 
 "${script_dir}/verify-monitoring-resource-policy.sh" "${rendered_manifest}"
+"${script_dir}/verify-postgres-backup-policy.sh" "${rendered_manifest}"
+
+# The mandatory backup must use the target release's bounded pg_dump policy,
+# not the CronJob template left by the previous Helm revision. Pre-applying this
+# Helm-owned resource is safe: a later atomic rollback restores the old release
+# manifest if the upgrade itself fails.
+awk '
+  /^---$/ {
+    if (capture) exit
+    next
+  }
+
+  /^# Source: / {
+    capture = index($0, "solar-battery/templates/infra/postgres-backup.yaml") > 0
+  }
+
+  capture { print }
+' "${rendered_manifest}" > "${backup_cronjob_manifest}"
+
+[[ -s "${backup_cronjob_manifest}" ]] || {
+  printf 'target release does not contain the required PostgreSQL backup CronJob\n' >&2
+  exit 1
+}
+
+if kubectl -n "${namespace}" get cronjob postgres-backup >/dev/null 2>&1; then
+  kubectl -n "${namespace}" apply -f "${backup_cronjob_manifest}"
+  run_predeployment_backup
+else
+  printf 'No existing PostgreSQL backup CronJob; skipping backup for initial Helm install\n'
+fi
 
 helm_args=(
   upgrade --install "${helm_release}" "${chart_dir}"

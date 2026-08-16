@@ -247,6 +247,10 @@ postgres:
     bucket: postgres-backups
     retentionDays: 14
     activeDeadlineSeconds: 1800
+    lockWaitTimeout: 60s
+    databaseTimeoutSeconds: 600
+    maxAttempts: 3
+    retryDelaySeconds: 15
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits:   { cpu: 500m, memory: 512Mi }
