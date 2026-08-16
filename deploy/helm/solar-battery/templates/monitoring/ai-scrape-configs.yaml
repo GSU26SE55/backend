@@ -1,0 +1,74 @@
+{{- if and .Values.monitoring.ai.enabled .Values.wireguard.enabled (index .Values "kube-prometheus-stack" "enabled") -}}
+{{- $aiDomain := .Values.monitoring.ai.domain | default (printf "ai.%s" .Values.global.domain) -}}
+{{- $aiIpv4 := required "wireguard.aiIpv4 is required when AI monitoring is enabled" .Values.wireguard.aiIpv4 -}}
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: ai-application
+  labels:
+    prometheus: monitoring
+spec:
+  jobName: ai-application
+  scrapeInterval: {{ .Values.monitoring.ai.scrapeInterval }}
+  scrapeTimeout: {{ .Values.monitoring.ai.scrapeTimeout }}
+  metricsPath: /metrics/
+  scheme: HTTPS
+  enableHTTP2: true
+  tlsConfig:
+    serverName: {{ $aiDomain | quote }}
+    minVersion: TLS12
+  staticConfigs:
+  - targets:
+    - {{ printf "%s:%v" $aiDomain .Values.monitoring.ai.applicationPort | quote }}
+    labels:
+      source: ai-vps
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: ai-node
+  labels:
+    prometheus: monitoring
+spec:
+  jobName: ai-node
+  scrapeInterval: {{ .Values.monitoring.ai.scrapeInterval }}
+  scrapeTimeout: {{ .Values.monitoring.ai.scrapeTimeout }}
+  staticConfigs:
+  - targets:
+    - {{ printf "%s:%v" $aiIpv4 .Values.monitoring.ai.nodeExporterPort | quote }}
+    labels:
+      source: ai-vps
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: ai-cadvisor
+  labels:
+    prometheus: monitoring
+spec:
+  jobName: ai-cadvisor
+  scrapeInterval: {{ .Values.monitoring.ai.scrapeInterval }}
+  scrapeTimeout: {{ .Values.monitoring.ai.scrapeTimeout }}
+  staticConfigs:
+  - targets:
+    - {{ printf "%s:%v" $aiIpv4 .Values.monitoring.ai.cadvisorPort | quote }}
+    labels:
+      source: ai-vps
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: ai-alloy
+  labels:
+    prometheus: monitoring
+spec:
+  jobName: ai-alloy
+  scrapeInterval: {{ .Values.monitoring.ai.scrapeInterval }}
+  scrapeTimeout: {{ .Values.monitoring.ai.scrapeTimeout }}
+  staticConfigs:
+  - targets:
+    - {{ printf "%s:%v" $aiIpv4 .Values.monitoring.ai.alloyPort | quote }}
+    labels:
+      source: ai-vps
+{{- end }}

@@ -666,3 +666,63 @@ groups:
         annotations:
           summary: "{{ $value }} device token bị vô hiệu hoá trong 1 giờ"
           description: "Bình thường token chỉ chết rải rác khi user gỡ app. Tăng đột biến thường do sai EAS projectId hoặc credential FCM/APNs hết hạn."
+
+  # AI VPS is intentionally outside Kubernetes. These four scrape jobs are
+  # reached only through WireGuard and are the central proof that application,
+  # host, container and log-agent observability are all connected.
+  - name: ai-vps-observability
+    interval: 30s
+    rules:
+      - alert: AiObservabilityTargetsMissing
+        expr: count(up{job=~"ai-(application|node|cadvisor|alloy)"}) < 4
+        for: 5m
+        labels:
+          severity: critical
+          domain: ai
+        annotations:
+          summary: "One or more AI observability targets are missing"
+          description: "Expected ai-application, ai-node, ai-cadvisor and ai-alloy through WireGuard. Check wg0, ScrapeConfig discovery and the AI Compose exporters."
+
+      - alert: AiObservabilityTargetDown
+        expr: min_over_time(up{job=~"ai-(application|node|cadvisor|alloy)"}[3m]) == 0
+        for: 2m
+        labels:
+          severity: critical
+          domain: ai
+        annotations:
+          summary: "AI target {{ $labels.job }} is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} through WireGuard. Check the peer handshake, AI firewall and container health."
+
+      - alert: AiGrpcErrorRateHigh
+        expr: |
+          (
+            sum(rate(ai_grpc_requests_total{outcome="error"}[5m]))
+            /
+            clamp_min(sum(rate(ai_grpc_requests_total[5m])), 0.001)
+          ) > 0.05
+          and
+          sum(rate(ai_grpc_requests_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          domain: ai
+        annotations:
+          summary: "AI gRPC error rate exceeds 5%"
+          description: "The primary Backend-to-AI transport is failing. Inspect AI gRPC method/outcome metrics and BatteryService fallback logs."
+
+      - alert: AiHttpServerErrorRateHigh
+        expr: |
+          (
+            sum(rate(ai_http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(ai_http_requests_total[5m])), 0.001)
+          ) > 0.05
+          and
+          sum(rate(ai_http_requests_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          domain: ai
+        annotations:
+          summary: "AI HTTPS 5xx rate exceeds 5%"
+          description: "The AI HTTPS fallback is unhealthy. Inspect FastAPI and Caddy logs in Loki before relying on fallback."

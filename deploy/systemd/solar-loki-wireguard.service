@@ -6,11 +6,20 @@ Requires=k3s.service wg-quick@wg0.service
 [Service]
 Type=simple
 Environment=KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-ExecStart=/usr/local/bin/kubectl --namespace solar-prod port-forward --address 10.20.0.1 service/loki 3100:3100
+Environment=HOME=/tmp
+ExecStartPre=/usr/sbin/ip address show dev wg0
+ExecStart=/usr/local/bin/kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml --namespace=solar-prod port-forward --address=10.20.0.1 service/loki 3100:3100
 Restart=always
 RestartSec=5s
 User=root
 Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target

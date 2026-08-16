@@ -71,6 +71,8 @@ platform_domain="$(read_env PLATFORM_PUBLIC_DOMAIN "${host_env}")"
 frontend_origin="$(read_env FRONTEND_PUBLIC_ORIGIN "${host_env}")"
 ai_grpc_address="$(read_env AI_GRPC_ADDRESS "${host_env}")"
 ai_http_base_url="$(read_env AI_HTTP_BASE_URL "${host_env}")"
+ai_wireguard_ipv4="$(read_env AI_WIREGUARD_IPV4 "${host_env}")"
+platform_wireguard_ipv4="$(read_env PLATFORM_WIREGUARD_IPV4 "${host_env}")"
 mqtt_node_ip="$(read_env MQTT_NODE_IP "${host_env}")"
 mqtt_auth_dir="$(read_env MQTT_AUTH_DIR "${host_env}")"
 kubeconfig="$(read_env KUBECONFIG "${host_env}")"
@@ -78,7 +80,8 @@ namespace="$(read_env K3S_NAMESPACE "${host_env}")"
 helm_release="$(read_env HELM_RELEASE "${host_env}")"
 
 [[ -n "${platform_domain}" && -n "${frontend_origin}" && -n "${ai_grpc_address}" \
-  && -n "${ai_http_base_url}" && -n "${mqtt_node_ip}" && -n "${mqtt_auth_dir}" \
+  && -n "${ai_http_base_url}" && -n "${ai_wireguard_ipv4}" \
+  && -n "${platform_wireguard_ipv4}" && -n "${mqtt_node_ip}" && -n "${mqtt_auth_dir}" \
   && -n "${kubeconfig}" && -n "${namespace}" && -n "${helm_release}" ]] || {
   printf 'host.env is incomplete\n' >&2
   exit 1
@@ -213,6 +216,10 @@ helm_value_args=(
   --set-string "config.Ai__GrpcAddress=${ai_grpc_address}"
   --set-string "config.Ai__HttpBaseUrl=${ai_http_base_url}"
   --set-string "config.TicketAi__AiGrpcAddress=${ai_grpc_address}"
+  --set-string "wireguard.aiIpv4=${ai_wireguard_ipv4}"
+  --set-string "wireguard.platformIpv4=${platform_wireguard_ipv4}"
+  --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].ip=${ai_wireguard_ipv4}"
+  --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].hostnames[0]=ai.${platform_domain}"
   --set-string "iot.mqttNodeIp=${mqtt_node_ip}"
   --set-string "iot.mqttPasswordSync.hostPath=${mqtt_auth_dir}"
 )
@@ -338,6 +345,76 @@ wait_for_operator_resource() {
 
 wait_for_operator_resource 'alertmanagers.monitoring.coreos.com' 'Alertmanager'
 wait_for_operator_resource 'prometheuses.monitoring.coreos.com' 'Prometheus'
+
+verify_ai_observability_targets() {
+  local attempts=0
+  local port_forward_log
+  local port_forward_pid
+  local prometheus_service
+  local query_result
+  local verified=false
+
+  prometheus_service="$(
+    kubectl -n "${namespace}" get service \
+      -l app.kubernetes.io/name=prometheus \
+      -o json |
+      jq -er '
+        [.items[] | select(any(.spec.ports[]?; .port == 9090))] as $items
+        | if ($items | length) == 1
+          then $items[0].metadata.name
+          else error("expected exactly one Prometheus service on port 9090")
+          end
+      '
+  )" || {
+    kubectl -n "${namespace}" get service -o wide >&2 || true
+    printf 'unable to identify the Prometheus service\n' >&2
+    return 1
+  }
+
+  port_forward_log="$(mktemp)"
+  kubectl -n "${namespace}" port-forward \
+    "service/${prometheus_service}" 19090:9090 \
+    >"${port_forward_log}" 2>&1 &
+  port_forward_pid=$!
+
+  while (( attempts < 36 )); do
+    attempts=$((attempts + 1))
+    if ! kill -0 "${port_forward_pid}" 2>/dev/null; then
+      break
+    fi
+
+    query_result="$(
+      curl --fail --silent --show-error --get \
+        --data-urlencode 'query=count by(job) (up{job=~"ai-(application|node|cadvisor|alloy)"} == 1)' \
+        http://127.0.0.1:19090/api/v1/query 2>/dev/null || true
+    )"
+    if jq -e '
+      [.data.result[].metric.job] | sort
+      == ["ai-alloy", "ai-application", "ai-cadvisor", "ai-node"]
+    ' <<<"${query_result}" >/dev/null 2>&1; then
+      verified=true
+      break
+    fi
+    sleep 5
+  done
+
+  if [[ "${verified}" != true ]]; then
+    printf 'AI Prometheus targets did not all become UP\n' >&2
+    curl --silent --show-error --get \
+      --data-urlencode 'state=active' \
+      http://127.0.0.1:19090/api/v1/targets 2>/dev/null |
+      jq '.data.activeTargets[] | select(.labels.job | startswith("ai-"))
+          | {job: .labels.job, health, lastError, scrapeUrl}' >&2 || true
+    cat "${port_forward_log}" >&2 || true
+  fi
+
+  kill "${port_forward_pid}" 2>/dev/null || true
+  wait "${port_forward_pid}" 2>/dev/null || true
+  rm -f "${port_forward_log}"
+  [[ "${verified}" == true ]]
+}
+
+verify_ai_observability_targets || exit 1
 
 if ! helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m; then
   helm status "${helm_release}" --namespace "${namespace}" >&2 || true
