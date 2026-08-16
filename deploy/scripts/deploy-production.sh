@@ -355,9 +355,7 @@ verify_ai_observability_targets() {
   local verified=false
 
   prometheus_service="$(
-    kubectl -n "${namespace}" get service \
-      -l app.kubernetes.io/name=prometheus \
-      -o json |
+    kubectl -n "${namespace}" get service -o json |
       jq -er -f "${script_dir}/select-prometheus-service.jq"
   )" || {
     kubectl -n "${namespace}" get service -o wide >&2 || true
