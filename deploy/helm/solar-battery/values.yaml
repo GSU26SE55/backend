@@ -68,6 +68,15 @@ global:
   # Tự override thành http://tempo:4317 khi tempo.enabled (xem shared/configmap.yaml).
   otlpEndpoint: ""
 
+# Encrypted point-to-point network between the platform VPS and the AI VPS.
+# Production enables this and injects the two host-owned /32 addresses from
+# /opt/solar-platform/config/host.env. Keeping it disabled by default preserves
+# local/staging behavior where wg0 does not exist.
+wireguard:
+  enabled: false
+  platformIpv4: ""
+  aiIpv4: ""
+
 # --------------------------------------------------------------------
 # ASP.NET services
 # --------------------------------------------------------------------
@@ -544,6 +553,16 @@ tempo:
   retention: 48h
 
 monitoring:
+  ai:
+    enabled: false
+    domain: ""
+    scrapeInterval: 15s
+    scrapeTimeout: 10s
+    applicationPort: 443
+    nodeExporterPort: 9100
+    cadvisorPort: 8082
+    alloyPort: 12345
+
   alertmanagerDiscord:
     enabled: false
     name: solar-discord

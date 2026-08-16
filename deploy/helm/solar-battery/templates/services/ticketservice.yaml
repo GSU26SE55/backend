@@ -26,6 +26,14 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      {{- if and .Values.wireguard.enabled .Values.wireguard.aiIpv4 }}
+      # Preserve the public certificate name while sending TicketService's AI
+      # gRPC traffic over the encrypted inter-VPS tunnel.
+      hostAliases:
+      - ip: {{ .Values.wireguard.aiIpv4 | quote }}
+        hostnames:
+        - {{ printf "ai.%s" .Values.global.domain | quote }}
+      {{- end }}
       securityContext:
         {{- include "solar.podSecurityContext" . | nindent 8 }}
       imagePullSecrets:
