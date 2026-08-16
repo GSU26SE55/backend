@@ -363,4 +363,44 @@ else
   FAILED=1
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 11: Prometheus discovery must ignore the operator-managed headless
+# service. kube-prometheus-stack exposes both `monitoring-prometheus` and
+# `prometheus-operated` with app.kubernetes.io/name=prometheus and port 9090.
+# Port-forward requires the routable ClusterIP service; selecting by label and
+# port alone makes every otherwise-successful production deployment fail.
+# ---------------------------------------------------------------------------
+PROMETHEUS_SELECTOR="deploy/scripts/select-prometheus-service.jq"
+PROMETHEUS_SELECTOR_FIXTURE='{
+  "items": [
+    {
+      "metadata": {"name": "monitoring-prometheus"},
+      "spec": {
+        "type": "ClusterIP",
+        "clusterIP": "10.43.52.54",
+        "ports": [{"port": 9090}, {"port": 8080}]
+      }
+    },
+    {
+      "metadata": {"name": "prometheus-operated"},
+      "spec": {
+        "type": "ClusterIP",
+        "clusterIP": "None",
+        "ports": [{"port": 9090}]
+      }
+    }
+  ]
+}'
+
+if [ ! -f "${PROMETHEUS_SELECTOR}" ]; then
+  echo "FAIL: missing Prometheus service selector: ${PROMETHEUS_SELECTOR}"
+  FAILED=1
+elif [ "$(printf '%s' "${PROMETHEUS_SELECTOR_FIXTURE}" |
+  jq -er -f "${PROMETHEUS_SELECTOR}" 2>/dev/null || true)" = 'monitoring-prometheus' ]; then
+  echo "PASS: Prometheus discovery selects the routable service and ignores the headless service"
+else
+  echo "FAIL: Prometheus discovery must select monitoring-prometheus from the production topology"
+  FAILED=1
+fi
+
 exit "$FAILED"
