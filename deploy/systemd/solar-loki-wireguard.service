@@ -19,7 +19,9 @@ ProtectHome=true
 ProtectKernelModules=true
 ProtectKernelTunables=true
 ProtectSystem=strict
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# `ip address show` uses rtnetlink during ExecStartPre. Keep NETLINK available
+# while still denying unrelated address families to the long-running kubectl.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target
