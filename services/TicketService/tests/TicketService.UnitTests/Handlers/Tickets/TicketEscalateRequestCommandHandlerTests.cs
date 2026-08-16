@@ -14,48 +14,104 @@ using TicketService.UnitTests.Utils;
 namespace TicketService.UnitTests.Handlers.Tickets;
 
 /// <summary>
-/// Staff xin chuyển cấp (§3.12) — Manager và Admin phải nhận được thông báo.
+/// Unit test cho luồng Staff yêu cầu escalate ticket lên Manager (§3.12).
+/// Mỗi test UTCID tương ứng 1 dòng trong GSU26SE55_Unit_Test_Report.xlsx — sheet TicketEscalateRequest.
 ///
-/// Thông báo đó chỉ tới nơi nếu outbox nhận đúng <see cref="TicketEscalatedEvent"/> của
-/// SharedContracts: OutboxRelayService publish theo runtime type để MassTransit định tuyến
-/// exchange, và NotificationService chỉ đăng ký <c>IConsumer&lt;TicketEscalatedEvent&gt;</c>.
-/// Ghi một kiểu nội bộ của TicketService thì message vẫn publish thành công, không có lỗi nào
-/// hiện ra, nhưng không exchange nào có người nhận — thông báo im lặng biến mất. Bài kiểm tra
-/// này khoá đúng chỗ đó lại.
+/// Ngoài các ca nghiệp vụ, file này còn khoá KIỂU event ghi ra outbox: Manager và Admin chỉ nhận được
+/// thông báo nếu outbox nhận đúng <see cref="TicketEscalatedEvent"/> của SharedContracts.
+/// OutboxRelayService publish theo runtime type để MassTransit định tuyến exchange, và
+/// NotificationService chỉ đăng ký <c>IConsumer&lt;TicketEscalatedEvent&gt;</c>. Ghi một kiểu nội bộ
+/// của TicketService thì message vẫn publish thành công, không có lỗi nào hiện ra, nhưng không
+/// exchange nào có người nhận — thông báo im lặng biến mất.
 /// </summary>
 public class TicketEscalateRequestCommandHandlerTests
 {
+    private readonly Mock<ITicketStateMachine> _stateMachine = MockTicketStateMachine.Create();
     private readonly Mock<IActivityLogger> _logger = new();
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
-    private readonly Mock<ITicketStateMachine> _stateMachine = new();
     private readonly Mock<ISlaService> _slaService = new();
 
-    [Fact]
-    public async Task Handle_ValidRequest_WritesSharedContractEscalatedEvent()
-    {
-        var staffId = Guid.NewGuid();
-        var ticket = new Ticket
+    private TicketEscalateRequestCommandHandler CreateHandler(Mock<TicketService.Application.Interfaces.Repositories.ITicketUnitOfWork> uow)
+        => new(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object,
+            Mock.Of<MediatR.IPublisher>(), _slaService.Object);
+
+    private static Ticket BuildTicket(Guid ticketId, TicketPriorityEnum priority = TicketPriorityEnum.P3Normal)
+        => new()
         {
-            Id = Guid.NewGuid(),
+            Id = ticketId,
             Code = "TKT-001",
             Title = "Test",
-            Description = "Test",
+            Description = "Desc",
             Status = TicketStatusEnum.InProgress,
-            Priority = TicketPriorityEnum.P2High
+            Priority = priority
         };
-        var assignment = new TicketAssignment
+
+    private static TicketAssignment BuildPrimaryAssignment(Guid ticketId, Guid staffId)
+        => new()
         {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
+            TicketId = ticketId,
             StaffId = staffId,
             Role = AssignmentRoleEnum.PrimaryHandler
         };
 
-        var handler = BuildHandler(ticket, assignment, staffId);
+    /// <summary>UTCID01 — Happy path: PrimaryHandler hợp lệ, note có nội dung, transition được phép.</summary>
+    [Fact]
+    public async Task Handle_ValidRequest_SubmitsEscalationAndPausesSla()
+    {
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = BuildTicket(ticketId);
 
-        var result = await handler.Handle(new TicketEscalateRequestCommand
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: new[] { ticket },
+            assignmentSeed: new[] { BuildPrimaryAssignment(ticketId, staffId) });
+
+        var command = new TicketEscalateRequestCommand
         {
-            TicketId = ticket.Id,
+            TicketId = ticketId,
+            StaffId = staffId,
+            StaffName = "Staff A",
+            Reason = EscalationReasonEnum.SkillGap,
+            Note = "Cần chuyên gia tier cao hơn"
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Message.Should().Be("Escalation request submitted for Manager review.");
+        ticket.Status.Should().Be(TicketStatusEnum.Request);
+        ticket.EscalationReason.Should().Be(EscalationReasonEnum.SkillGap);
+        ticket.EscalatedAt.Should().NotBeNull();
+        ticket.Reason.Should().Be("Cần chuyên gia tier cao hơn");
+
+        _slaService.Verify(x => x.PauseSlaAsync(ticketId, PauseReasonEnum.WorkBlocked,
+            "Cần chuyên gia tier cao hơn", staffId, It.IsAny<CancellationToken>()), Times.Once);
+        _logger.Verify(x => x.LogAsync(ticketId, staffId, ActorRoleEnum.Staff, "Staff A",
+            ActivityActionEnum.EscalationRequested, null, null, "Cần chuyên gia tier cao hơn"), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketEscalatedEvent>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// Outbox phải nhận đúng <see cref="TicketEscalatedEvent"/> của SharedContracts, với đủ payload —
+    /// note được trim trước khi ghi. Đây là event NotificationService thực sự có consumer.
+    /// </summary>
+    [Fact]
+    public async Task Handle_ValidRequest_WritesSharedContractEscalatedEvent()
+    {
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = BuildTicket(ticketId, TicketPriorityEnum.P2High);
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: new[] { ticket },
+            assignmentSeed: new[] { BuildPrimaryAssignment(ticketId, staffId) });
+
+        var result = await CreateHandler(uow).Handle(new TicketEscalateRequestCommand
+        {
+            TicketId = ticketId,
             Reason = EscalationReasonEnum.SkillGap,
             Note = "  Beyond my skill tier  ",
             StaffId = staffId,
@@ -66,7 +122,7 @@ public class TicketEscalateRequestCommandHandlerTests
 
         _outboxWriter.Verify(x => x.WriteAsync(
             It.Is<TicketEscalatedEvent>(e =>
-                e.TicketId == ticket.Id &&
+                e.TicketId == ticketId &&
                 e.Code == ticket.Code &&
                 e.Reason == (int)EscalationReasonEnum.SkillGap &&
                 e.Note == "Beyond my skill tier" &&
@@ -82,29 +138,17 @@ public class TicketEscalateRequestCommandHandlerTests
     [Fact]
     public async Task Handle_ValidRequest_DoesNotWriteConsumerlessInternalEvent()
     {
+        var ticketId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
-        var ticket = new Ticket
-        {
-            Id = Guid.NewGuid(),
-            Code = "TKT-002",
-            Title = "Test",
-            Description = "Test",
-            Status = TicketStatusEnum.InProgress,
-            Priority = TicketPriorityEnum.P3Normal
-        };
-        var assignment = new TicketAssignment
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            StaffId = staffId,
-            Role = AssignmentRoleEnum.PrimaryHandler
-        };
+        var ticket = BuildTicket(ticketId);
 
-        var handler = BuildHandler(ticket, assignment, staffId);
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: new[] { ticket },
+            assignmentSeed: new[] { BuildPrimaryAssignment(ticketId, staffId) });
 
-        await handler.Handle(new TicketEscalateRequestCommand
+        await CreateHandler(uow).Handle(new TicketEscalateRequestCommand
         {
-            TicketId = ticket.Id,
+            TicketId = ticketId,
             Reason = EscalationReasonEnum.CustomerComplaint,
             Note = "Customer escalated",
             StaffId = staffId,
@@ -116,34 +160,139 @@ public class TicketEscalateRequestCommandHandlerTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private TicketEscalateRequestCommandHandler BuildHandler(
-        Ticket ticket,
-        TicketAssignment assignment,
-        Guid staffId)
+    /// <summary>UTCID02 — Ticket không tồn tại → 404.</summary>
+    [Fact]
+    public async Task Handle_TicketNotFound_Returns404()
     {
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build();
+
+        var command = new TicketEscalateRequestCommand
+        {
+            TicketId = Guid.NewGuid(),
+            StaffId = Guid.NewGuid(),
+            Note = "Note"
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(404);
+        result.Message.Should().Be("Ticket not found.");
+    }
+
+    /// <summary>UTCID03 — Ticket đã ở priority Urgent (cao nhất) → 409, không thể escalate thêm.</summary>
+    [Fact]
+    public async Task Handle_UrgentPriority_Returns409()
+    {
+        var ticketId = Guid.NewGuid();
+        var ticket = BuildTicket(ticketId, TicketPriorityEnum.Urgent);
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket });
+
+        var command = new TicketEscalateRequestCommand
+        {
+            TicketId = ticketId,
+            StaffId = Guid.NewGuid(),
+            Note = "Note"
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(409);
+        result.Message.Should().Be("Urgent is the highest priority and cannot be escalated.");
+    }
+
+    /// <summary>UTCID04 — Người gọi không phải PrimaryHandler đang active → 403.</summary>
+    [Fact]
+    public async Task Handle_CallerIsNotPrimaryHandler_Returns403()
+    {
+        var ticketId = Guid.NewGuid();
+        var primaryStaffId = Guid.NewGuid();
+        var otherStaffId = Guid.NewGuid();
+        var ticket = BuildTicket(ticketId);
+
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: new[] { ticket },
-            assignmentSeed: new[] { assignment });
+            assignmentSeed: new[] { BuildPrimaryAssignment(ticketId, primaryStaffId) });
+
+        var command = new TicketEscalateRequestCommand
+        {
+            TicketId = ticketId,
+            StaffId = otherStaffId,
+            Note = "Note"
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+        result.Message.Should().Be("Only the active PrimaryHandler can request escalation.");
+    }
+
+    /// <summary>UTCID05 — Note rỗng/chỉ khoảng trắng → 400 (bắt buộc có lý do escalate).</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Handle_MissingNote_Returns400(string? note)
+    {
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = BuildTicket(ticketId);
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: new[] { ticket },
+            assignmentSeed: new[] { BuildPrimaryAssignment(ticketId, staffId) });
+
+        var command = new TicketEscalateRequestCommand
+        {
+            TicketId = ticketId,
+            StaffId = staffId,
+            Note = note
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        result.Message.Should().Be("An escalation reason note is required.");
+    }
+
+    /// <summary>UTCID06 — State machine chặn transition sang Request → 409 kèm lý do từ state machine.</summary>
+    [Fact]
+    public async Task Handle_TransitionNotAllowed_Returns409WithStateMachineReason()
+    {
+        var ticketId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var ticket = BuildTicket(ticketId);
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: new[] { ticket },
+            assignmentSeed: new[] { BuildPrimaryAssignment(ticketId, staffId) });
 
         _stateMachine
-            .Setup(x => x.CanTransition(ticket, TicketStatusEnum.Request, ActorRoleEnum.Staff, staffId))
-            .Returns(new TransitionResult { IsAllowed = true });
-        _stateMachine
-            .Setup(x => x.ExecuteAsync(ticket, TicketStatusEnum.Request, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()))
-            .Callback<Ticket, TicketStatusEnum, TransitionContext, CancellationToken>((t, s, _, _) => t.Status = s)
-            .ReturnsAsync(new TransitionResult { IsAllowed = true });
+            .Setup(x => x.CanTransition(It.IsAny<Ticket>(), TicketStatusEnum.Request,
+                ActorRoleEnum.Staff, It.IsAny<Guid>()))
+            .Returns(new TransitionResult
+            {
+                IsAllowed = false,
+                Reason = "Ticket đã Completed, không thể escalate."
+            });
 
-        _slaService
-            .Setup(x => x.PauseSlaAsync(ticket.Id, It.IsAny<PauseReasonEnum>(), It.IsAny<string>(),
-                It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        var command = new TicketEscalateRequestCommand
+        {
+            TicketId = ticketId,
+            StaffId = staffId,
+            Note = "Note"
+        };
 
-        return new TicketEscalateRequestCommandHandler(
-            uow.Object,
-            _stateMachine.Object,
-            _logger.Object,
-            _outboxWriter.Object,
-            Mock.Of<MediatR.IPublisher>(),
-            _slaService.Object);
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(409);
+        result.Message.Should().Be("Ticket đã Completed, không thể escalate.");
+        _slaService.Verify(x => x.PauseSlaAsync(It.IsAny<Guid>(), It.IsAny<PauseReasonEnum>(),
+            It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

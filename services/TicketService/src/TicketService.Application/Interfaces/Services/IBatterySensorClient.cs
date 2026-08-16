@@ -9,5 +9,12 @@ namespace TicketService.Application.Interfaces.Services;
 /// </summary>
 public interface IBatterySensorClient
 {
-    Task<TicketSensorSnapshotDto?> GetSnapshotAsync(Guid assetId, CancellationToken ct);
+    /// <param name="detectedAt">
+    /// Thời điểm sự cố được khai báo. Null → lấy số đo mới nhất (hành vi cũ).
+    /// Truyền mốc này vào thì snapshot phản ánh tình trạng pin LÚC XẢY RA sự cố: Customer
+    /// thường mở app hàng giờ sau khi thấy vấn đề, đọc realtime khi đó thì pin đã nguội và AI
+    /// trừ điểm một báo cáo đúng vì "sensor không thấy bất thường".
+    /// </param>
+    Task<TicketSensorSnapshotDto?> GetSnapshotAsync(
+        Guid assetId, DateTime? detectedAt, CancellationToken ct);
 }

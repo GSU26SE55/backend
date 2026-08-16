@@ -117,7 +117,7 @@ public class SohPredictionBackgroundServiceTests
     [Fact]
     public async Task Tick_MergeWithoutEscalation_KeepsDetectedAt_SoEscalationClockStillRuns()
     {
-        // AlertEscalationService lọc `DetectedAt <= now - EscalationAfterMinutes` (5 phút) còn job
+        // AlertEscalationService lọc `DetectedAt <= now - EscalationAfterMinutes` (1 phút) còn job
         // này chạy mỗi 5 phút. Nếu merge đẩy DetectedAt = now thì alert SOH Critical không bao giờ
         // đủ già để escalate — luồng P1 chết âm thầm.
         var assetId = Guid.NewGuid();

@@ -172,11 +172,27 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
     /// </summary>
     public static TicketCategoryEnum MapAnomalyToCategory(string anomalyCategory) => anomalyCategory switch
     {
-        "Overheat" or "HighAmbientTemp" or "HighTempHumidityCombo" => TicketCategoryEnum.Overheat,
-        "AbnormalCharging" => TicketCategoryEnum.Charging,
+        // Nhiệt độ — cả hai chiều. Undertemp trước đây rơi vào `_ => Repair`, và vì
+        // `ux_tickets_active_auto_per_asset_category` là UNIQUE trên (asset, category), nó
+        // chiếm mất slot Repair của cả nhóm: alert Overvoltage ngay sau đó không insert được,
+        // saga kẹt ở `TicketRequested` không log lỗi, và ticket biến mất trong im lặng.
+        "Overheat" or "HighAmbientTemp" or "HighTempHumidityCombo" or "Undertemp"
+            => TicketCategoryEnum.Overheat,
+
+        // Sạc — dòng sạc bất thường và quá áp đều là sự cố của đường nạp.
+        "AbnormalCharging" or "Overvoltage" => TicketCategoryEnum.Charging,
+
         "Undervoltage" or "LowSoc" => TicketCategoryEnum.NoPower,
+
         "SohDegradation" or "RapidDischarge" or "HighInternalResistance" or "CellImbalance"
             => TicketCategoryEnum.Performance,
+
+        // Hạ tầng đo đạc/thiết bị — không phải lỗi của bản thân viên pin, nên tách khỏi
+        // `Repair` để không tranh slot với các anomaly đo được ở trên.
+        "SensorMismatch" or "DeviceOffline" or "IotDataIntegrityViolation"
+            => TicketCategoryEnum.Other,
+
+        // Còn lại (EnvironmentalIncident, HighHumidity…) — cần kỹ thuật viên tới xử lý.
         _ => TicketCategoryEnum.Repair
     };
 
