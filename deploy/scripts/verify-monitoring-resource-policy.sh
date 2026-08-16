@@ -245,6 +245,69 @@ verify_resource_value() {
   fi
 }
 
+verify_application_service_monitor_contract() {
+  local service_name="$1"
+  local service_manifest="${temporary_directory}/${service_name}-service.yaml"
+  local service_monitor_manifest="${temporary_directory}/${service_name}-service-monitor.yaml"
+  local expected_component_label="app.kubernetes.io/component: ${service_name}"
+
+  extract_named_resource \
+    'Service' \
+    "${service_name}" \
+    "${service_manifest}"
+  extract_named_resource \
+    'ServiceMonitor' \
+    "${service_name}" \
+    "${service_monitor_manifest}"
+
+  awk -v expected_label="${expected_component_label}" '
+    /^metadata:[[:space:]]*$/ {
+      in_metadata = 1
+      next
+    }
+
+    /^spec:[[:space:]]*$/ {
+      in_metadata = 0
+    }
+
+    in_metadata {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (line == expected_label) {
+        found = 1
+      }
+    }
+
+    END { exit(found ? 0 : 1) }
+  ' "${service_manifest}" || {
+    printf 'application Service metadata label is missing: %s (%s)\n' \
+      "${service_name}" "${expected_component_label}" >&2
+    exit 1
+  }
+
+  grep -Eq \
+    "^[[:space:]]+app[.]kubernetes[.]io/component:[[:space:]]+${service_name}[[:space:]]*$" \
+    "${service_monitor_manifest}" || {
+    printf 'application ServiceMonitor selector is missing: %s (%s)\n' \
+      "${service_name}" "${expected_component_label}" >&2
+    exit 1
+  }
+}
+
+for application_service in \
+  apigateway \
+  auditaggregatorservice \
+  authservice \
+  batteryservice \
+  emailservice \
+  filestorageservice \
+  notificationservice \
+  smsservice \
+  ticketservice
+do
+  verify_application_service_monitor_contract "${application_service}"
+done
+
 grafana_deployment="${temporary_directory}/grafana-deployment.yaml"
 prometheus_operator="${temporary_directory}/prometheus-operator.yaml"
 grafana_service_monitor="${temporary_directory}/grafana-service-monitor.yaml"
