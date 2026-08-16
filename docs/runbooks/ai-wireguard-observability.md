@@ -24,6 +24,12 @@ Luồng ứng dụng dùng cùng một origin `https://ai.solars.io.vn`:
 
 Không public `3100`, `9100`, `8082`, `12345`, `8000` hoặc `50051`.
 
+Hai Jenkins SSH account cố ý không có `CAP_NET_ADMIN` và không được cấp `sudo`
+chỉ để đọc `wg show`. Production preflight xác nhận peer `/32` được route qua
+`wg0`, sau đó dùng các probe HTTPS/gRPC có timeout tới peer để chứng minh tunnel,
+TLS/SNI và ứng dụng đang hoạt động. Một request thành công cũng làm mới handshake
+nếu tunnel hợp lệ nhưng trước đó nhàn rỗi.
+
 ## 2. Xác nhận endpoint trước khi cấu hình
 
 Hai VPS hiện ở cùng VPC nên ưu tiên VPC address làm endpoint WireGuard. Chạy:
@@ -200,7 +206,7 @@ Thứ tự bắt buộc:
 Trên Backend, ép socket tới peer nhưng giữ hostname TLS:
 
 ```bash
-curl --fail --silent --show-error \
+curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
   --resolve ai.solars.io.vn:443:10.20.0.2 \
   https://ai.solars.io.vn/ready | jq -e '.ready == true'
 
