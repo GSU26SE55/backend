@@ -104,7 +104,12 @@ spec:
           {{- if (index .Values "kube-prometheus-stack" "enabled") }}
           check http://{{ .Release.Name }}-grafana:80/api/health
           check_grafana_api /api/datasources/uid/prometheus/health "queried Prometheus datasource"
-          check_grafana_api /api/datasources/uid/alertmanager/health "queried Alertmanager datasource"
+          # Grafana's built-in Alertmanager datasource does not implement the
+          # generic datasource health endpoint in every supported Grafana
+          # release. Query the real Alertmanager API through Grafana's
+          # datasource proxy instead. A 200 here proves that the datasource is
+          # provisioned, Grafana can reach it, and Alertmanager serves traffic.
+          check_grafana_api /api/datasources/proxy/uid/alertmanager/api/v2/status "queried Alertmanager API through datasource proxy"
           {{- if (index .Values "loki-stack" "enabled") }}
           check_grafana_api /api/datasources/uid/loki/health "queried Loki datasource"
           {{- end }}
