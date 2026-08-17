@@ -46,7 +46,8 @@ public class BatteryInternalService : BatteryInternal.BatteryInternalBase
                                  out var detectedAt))
         {
             var snapshot = await BuildSnapshotAroundAsync(assetId, detectedAt, context.CancellationToken);
-            if (snapshot is not null) return snapshot;
+            if (snapshot is not null)
+                return snapshot;
             // Không có reading nào trong cửa sổ → rơi xuống đường realtime bên dưới thay vì trả
             // found=false: thà đối chiếu bằng số đo mới nhất còn hơn bỏ hẳn tín hiệu sensor.
         }
@@ -122,7 +123,8 @@ public class BatteryInternalService : BatteryInternal.BatteryInternalBase
                   })
             .FirstOrDefaultAsync(ct);
 
-        if (row is null) return (0, 0, 0, 0);
+        if (row is null)
+            return (0, 0, 0, 0);
         return ((double)row.TemperatureMax,
                 (double)row.TemperatureMin,
                 (double)row.SocWarningThreshold,
@@ -162,7 +164,8 @@ public class BatteryInternalService : BatteryInternal.BatteryInternalBase
             .Where(r => r.BatteryAssetId == assetId && r.Time >= from && r.Time <= to)
             .ToListAsync(ct);
 
-        if (readings.Count == 0) return null;
+        if (readings.Count == 0)
+            return null;
 
         var asset = await _unitOfWork.BatteryAssets
             .GetAllAsync()
