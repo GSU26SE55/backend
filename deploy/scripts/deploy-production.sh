@@ -424,6 +424,7 @@ if ! helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m;
     allow-helm-smoke-to-grafana \
     allow-helm-smoke-to-tempo \
     allow-grafana-to-kubernetes-api \
+    allow-monitoring-discovery-to-kubernetes-api \
     -o yaml >&2 || true
   kubectl -n "${namespace}" get configmap \
     -l grafana_datasource=1 -o name >&2 || true

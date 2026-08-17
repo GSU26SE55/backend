@@ -359,6 +359,31 @@ spec:
     - { protocol: TCP, port: 443 }
     - { protocol: TCP, port: 6443 }
 ---
+# Prometheus, Prometheus Operator, kube-state-metrics, and Promtail use
+# Kubernetes API watches/service discovery. On k3s, the kubernetes.default
+# Service port 443 is DNATed to the node API endpoint on 6443 before the
+# NetworkPolicy egress check, just like the Grafana sidecars above. Keep the
+# exception limited to the monitoring agents that actually need API access.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-discovery-to-kubernetes-api
+spec:
+  podSelector:
+    matchExpressions:
+    - key: app.kubernetes.io/name
+      operator: In
+      values:
+      - prometheus
+      - kube-prometheus-stack-prometheus-operator
+      - kube-state-metrics
+      - promtail
+  policyTypes: [Egress]
+  egress:
+  - ports:
+    - { protocol: TCP, port: 443 }
+    - { protocol: TCP, port: 6443 }
+---
 # 9. cert-manager ACME HTTP-01 solver pods — Traefik cần reach port 8089 để forward challenge.
 # Solver pods do cert-manager tạo ra, không có label app.kubernetes.io/*, nên cần policy riêng.
 apiVersion: networking.k8s.io/v1
