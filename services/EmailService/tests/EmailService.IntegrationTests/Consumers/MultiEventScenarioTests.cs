@@ -44,6 +44,12 @@ public class MultiEventScenarioTests : IAsyncLifetime
         foreach (var e in events)
             await _factory.WaitForRenderCallAsync(e.Otp);
 
+        // Render xảy ra trước lời gọi HTTP tới Mailjet. Nếu đếm ngay sau khi render,
+        // request cuối cùng có thể vẫn đang chạy và làm test đỏ giả trên CI.
+        // Đợi từng marker email unique xuất hiện trước khi assert exactly-once.
+        foreach (var e in events)
+            await _factory.WaitForMailjetCallAsync(e.ToEmail, timeoutMs: 10000);
+
         // Mỗi event tương ứng 1 Mailjet call.
         foreach (var e in events)
             _factory.CountMailjetCallsContaining(e.ToEmail).Should().Be(1, $"chính xác 1 mail cho {e.ToEmail}");
