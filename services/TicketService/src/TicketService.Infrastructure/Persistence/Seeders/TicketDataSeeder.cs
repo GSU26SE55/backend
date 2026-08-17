@@ -667,7 +667,14 @@ public class TicketDataSeeder
         var staff = staffs.First();
         var logs = new List<MaintenanceLog>();
 
-        var resolvedTickets = tickets.Where(t => t.Status is TicketStatusEnum.Completed or TicketStatusEnum.Closed).ToList();
+        // Closed KHÔNG kéo theo đã-resolve: ticket đóng vì ngoài scope / khách rút yêu cầu thì
+        // ResolvedAt vẫn null. Trước đây chỗ này ép `.Value` nên gặp một ticket như vậy là seeder
+        // ném NullReference và service crash-loop ngay lúc khởi động — mà seeder chỉ chạy khi bảng
+        // maintenance_logs còn rỗng, nên lỗi chỉ lộ ra trên môi trường vừa reset DB.
+        var resolvedTickets = tickets
+            .Where(t => t.Status is TicketStatusEnum.Completed or TicketStatusEnum.Closed)
+            .Where(t => t.ResolvedAt.HasValue)
+            .ToList();
         foreach (var ticket in resolvedTickets)
         {
             var startedAt = ticket.ResolvedAt!.Value.AddHours(-2);

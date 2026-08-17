@@ -99,6 +99,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             OriginAlertId = ticket.OriginAlertId?.ToString(),
             ReopenCount = ticket.ReopenCount,
             IsIncident = ticket.IsIncident,
+            EnvironmentalIncidentId = ticket.EnvironmentalIncidentId?.ToString(),
             ResolutionSummary = ticket.ResolutionSummary,
             ResolvedAt = ticket.ResolvedAt,
             ResolvedByStaffId = ticket.ResolvedByStaffId?.ToString(),

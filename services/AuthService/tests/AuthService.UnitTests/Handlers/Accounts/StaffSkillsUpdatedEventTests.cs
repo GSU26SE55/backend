@@ -38,6 +38,23 @@ public class StaffSkillsUpdatedEventTests
         }
     }
 
+    /// <summary>
+    /// Chỉ account role Staff mới được cấp kỹ năng — handler tự tạo StaffProfile nếu chưa có,
+    /// nên cấp skill cho Manager là đưa họ vào danh sách phân công ticket.
+    /// </summary>
+    private static Account StaffAccountFixture(Guid staffId, string roleName = "Staff")
+    {
+        var roleId = Guid.NewGuid();
+        return new Account
+        {
+            Id = staffId,
+            Email = "s@example.com",
+            FullName = "Kỹ Thuật Viên",
+            RoleId = roleId,
+            Role = new Role { Id = roleId, Name = roleName, NormalizedName = roleName.ToUpperInvariant() }
+        };
+    }
+
     private static StaffSkill Skill(Guid staffId, string code, bool deleted = false) => new()
     {
         Id = Guid.NewGuid(),
@@ -50,7 +67,7 @@ public class StaffSkillsUpdatedEventTests
     public async Task AddSkill_PublishesFullSkillSet_IncludingTheNewOne()
     {
         var staffId = Guid.NewGuid();
-        var account = new Account { Id = staffId, Email = "s@example.com", FullName = "Kỹ Thuật Viên" };
+        var account = StaffAccountFixture(staffId);
         var (uow, _, _, _) = MockUnitOfWork.Build(
             accountSeed: new[] { account },
             staffProfileSeed: new[] { new StaffProfile { Id = Guid.NewGuid(), AccountId = staffId } },
@@ -74,7 +91,7 @@ public class StaffSkillsUpdatedEventTests
         // Cập nhật cấp độ của một kỹ năng đã có: tập không được sinh ra mã trùng, kẻo consumer
         // ghi vào danh sách kỹ năng hai bản giống nhau.
         var staffId = Guid.NewGuid();
-        var account = new Account { Id = staffId, Email = "s@example.com", FullName = "Kỹ Thuật Viên" };
+        var account = StaffAccountFixture(staffId);
         var (uow, _, _, _) = MockUnitOfWork.Build(
             accountSeed: new[] { account },
             staffProfileSeed: new[] { new StaffProfile { Id = Guid.NewGuid(), AccountId = staffId } },
@@ -95,7 +112,7 @@ public class StaffSkillsUpdatedEventTests
         // Kỹ năng từng bị gỡ rồi cấp lại: bản ghi cũ được khôi phục chứ không tạo mới, nên truy
         // vấn "chưa xoá" trên DB CHƯA thấy nó — phải tự hợp nhất vào tập.
         var staffId = Guid.NewGuid();
-        var account = new Account { Id = staffId, Email = "s@example.com", FullName = "Kỹ Thuật Viên" };
+        var account = StaffAccountFixture(staffId);
         var (uow, _, _, _) = MockUnitOfWork.Build(
             accountSeed: new[] { account },
             staffProfileSeed: new[] { new StaffProfile { Id = Guid.NewGuid(), AccountId = staffId } },
@@ -108,6 +125,28 @@ public class StaffSkillsUpdatedEventTests
             CancellationToken.None);
 
         producer.Events.Should().ContainSingle().Which.SkillCodes.Should().BeEquivalentTo("SKL1", "SKL9");
+    }
+
+    [Theory]
+    [InlineData("Manager")]
+    [InlineData("Admin")]
+    public async Task AddSkill_ToNonStaffAccount_IsRejected(string roleName)
+    {
+        // Handler TỰ TẠO StaffProfile nếu chưa có. Cấp skill cho một Manager là vô tình đưa họ vào
+        // "danh sách kỹ thuật viên" mà màn hình phân công ticket đọc, và không có gì gỡ ra sau đó.
+        var accountId = Guid.NewGuid();
+        var (uow, _, _, _) = MockUnitOfWork.Build(
+            accountSeed: new[] { StaffAccountFixture(accountId, roleName) });
+        var producer = new CapturingProducer();
+        var handler = new AddStaffSkillCommandHandler(uow.Object, producer);
+
+        var resp = await handler.Handle(
+            new AddStaffSkillCommand { StaffAccountId = accountId, SkillCode = "SKL1", SkillLevel = 3 },
+            CancellationToken.None);
+
+        resp.IsSuccess.Should().BeFalse();
+        resp.StatusCode.Should().Be(409);
+        producer.Events.Should().BeEmpty();
     }
 
     [Fact]

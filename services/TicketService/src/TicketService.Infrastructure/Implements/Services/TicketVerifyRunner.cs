@@ -83,10 +83,14 @@ public class TicketVerifyRunner : ITicketVerifyRunner
         // "Performance" — cùng một sự cố, khác category, và filter cứng sẽ loại thẳng ứng viên
         // đó. Hệ quả là hai ticket song song cho một sự cố, không ai biết chúng trùng nhau.
         //
-        // Vì vậy: máy-với-máy thì so category; hễ một bên do người tạo thì bỏ ràng buộc và để AI
-        // phán trên mô tả — mô tả người viết bằng lời của họ, không dính bẫy template ở trên.
-        var isMachinePair = ticket.Origin == TicketOriginEnum.AutoFromAlert;
-
+        // Việc chọn luật nào đã chuyển hẳn sang AI (`is_machine_written` trong VerifyTicketRequest):
+        // nó có đủ ngữ cảnh để so category, khoảng cách thời gian và mô tả cùng lúc, còn ở đây
+        // thì chỉ lọc được bằng SQL. Bộ lọc `isMachinePair` cũ đã bỏ — giữ lại là hai nơi cùng
+        // quyết một chuyện với hai định nghĩa "máy" khác nhau (BE tính mỗi AutoFromAlert, AI tính
+        // cả System), và ứng viên bị SQL loại thì AI không bao giờ thấy để mà cân nhắc.
+        //
+        // Tầng này giờ chỉ giới hạn PHẠM VI: ticket khác, cùng pin, cùng khách hàng, còn mở và
+        // chưa merge. Đó là những điều kiện cứng của nghiệp vụ, không phải phán đoán.
         var candidates = new List<DuplicateCandidateDto>();
         if (ticket.BatteryAssetId != Guid.Empty)
         {
@@ -96,21 +100,20 @@ public class TicketVerifyRunner : ITicketVerifyRunner
                     && t.Id != ticket.Id
                     && t.BatteryAssetId == ticket.BatteryAssetId
                     && t.CustomerId == ticket.CustomerId
-                    && (!isMachinePair
-                        || t.Origin != TicketOriginEnum.AutoFromAlert
-                        || t.Category == ticket.Category)
                     && t.MergedIntoTicketId == null
                     && OpenStatuses.Contains(t.Status))
                 .OrderByDescending(t => t.CreatedAt)
                 .Take(_options.MaxDuplicateCandidates)
-                .Select(t => new { t.Id, t.Description, t.Category })
+                .Select(t => new { t.Id, t.Description, t.Category, t.DetectedAt, t.Origin })
                 .ToListAsync(ct);
 
             candidates = raw.Select(t => new DuplicateCandidateDto
             {
                 TicketId = t.Id.ToString(),
                 Description = t.Description,
-                Category = (int)t.Category
+                Category = (int)t.Category,
+                DetectedAt = t.DetectedAt,
+                IsMachineWritten = t.Origin is TicketOriginEnum.AutoFromAlert or TicketOriginEnum.System
             }).ToList();
         }
 
@@ -137,6 +140,7 @@ public class TicketVerifyRunner : ITicketVerifyRunner
             (int)ticket.Category,
             sensor,
             candidates,
+            isMachineWritten: ticket.Origin is TicketOriginEnum.AutoFromAlert or TicketOriginEnum.System,
             ct);
 
         if (result is null)

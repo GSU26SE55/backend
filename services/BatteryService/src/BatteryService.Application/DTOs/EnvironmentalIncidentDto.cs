@@ -17,6 +17,15 @@ public class EnvironmentalIncidentDto
     public AlertSeverityEnum Severity { get; set; }
     /// <summary>User ID đã report incident.</summary>
     public string? ReportedBy { get; set; }
+    /// <summary>
+    /// Số đo cảm biến do firmware gửi kèm — ví dụ <c>"MQ-2 raw=3100 > thr=2000 (GPIO1)"</c>.
+    ///
+    /// <para>Đây là BẰNG CHỨNG của sự cố cấp site, tương đương bảng số đo của ticket pin. Trước
+    /// đây trường này được lưu vào entity nhưng không map ra DTO, nên UI chỉ còn cách đọc câu mô
+    /// tả tự sinh của ticket — vốn trộn lẫn số đo với văn bản khuôn mẫu và mã enum thô
+    /// (<c>"type 3, severity 3"</c>). Tách riêng ở đây để UI trình bày số đo đúng như nó vốn là.</para>
+    /// </summary>
+    public string? Notes { get; set; }
     /// <summary>Timestamp phát hiện (UTC).</summary>
     public DateTime DetectedAt { get; set; }
     /// <summary>Timestamp acknowledged (UTC).</summary>

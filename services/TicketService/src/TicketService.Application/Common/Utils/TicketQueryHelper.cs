@@ -43,6 +43,9 @@ public static class TicketQueryHelper
             Origin = t.Origin,
             ReopenCount = t.ReopenCount,
             IsIncident = t.IsIncident,
+            EnvironmentalIncidentId = t.EnvironmentalIncidentId.HasValue
+                ? t.EnvironmentalIncidentId.Value.ToString()
+                : null,
             ScheduledStartAtUtc = t.ScheduledStartAtUtc,
             ScheduleVersion = t.ScheduleVersion,
             PendingContext = t.PendingContext,

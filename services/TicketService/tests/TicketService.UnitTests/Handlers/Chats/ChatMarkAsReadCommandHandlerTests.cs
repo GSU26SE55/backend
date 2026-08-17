@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.Interfaces.Services;
@@ -27,6 +28,16 @@ public class ChatMarkAsReadCommandHandlerTests
         return queue;
     }
 
+    /// <summary>Hàng đợi đầy — TryEnqueue luôn trả false, không nhận thêm item nào.</summary>
+    private static Mock<IChatReadReceiptQueue> MakeFullQueue()
+    {
+        var queue = new Mock<IChatReadReceiptQueue>();
+        queue.Setup(q => q.TryEnqueue(It.IsAny<ChatReadReceiptItem>())).Returns(false);
+        return queue;
+    }
+
+    private static Mock<ILogger<ChatMarkAsReadCommandHandler>> MakeLogger() => new();
+
     [Fact]
     public async Task Handle_EmptyChatIds_ReturnsZeroWithoutQuery()
     {
@@ -34,7 +45,7 @@ public class ChatMarkAsReadCommandHandlerTests
         var captured = new List<ChatReadReceiptItem>();
         var queue = MakeQueue(captured);
 
-        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object);
+        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object, MakeLogger().Object);
 
         var command = new ChatMarkAsReadCommand
         {
@@ -74,7 +85,7 @@ public class ChatMarkAsReadCommandHandlerTests
         var captured = new List<ChatReadReceiptItem>();
         var queue = MakeQueue(captured);
 
-        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object);
+        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object, MakeLogger().Object);
 
         var command = new ChatMarkAsReadCommand
         {
@@ -113,7 +124,7 @@ public class ChatMarkAsReadCommandHandlerTests
         var captured = new List<ChatReadReceiptItem>();
         var queue = MakeQueue(captured);
 
-        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object);
+        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object, MakeLogger().Object);
 
         var command = new ChatMarkAsReadCommand
         {
@@ -147,7 +158,7 @@ public class ChatMarkAsReadCommandHandlerTests
         var captured = new List<ChatReadReceiptItem>();
         var queue = MakeQueue(captured);
 
-        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object);
+        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object, MakeLogger().Object);
 
         var command = new ChatMarkAsReadCommand
         {
@@ -163,5 +174,81 @@ public class ChatMarkAsReadCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Data.Should().Be(0);
         captured.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Tin do chính actor gửi không bao giờ là chưa đọc — các query đếm unread đều bỏ qua chúng,
+    /// nên ghi receipt cho chúng chỉ tốn slot hàng đợi và đẩy receipt của người khác ra ngoài.
+    /// </summary>
+    [Fact]
+    public async Task Handle_ChatsAuthoredByActor_AreFilteredOut()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        var ownChat = MakeChat(ticketId, Guid.NewGuid());
+        ownChat.AuthorUserId = userId;
+        var otherChat = MakeChat(ticketId, Guid.NewGuid());
+
+        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" };
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket }, chatSeed: new[] { ownChat, otherChat });
+        uow.SetupReads(new List<TicketChatRead>());
+
+        var captured = new List<ChatReadReceiptItem>();
+        var queue = MakeQueue(captured);
+
+        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object, MakeLogger().Object);
+
+        var command = new ChatMarkAsReadCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+            UserRole = ActorRoleEnum.Staff,
+            ActorRoles = new[] { "Admin" },
+            ChatIds = new List<Guid> { ownChat.Id, otherChat.Id }
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data.Should().Be(1);
+        captured.Should().ContainSingle(i => i.ChatId == otherChat.Id);
+    }
+
+    /// <summary>
+    /// Hàng đợi đầy thì receipt bị rớt và không có retry nội bộ — trả 200 sẽ khiến client tưởng
+    /// đã đọc xong và không gửi lại, làm unread kẹt vĩnh viễn. Phải báo thất bại để client retry.
+    /// </summary>
+    [Fact]
+    public async Task Handle_QueueFull_ReportsFailureSoClientRetries()
+    {
+        var ticketId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var chat = MakeChat(ticketId, Guid.NewGuid());
+
+        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "Test Ticket", Description = "Test Description" };
+        var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket }, chatSeed: new[] { chat });
+        uow.SetupReads(new List<TicketChatRead>());
+
+        var queue = MakeFullQueue();
+
+        var handler = new ChatMarkAsReadCommandHandler(uow.Object, queue.Object, MakeLogger().Object);
+
+        var command = new ChatMarkAsReadCommand
+        {
+            TicketId = ticketId,
+            UserId = userId,
+            UserRole = ActorRoleEnum.Staff,
+            ActorRoles = new[] { "Admin" },
+            ChatIds = new List<Guid> { chat.Id }
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(503);
+        result.Data.Should().Be(0);
     }
 }

@@ -81,13 +81,23 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
 
         await SaveAiSuggestionAsync(ticket.Id, request);
 
+        // Dòng này hiện nguyên văn trên tab "Activity history" của FE, nên nó phải đọc được
+        // bằng mắt người. Trước đây ghi thẳng OriginAlertId — một GUID không nói lên điều gì
+        // với người đọc, mà tra ngược cũng không tiện vì màn Alerts tìm theo pin chứ không
+        // theo id. Alert KHÔNG có mã dạng "TKT-…" để thay vào, nên mô tả bằng chính nội dung
+        // của nó: loại bất thường + pin. Id vẫn nằm ở cột Ticket.OriginAlertId và ở
+        // causation_id của bản ghi audit ngay dưới, nên không mất đường truy vết.
+        var alertDescription = string.IsNullOrWhiteSpace(request.BatterySerialNumber)
+            ? $"a {request.AnomalyCategory} alert"
+            : $"a {request.AnomalyCategory} alert on {request.BatterySerialNumber}";
+
         await _activityLogger.LogAsync(
             ticket.Id,
             null,
             ActorRoleEnum.System,
             "System",
             ActivityActionEnum.Created,
-            newValue: $"Auto-created from alert {request.OriginAlertId}");
+            newValue: $"Auto-created from {alertDescription}");
 
         await _outboxWriter.WriteAsync(
             new TicketCreatedEvent(ticket.Id, ticket.Code, ticket.CustomerId, ticket.Priority?.ToString()), ct);

@@ -29,6 +29,18 @@ public class DuplicateCandidateDto
     public string TicketId { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public int Category { get; set; }
+
+    /// <summary>Mốc phát hiện sự cố (UTC) — AI so khoảng cách thời gian giữa hai ticket.</summary>
+    public DateTime? DetectedAt { get; set; }
+
+    /// <summary>
+    /// Mô tả do MÁY sinh từ template cố định (<c>AutoFromAlert</c> / <c>System</c>).
+    ///
+    /// <para>AI chọn thuật toán dò trùng theo cờ này, vì hai loại mô tả hỏng theo hai kiểu ngược
+    /// nhau: mô tả máy dùng chung template nên đếm-từ-chung cho điểm cao giả tạo giữa các lỗi
+    /// khác hẳn nhau, còn mô tả người viết thì cùng một sự cố lại gần như không chung từ nào.</para>
+    /// </summary>
+    public bool IsMachineWritten { get; set; }
 }
 
 /// <summary>
