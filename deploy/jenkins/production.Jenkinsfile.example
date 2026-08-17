@@ -173,10 +173,42 @@ pipeline {
                         trap 'rm -rf "${docker_config}"' EXIT
                         export DOCKER_CONFIG="${docker_config}"
 
-                        printf '%s' "${REGISTRY_PASSWORD}" |
-                          docker login "${REGISTRY_HOST}" \
-                            --username "${REGISTRY_USERNAME}" \
-                            --password-stdin
+                        retry_registry_command() {
+                          description="$1"
+                          shift
+                          attempt=1
+                          max_attempts=4
+                          delay_seconds=5
+
+                          while :; do
+                            if "$@"; then
+                              return 0
+                            else
+                              status=$?
+                            fi
+
+                            if [ "${attempt}" -ge "${max_attempts}" ]; then
+                              echo "${description} failed after ${attempt} attempts (exit ${status})" >&2
+                              return "${status}"
+                            fi
+
+                            echo "${description} failed on attempt ${attempt}/${max_attempts} (exit ${status}); retrying in ${delay_seconds}s" >&2
+                            sleep "${delay_seconds}"
+                            attempt=$((attempt + 1))
+                            delay_seconds=$((delay_seconds * 2))
+                          done
+                        }
+
+                        registry_login() {
+                          printf '%s' "${REGISTRY_PASSWORD}" |
+                            docker login "${REGISTRY_HOST}" \
+                              --username "${REGISTRY_USERNAME}" \
+                              --password-stdin
+                        }
+
+                        retry_registry_command \
+                          "Docker login to ${REGISTRY_HOST}" \
+                          registry_login
 
                         lock_file=deploy/production/image-lock.env
                         : > "${lock_file}"
@@ -193,8 +225,12 @@ pipeline {
                           auditaggregatorservice
                         do
                           image_tag="${REGISTRY_NAMESPACE}/${service}:${RELEASE_SHA}"
-                          docker push "${image_tag}"
-                          docker pull "${image_tag}"
+                          retry_registry_command \
+                            "Docker push ${image_tag}" \
+                            docker push "${image_tag}"
+                          retry_registry_command \
+                            "Docker pull ${image_tag}" \
+                            docker pull "${image_tag}"
 
                           image_ref="$(
                             docker image inspect "${image_tag}" \
@@ -207,9 +243,13 @@ pipeline {
                           key="$(printf '%s' "${service}" | tr '[:lower:]' '[:upper:]')_DIGEST"
                           printf '%s=%s\n' "${key}" "${image_ref#*@}" >> "${lock_file}"
 
-                          COSIGN_PASSWORD="${COSIGN_PASSWORD}" \
-                            cosign sign --yes --key "${COSIGN_PRIVATE_KEY}" "${image_ref}"
-                          cosign verify --key "${COSIGN_PUBLIC_KEY}" "${image_ref}"
+                          retry_registry_command \
+                            "Cosign sign ${image_ref}" \
+                            env COSIGN_PASSWORD="${COSIGN_PASSWORD}" \
+                              cosign sign --yes --key "${COSIGN_PRIVATE_KEY}" "${image_ref}"
+                          retry_registry_command \
+                            "Cosign verify ${image_ref}" \
+                            cosign verify --key "${COSIGN_PUBLIC_KEY}" "${image_ref}"
                         done
 
                         test "$(wc -l < "${lock_file}" | tr -d ' ')" = 9
