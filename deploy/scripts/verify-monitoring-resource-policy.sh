@@ -562,7 +562,9 @@ default_datasource_count="$(
 }
 
 for expected in \
+  'type: prometheus' \
   'uid: prometheus' \
+  'url: http://monitoring-prometheus.solar-prod:9090/' \
   'isDefault: true'
 do
   grep -Fq "${expected}" "${grafana_datasource_configmap}" || {
@@ -586,6 +588,7 @@ do
 done
 
 for expected in \
+  'type: tempo' \
   'uid: tempo' \
   'url: http://tempo:3200' \
   'isDefault: false'
@@ -598,7 +601,9 @@ do
 done
 
 for expected in \
+  'type: loki' \
   'uid: "loki"' \
+  'url: "http://loki:3100"' \
   'isDefault: false'
 do
   grep -Fq "${expected}" "${loki_datasource_configmap}" || {
@@ -661,10 +666,10 @@ do
 done
 
 for expected_grafana_resource in \
-  '/api/datasources/uid/prometheus/health' \
+  '/api/datasources/proxy/uid/prometheus/api/v1/query?query=up' \
   '/api/datasources/proxy/uid/alertmanager/api/v2/status' \
-  '/api/datasources/uid/loki/health' \
-  '/api/datasources/uid/tempo/health' \
+  '/api/datasources/proxy/uid/loki/loki/api/v1/labels' \
+  '/api/datasources/proxy/uid/tempo/ready' \
   '/api/dashboards/uid/alert-ticket-saga' \
   '/api/dashboards/uid/audit-pipeline' \
   '/api/dashboards/uid/auth-security' \
@@ -686,10 +691,11 @@ do
   }
 done
 
-if grep -Fq '/api/datasources/uid/alertmanager/health' "${solar_smoke_test}"
+if grep -Eq '/api/datasources/uid/(prometheus|alertmanager|loki|tempo)/health' \
+  "${solar_smoke_test}"
 then
   printf '%s\n' \
-    'Solar smoke test must probe Alertmanager through the datasource proxy; the generic health endpoint is unsupported' >&2
+    'Solar smoke test must exercise real backends through the datasource proxy; generic plugin health endpoints are unsupported' >&2
   exit 1
 fi
 

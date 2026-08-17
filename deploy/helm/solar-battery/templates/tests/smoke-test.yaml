@@ -72,22 +72,48 @@ spec:
             if [ "${grafana_failed}" -ne 0 ]; then
               return
             fi
+            response_file="$(mktemp)"
+            error_file="$(mktemp)"
             attempts=0
             while :; do
-              if curl --fail --silent --show-error \
+              code=""
+              curl_status=0
+              if code="$(curl --silent --show-error \
+                --output "${response_file}" \
+                --write-out '%{http_code}' \
                 --user "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
                 --max-time 10 \
                 "http://{{ .Release.Name }}-grafana:80${resource_path}" \
-                >/dev/null 2>&1; then
+                2>"${error_file}")"; then
+                :
+              else
+                curl_status="$?"
+              fi
+
+              if [ "${curl_status}" -eq 0 ] && [ "${code}" = "200" ]; then
                 echo "OK   Grafana ${resource_name}"
+                rm -f "${response_file}" "${error_file}"
                 return
               fi
 
               attempts=$((attempts + 1))
               if [ "${attempts}" -ge 30 ]; then
-                echo "FAIL Grafana could not make ${resource_name} available"
+                if [ "${curl_status}" -eq 0 ]; then
+                  echo "FAIL Grafana could not make ${resource_name} available (HTTP ${code})"
+                  head -c 512 "${response_file}" || true
+                else
+                  echo "FAIL Grafana could not make ${resource_name} available (curl exit ${curl_status})"
+                  head -c 512 "${error_file}" || true
+                fi
+                echo
                 fail=1
-                grafana_failed=1
+                case "${code}" in
+                  401|403|502|503|504) grafana_failed=1 ;;
+                esac
+                if [ "${curl_status}" -ne 0 ]; then
+                  grafana_failed=1
+                fi
+                rm -f "${response_file}" "${error_file}"
                 return
               fi
               sleep 2
@@ -103,18 +129,17 @@ spec:
           check http://smsservice:80/metrics
           {{- if (index .Values "kube-prometheus-stack" "enabled") }}
           check http://{{ .Release.Name }}-grafana:80/api/health
-          check_grafana_api /api/datasources/uid/prometheus/health "queried Prometheus datasource"
-          # Grafana's built-in Alertmanager datasource does not implement the
-          # generic datasource health endpoint in every supported Grafana
-          # release. Query the real Alertmanager API through Grafana's
-          # datasource proxy instead. A 200 here proves that the datasource is
-          # provisioned, Grafana can reach it, and Alertmanager serves traffic.
-          check_grafana_api /api/datasources/proxy/uid/alertmanager/api/v2/status "queried Alertmanager API through datasource proxy"
+          # Exercise each real backend API through Grafana's datasource proxy.
+          # Generic datasource health handlers are plugin/version-specific:
+          # the deployed Loki handler sends PromQL `vector(1)+vector(1)` to
+          # LogQL and reports a false 400 failure.
+          check_grafana_api "/api/datasources/proxy/uid/prometheus/api/v1/query?query=up" "queried Prometheus API through datasource proxy"
+          check_grafana_api "/api/datasources/proxy/uid/alertmanager/api/v2/status" "queried Alertmanager API through datasource proxy"
           {{- if (index .Values "loki-stack" "enabled") }}
-          check_grafana_api /api/datasources/uid/loki/health "queried Loki datasource"
+          check_grafana_api "/api/datasources/proxy/uid/loki/loki/api/v1/labels" "queried Loki API through datasource proxy"
           {{- end }}
           {{- if .Values.tempo.enabled }}
-          check_grafana_api /api/datasources/uid/tempo/health "queried Tempo datasource"
+          check_grafana_api "/api/datasources/proxy/uid/tempo/ready" "queried Tempo readiness through datasource proxy"
           {{- end }}
           {{- if .Values.monitoring.grafanaDashboards.enabled }}
           {{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
