@@ -571,6 +571,20 @@ do
     exit 1
   }
 done
+
+for expected in \
+  'type: alertmanager' \
+  'uid: alertmanager' \
+  'url: http://monitoring-alertmanager.solar-prod:9093/' \
+  'implementation: prometheus'
+do
+  grep -Fq "${expected}" "${grafana_datasource_configmap}" || {
+    printf 'Grafana Alertmanager datasource provisioning is missing: %s\n' \
+      "${expected}" >&2
+    exit 1
+  }
+done
+
 for expected in \
   'uid: tempo' \
   'url: http://tempo:3200' \
@@ -648,7 +662,7 @@ done
 
 for expected_grafana_resource in \
   '/api/datasources/uid/prometheus/health' \
-  '/api/datasources/uid/alertmanager/health' \
+  '/api/datasources/proxy/uid/alertmanager/api/v2/status' \
   '/api/datasources/uid/loki/health' \
   '/api/datasources/uid/tempo/health' \
   '/api/dashboards/uid/alert-ticket-saga' \
@@ -671,6 +685,13 @@ do
     exit 1
   }
 done
+
+if grep -Fq '/api/datasources/uid/alertmanager/health' "${solar_smoke_test}"
+then
+  printf '%s\n' \
+    'Solar smoke test must probe Alertmanager through the datasource proxy; the generic health endpoint is unsupported' >&2
+  exit 1
+fi
 
 for expected_secret_key in admin-user admin-password
 do
