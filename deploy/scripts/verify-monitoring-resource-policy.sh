@@ -357,6 +357,7 @@ grafana_service_monitor="${temporary_directory}/grafana-service-monitor.yaml"
 monitoring_network_policy="${temporary_directory}/monitoring-network-policy.yaml"
 grafana_smoke_network_policy="${temporary_directory}/grafana-smoke-network-policy.yaml"
 grafana_kubernetes_api_network_policy="${temporary_directory}/grafana-kubernetes-api-network-policy.yaml"
+monitoring_kubernetes_api_network_policy="${temporary_directory}/monitoring-kubernetes-api-network-policy.yaml"
 grafana_datasource_configmap="${temporary_directory}/grafana-datasource-configmap.yaml"
 loki_datasource_configmap="${temporary_directory}/loki-datasource-configmap.yaml"
 tempo_datasource_configmap="${temporary_directory}/tempo-datasource-configmap.yaml"
@@ -397,6 +398,10 @@ extract_named_resource \
   'NetworkPolicy' \
   'allow-grafana-to-kubernetes-api' \
   "${grafana_kubernetes_api_network_policy}"
+extract_named_resource \
+  'NetworkPolicy' \
+  'allow-monitoring-discovery-to-kubernetes-api' \
+  "${monitoring_kubernetes_api_network_policy}"
 extract_named_resource \
   'NetworkPolicy' \
   'allow-helm-smoke-to-tempo' \
@@ -525,6 +530,24 @@ for expected in \
 do
   grep -Fq "${expected}" "${grafana_kubernetes_api_network_policy}" || {
     printf 'Grafana Kubernetes API NetworkPolicy contract is missing: %s\n' \
+      "${expected}" >&2
+    exit 1
+  }
+done
+
+for expected in \
+  'key: app.kubernetes.io/name' \
+  'operator: In' \
+  '- prometheus' \
+  '- kube-prometheus-stack-prometheus-operator' \
+  '- kube-state-metrics' \
+  '- promtail' \
+  'protocol: TCP' \
+  'port: 443' \
+  'port: 6443'
+do
+  grep -Fq -- "${expected}" "${monitoring_kubernetes_api_network_policy}" || {
+    printf 'Monitoring Kubernetes API NetworkPolicy contract is missing: %s\n' \
       "${expected}" >&2
     exit 1
   }
@@ -667,6 +690,7 @@ done
 
 for expected_grafana_resource in \
   '/api/datasources/proxy/uid/prometheus/api/v1/query?query=up' \
+  '/api/datasources/proxy/uid/prometheus/api/v1/alertmanagers' \
   '/api/datasources/proxy/uid/alertmanager/api/v2/status' \
   '/api/datasources/proxy/uid/loki/loki/api/v1/labels' \
   '/api/datasources/proxy/uid/tempo/ready' \
@@ -690,6 +714,12 @@ do
     exit 1
   }
 done
+
+
+grep -Fq 'activeAlertmanagers' "${solar_smoke_test}" || {
+  printf 'Solar smoke test must reject an empty Prometheus Alertmanager discovery result\n' >&2
+  exit 1
+}
 
 if grep -Eq '/api/datasources/uid/(prometheus|alertmanager|loki|tempo)/health' \
   "${solar_smoke_test}"
