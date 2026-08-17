@@ -76,7 +76,14 @@ public class TicketWorkStartedConsumerTests
             Guid.NewGuid(), "TKT-1176", Guid.NewGuid(), Guid.NewGuid(),
             DateTime.UtcNow, 5, "ScheduledDue", "P2High", DateTime.UtcNow);
 
+        // Complete the first delivery before publishing the redelivery. Publishing both
+        // messages back-to-back exercises concurrent delivery instead of the intended
+        // "after the cache window" scenario, and lets the in-memory mock race between
+        // GetByIdAsync and AddAsync even though PostgreSQL enforces the deterministic PK.
         await harness.Bus.Publish(message);
+        (await harness.Consumed.Any<TicketWorkStartedEvent>()).Should().BeTrue();
+        written.Should().HaveCount(12);
+
         await harness.Bus.Publish(message);
         (await harness.Consumed.SelectAsync<TicketWorkStartedEvent>().Take(2).Count()).Should().Be(2);
 
