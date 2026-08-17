@@ -29,11 +29,15 @@ namespace BatteryService.Api.Controllers.Admin;
 ///   <item><description><b>Offline detection</b>: <c>IotDeviceOfflineDetectionBackgroundService</c> chạy 60s/lần, mark device Offline khi <c>LastSeenAt &lt; now - 5 phút</c>.</description></item>
 /// </list>
 /// </remarks>
+// Role is deliberately NOT declared here: ASP.NET Core combines class-level and method-level
+// [Authorize(Roles=...)] with AND, not override — a class-level "Admin" would silently block the
+// "Admin,Staff" actions below from ever letting Staff through. Every action instead declares its
+// own [Authorize(Roles=...)].
 [ApiController]
 [Route("api/admin/iot-devices")]
 [Produces("application/json")]
 [ApiExplorerSettings(GroupName = "admin")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class AdminIotDevicesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -81,6 +85,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <response code="401">Chưa đăng nhập / token hết hạn.</response>
     /// <response code="403">Không có role Admin.</response>
     [HttpGet]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<PaginationResponse<IotDeviceDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -110,7 +115,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <list type="bullet">
     ///   <item><description>Đây là endpoint <b>duy nhất</b> trả full plaintext key ngoài lúc create/rotate — endpoint <c>list</c> chỉ trả <c>apiKeyLastFour</c>.</description></item>
     ///   <item><description><c>apiKey = null</c> nếu device được tạo <b>trước</b> khi bật lưu plaintext (không backfill được vì DB cũ chỉ giữ hash). Gọi <c>POST /{id}/rotate-key</c> để sinh key mới + lưu plaintext.</description></item>
-    ///   <item><description>Chỉ role <c>Admin</c> gọi được (đã có <c>[Authorize(Roles = "Admin")]</c> ở controller).</description></item>
+    ///   <item><description>Role <c>Admin</c> hoặc <c>Staff</c> gọi được (<c>[Authorize(Roles = "Admin,Staff")]</c> trên chính action này).</description></item>
     /// </list>
     ///
     /// Lưu ý:
@@ -127,6 +132,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy device.</response>
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Admin,Staff")]
     [ProducesResponseType(typeof(CommonResponse<IotDeviceDetailDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -179,6 +185,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <response code="404">Site không tồn tại.</response>
     /// <response code="409"><c>DeviceCode</c> đã tồn tại.</response>
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<IotDeviceCreatedDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(CommonResponse<IotDeviceCreatedDto>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -234,6 +241,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <response code="404">Device / Site / Firmware release không tồn tại.</response>
     /// <response code="409">Target firmware đang ở trạng thái <c>!IsPublished</c> hoặc <c>IsArchived</c>.</response>
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<IotDeviceDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<IotDeviceDto>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -274,6 +282,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy device.</response>
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -318,6 +327,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy device.</response>
     [HttpPost("{id:guid}/rotate-key")]
+    [Authorize(Roles = "Admin,Staff")]
     [ProducesResponseType(typeof(CommonResponse<IotDeviceCreatedDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -357,6 +367,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy device.</response>
     [HttpPost("{id:guid}/rotate-mqtt")]
+    [Authorize(Roles = "Admin,Staff")]
     [ProducesResponseType(typeof(CommonResponse<IotDeviceCreatedDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -399,6 +410,7 @@ public class AdminIotDevicesController : ControllerBase
     /// <response code="403">Không có role Admin.</response>
     /// <response code="404">Không tìm thấy device.</response>
     [HttpPost("{id:guid}/revoke-key")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -418,6 +430,7 @@ public class AdminIotDevicesController : ControllerBase
     /// MQTT bridge phải đang chạy (Mqtt:Enabled=true), nếu không sẽ trả 503.
     /// </remarks>
     [HttpPost("{id:guid}/command")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CommonResponse<IotDeviceCommandAcceptedDto>), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

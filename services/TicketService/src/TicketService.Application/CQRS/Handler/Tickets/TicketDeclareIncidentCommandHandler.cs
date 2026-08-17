@@ -36,8 +36,6 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
             return Success(ticket, "Ticket is already in active Urgent incident handling.");
         if (ticket.Status is TicketStatusEnum.Completed or TicketStatusEnum.Closed or TicketStatusEnum.ClosedRejected)
             return Fail(409, "A terminal ticket cannot be declared as an incident.");
-        if (ticket.Priority != TicketPriorityEnum.P1Critical)
-            return Fail(409, "Only a P1Critical ticket can be promoted to Urgent incident handling.");
 
         try
         {

@@ -8,6 +8,7 @@ using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Ticket;
 
@@ -42,6 +43,11 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
 
         if (request.Status.HasValue)
             query = query.Where(t => t.Status == request.Status.Value);
+        else
+            // Open = awaiting Manager triage/assignment — that's the Queue's job (ManagerQueueQuery).
+            // Hide it from the default "Tickets" list so the two views don't overlap; Manager can
+            // still filter Status=Open explicitly to look it up.
+            query = query.Where(t => t.Status != TicketStatusEnum.Open);
 
         if (request.Priority.HasValue)
             query = query.Where(t => t.Priority == request.Priority.Value);

@@ -31,7 +31,6 @@ public class TicketDataSeeder
         await SeedTicketAssignmentsAsync(ticketAssignments, ct);
         await SeedSlaTimersAsync(tickets, ct);
         await SeedActivitiesAsync(tickets, staffs, customers, ticketAssignments, ct);
-        await SeedChatsAsync(tickets, staffs, customers, ct);
         await SeedMaintenanceLogsAsync(tickets, staffs, kbArticles, ct);
         await SeedSagaStatesAsync(tickets, ct);
     }
@@ -591,66 +590,6 @@ public class TicketDataSeeder
         }
 
         _context.TicketActivities.AddRange(activities);
-        await _context.SaveChangesAsync(ct);
-    }
-
-    private async Task SeedChatsAsync(
-        List<Ticket> tickets,
-        List<StaffAccount> staffs,
-        List<CustomerAccount> customers,
-        CancellationToken ct)
-    {
-        var hasChats = await _context.TicketChats.AnyAsync(ct);
-        if (hasChats)
-            return;
-
-        var firstStaff = staffs.First();
-        var firstCustomer = customers.First();
-        var chats = new List<TicketChat>();
-
-        foreach (var ticket in tickets.Take(3))
-        {
-            chats.Add(new TicketChat
-            {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                AuthorUserId = ticket.CustomerId,
-                AuthorRole = ActorRoleEnum.Customer,
-                AuthorDisplayName = firstCustomer.FullName,
-                Body = $"Please assist soon — ticket {ticket.Code}.",
-                IsInternal = false,
-                CreatedAt = ticket.CreatedAt.AddMinutes(5),
-                Ticket = ticket
-            });
-
-            chats.Add(new TicketChat
-            {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                AuthorUserId = firstStaff.AccountId,
-                AuthorRole = ActorRoleEnum.Staff,
-                AuthorDisplayName = firstStaff.FullName,
-                Body = "Request received, a technician will contact you within 2 hours.",
-                IsInternal = false,
-                CreatedAt = ticket.CreatedAt.AddMinutes(30),
-                Ticket = ticket
-            });
-
-            chats.Add(new TicketChat
-            {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                AuthorUserId = firstStaff.AccountId,
-                AuthorRole = ActorRoleEnum.Staff,
-                AuthorDisplayName = firstStaff.FullName,
-                Body = $"[INTERNAL] Need to check the threshold config for asset {ticket.BatteryAssetId}.",
-                IsInternal = true,
-                CreatedAt = ticket.CreatedAt.AddMinutes(35),
-                Ticket = ticket
-            });
-        }
-
-        _context.TicketChats.AddRange(chats);
         await _context.SaveChangesAsync(ct);
     }
 
