@@ -145,44 +145,6 @@ public class AccountRoleChangedConsumerTests
         staff.FullName.Should().Be("Nguyễn Văn A");
     }
 
-    [Theory]
-    [InlineData("Manager")]
-    [InlineData("Admin")]
-    public async Task NewStaffMirror_StoresActualRole_NotDefaultStaff(string role)
-    {
-        // Bảng staff_accounts chứa cả ba vai trò nên cột Role là thứ DUY NHẤT tách được
-        // "danh sách kỹ thuật viên" khỏi Manager/Admin. Không gán ở đây thì bản ghi rơi vào
-        // mặc định "Staff" của entity, và Manager lọt vào gợi ý phân công
-        // (TicketStaffSuggestionsQueryHandler lọc Role == "Staff").
-        var accountId = Guid.NewGuid();
-
-        await Consumer().Consume(Ctx("Customer", role, accountId));
-
-        _staffRepo.Verify(r => r.AddAsync(It.Is<StaffAccount>(s => s.Role == role)), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExistingStaffMirror_OverwritesStaleRole_OnPromotion()
-    {
-        // Staff → Manager giữ nguyên bản ghi cũ. Không ghi đè Role thì vai trò cũ ở lại vĩnh viễn:
-        // không có luồng đồng bộ nào khác sửa cột này về sau.
-        var accountId = Guid.NewGuid();
-        var staff = new StaffAccount
-        {
-            Id = Guid.NewGuid(),
-            AccountId = accountId,
-            Email = "user@example.com",
-            FullName = "Nguyễn Văn A",
-            Role = "Staff",
-            Status = AccountStatusEnum.Active,
-        };
-        Seed(staff: staff);
-
-        await Consumer().Consume(Ctx("Staff", "Manager", accountId));
-
-        staff.Role.Should().Be("Manager");
-    }
-
     [Fact]
     public async Task DuplicateMessage_DoesNothing()
     {

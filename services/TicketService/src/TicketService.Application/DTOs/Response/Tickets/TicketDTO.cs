@@ -35,18 +35,6 @@ public class TicketDTO
     /// </summary>
     public int ReopenCount { get; set; }
     public bool IsIncident { get; set; }
-
-    /// <summary>
-    /// Sự cố môi trường đã sinh ra ticket này (khói, rò khí, ngập). <c>null</c> với mọi ticket khác.
-    ///
-    /// <para>Ticket cấp site có <c>BatteryAssetId = Guid.Empty</c> vì sự cố nằm ở tủ điện chứ không
-    /// ở một viên pin. Thiếu trường này, FE không phân biệt được "ticket không gắn pin" với "ticket
-    /// gắn pin nhưng dữ liệu chưa về", nên nó dựng khuôn của ticket pin rồi hiển thị một loạt ô
-    /// trống — kể cả dòng "Battery serial —" vốn không bao giờ có giá trị. Bằng chứng thật (số đo
-    /// cảm biến MQ-2) thì bị nhét trong câu mô tả tự sinh, không tra cứu được.</para>
-    /// </summary>
-    public string? EnvironmentalIncidentId { get; set; }
-
     public DateTime? ScheduledStartAtUtc { get; set; }
     public int ScheduleVersion { get; set; }
     public PendingContextEnum? PendingContext { get; set; }

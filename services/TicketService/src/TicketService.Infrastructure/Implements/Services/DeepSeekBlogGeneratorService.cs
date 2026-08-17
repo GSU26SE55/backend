@@ -7,7 +7,7 @@ using TicketService.Domain.Entities;
 namespace TicketService.Infrastructure.Implements.Services;
 
 /// <summary>
-/// Gọi DeepSeek để sinh nội dung blog từ guide article, rồi render Markdown → HTML qua Markdig.
+/// Gọi DeepSeek để sinh nội dung blog từ KB article, rồi render Markdown → HTML qua Markdig.
 /// Reuse <see cref="DeepSeekChatAiClient"/> (HttpClient + timeout đã cấu hình).
 /// </summary>
 public class DeepSeekBlogGeneratorService : IBlogGeneratorService
@@ -41,27 +41,25 @@ public class DeepSeekBlogGeneratorService : IBlogGeneratorService
         var tags = string.Join(", ", article.Tags);
 
         return $"""
-                You are a field engineer specialising in the maintenance of lithium-ion
-                solar battery storage. Write a technical blog post in English based on the
-                guide article below.
+                Bạn là kỹ sư kỹ thuật chuyên về bảo trì pin lithium-ion năng lượng mặt trời.
+                Hãy viết một bài blog kỹ thuật bằng tiếng Việt dựa trên tài liệu kiến thức dưới đây.
+                Yêu cầu:
+                - Ngôn ngữ: tiếng Việt, chuyên nghiệp, dễ hiểu cho kỹ thuật viên
+                - Định dạng: Markdown (dùng ## cho heading, ** cho in đậm, danh sách -/1.)
+                - Cấu trúc: Giới thiệu → Triệu chứng → Nguyên nhân & chẩn đoán → Giải pháp → Lưu ý
+                - Độ dài: 400–800 từ
+                - Không thêm thông tin ngoài tài liệu cung cấp
 
-                Requirements:
-                - Language: English, professional, readable by a field technician
-                - Format: Markdown (## for headings, ** for bold, -/1. for lists)
-                - Structure: Introduction → Symptoms → Causes & diagnosis → Resolution → Notes
-                - Length: 400-800 words
-                - Do not add information that is not in the source article
+                ## Tài liệu Knowledge Base
 
-                ## Source guide article
-
-                **Title:** {article.Title}
-                **Category:** {article.Category}
+                **Tiêu đề:** {article.Title}
+                **Danh mục:** {article.Category}
                 **Tags:** {tags}
 
-                **Content:**
+                **Nội dung:**
                 {content}
 
-                Start the blog post directly, with no preamble about the task.
+                Hãy bắt đầu bài blog ngay (không cần lời giới thiệu về nhiệm vụ).
                 """;
     }
 

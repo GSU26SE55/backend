@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -19,16 +18,11 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IChatReadReceiptQueue _queue;
-    private readonly ILogger<ChatMarkAsReadCommandHandler> _logger;
 
-    public ChatMarkAsReadCommandHandler(
-        ITicketUnitOfWork uow,
-        IChatReadReceiptQueue queue,
-        ILogger<ChatMarkAsReadCommandHandler> logger)
+    public ChatMarkAsReadCommandHandler(ITicketUnitOfWork uow, IChatReadReceiptQueue queue)
     {
         _uow = uow;
         _queue = queue;
-        _logger = logger;
     }
 
     public async Task<ChatMarkAsReadResponse> Handle(ChatMarkAsReadCommand request, CancellationToken ct)
@@ -58,13 +52,9 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
 
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
 
-        // Tin do chính actor gửi KHÔNG bao giờ là chưa đọc, nên loại thẳng ở đây: mọi query đếm
-        // unread đều bỏ qua chúng (AuthorUserId != actor), ghi receipt cho chúng chỉ tốn slot
-        // trong hàng đợi có giới hạn — đầy hàng đợi là receipt của người khác bị rớt.
         var validChatsQuery = _uow.TicketChats.GetAllAsync()
             .AsNoTracking()
-            .Where(c => request.ChatIds.Contains(c.Id) && c.TicketId == request.TicketId && !c.IsDeleted
-                        && c.AuthorUserId != request.UserId);
+            .Where(c => request.ChatIds.Contains(c.Id) && c.TicketId == request.TicketId && !c.IsDeleted);
 
         if (!canViewInternalChats)
             validChatsQuery = validChatsQuery.Where(c => !c.IsInternal);
@@ -87,32 +77,11 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
         var newChatIds = validChatIds.Except(alreadyReadChatIds).ToList();
         var readAt = DateTime.UtcNow;
         var enqueuedCount = 0;
-        var droppedCount = 0;
 
         foreach (var chatId in newChatIds)
         {
             if (_queue.TryEnqueue(new ChatReadReceiptItem(chatId, request.UserId, request.UserRole, readAt)))
                 enqueuedCount++;
-            else
-                droppedCount++;
-        }
-
-        // Hàng đợi đầy — receipt bị rớt và KHÔNG có cơ chế retry nội bộ. Trả 200 ở đây là nói dối:
-        // client ghi nhận "đã đọc", không gửi lại, và unread kẹt vĩnh viễn ở số cũ. Báo thất bại
-        // để client biết đường thử lại; những receipt đã vào được hàng đợi vẫn được ghi bình thường.
-        if (droppedCount > 0)
-        {
-            _logger.LogWarning(
-                "Read-receipt queue full: dropped {DroppedCount}/{TotalCount} receipts for ticket {TicketId}, user {UserId}.",
-                droppedCount, newChatIds.Count, request.TicketId, request.UserId);
-
-            return new ChatMarkAsReadResponse
-            {
-                IsSuccess = false,
-                StatusCode = 503,
-                Message = "Read-receipt queue is full. Some chats were not marked as read — please retry.",
-                Data = enqueuedCount
-            };
         }
 
         return new ChatMarkAsReadResponse

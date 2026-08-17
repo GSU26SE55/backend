@@ -118,11 +118,8 @@ public class BatteryDataSeeder
 
     private async Task<Guid> SeedSiteAsync(Guid customerId, CancellationToken cancellationToken)
     {
-        // Khớp theo tên thôi: site demo có thể đã được gán sang customer thật (sau khi đồng bộ
-        // với AuthService), thêm CustomerId vào điều kiện là seed lại một site trùng tên mỗi lần
-        // service khởi động.
         var existing = await _dbContext.Sites
-            .FirstOrDefaultAsync(s => s.Name == DefaultSiteName, cancellationToken);
+            .FirstOrDefaultAsync(s => s.Name == DefaultSiteName && s.CustomerId == customerId, cancellationToken);
         if (existing != null)
             return existing.Id;
 

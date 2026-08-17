@@ -150,13 +150,6 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         13 => "CellImbalance",
         14 => "EnvironmentalIncident",
         15 => "SensorMismatch",
-        // 16/17 thiếu ở đây khiến chúng ra "GenericAnomaly", mà chuỗi đó không khớp nhánh nào
-        // trong `MapAnomalyToCategory` nên rơi vào `_ => Repair`. Hệ quả không chỉ là nhãn sai:
-        // mọi anomaly lạ đều dồn về CÙNG một category, tranh nhau slot của unique index
-        // `ux_tickets_active_auto_per_asset_category` (asset, category) — cái vào trước chiếm
-        // chỗ, cái sau không insert được và saga kẹt ở `TicketRequested` mà không log gì.
-        16 => "Undertemp",
-        17 => "IotDataIntegrityViolation",
         _ => "GenericAnomaly"
     };
 
@@ -177,10 +170,6 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         13 => "Cell Voltage Imbalance",
         14 => "Environmental Incident",
         15 => "Sensor Mismatch (BMS vs IoT)",
-        // Thiếu 16/17 ở đây là lý do ticket Undertemp mang tiêu đề "Critical Battery Anomaly" —
-        // đọc lên không biết pin bị lỗi gì, và cũng không phân biệt được với mọi loại lạ khác.
-        16 => "Low Temperature",
-        17 => "IoT Data Integrity Violation",
         _ => "Critical Battery Anomaly"
     };
 }

@@ -123,37 +123,11 @@ public class GetIotDeviceCalibrationsQueryHandler : IRequestHandler<GetIotDevice
         }
 
         var list = await q.OrderByDescending(c => c.CalibratedAt).ToListAsync(ct);
-
-        // Kèm serial pin: thẻ hiệu chuẩn trên mobile hiện dòng "Battery: …", trước đây in GUID.
-        // Một truy vấn cho cả lô — nhiều channel của cùng thiết bị thường trỏ về cùng một pin.
-        var assetIds = list
-            .Where(c => c.BatteryAssetId.HasValue)
-            .Select(c => c.BatteryAssetId!.Value)
-            .Distinct()
-            .ToList();
-
-        var serials = assetIds.Count == 0
-            ? new Dictionary<Guid, string>()
-            : await _unitOfWork.BatteryAssets.GetAllAsync()
-                .Where(a => !a.IsDeleted && assetIds.Contains(a.Id))
-                .Select(a => new { a.Id, a.SerialNumber })
-                .ToDictionaryAsync(a => a.Id, a => a.SerialNumber, ct);
-
-        var data = list.Select(c =>
-        {
-            var dto = IotDeviceCalibrationMapper.ToDto(c);
-            // Thiếu serial (pin đã xoá) KHÔNG loại dòng — hồ sơ hiệu chuẩn vẫn phải xem được.
-            dto.BatterySerialNumber = c.BatteryAssetId.HasValue
-                ? serials.GetValueOrDefault(c.BatteryAssetId.Value)
-                : null;
-            return dto;
-        }).ToList();
-
         return new CommonResponse<List<IotDeviceCalibrationDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = data
+            Data = list.Select(IotDeviceCalibrationMapper.ToDto).ToList()
         };
     }
 }
@@ -174,31 +148,11 @@ public class GetIotCalibrationsExpiringQueryHandler : IRequestHandler<GetIotCali
             .OrderBy(c => c.ExpiresAt)
             .ToListAsync(ct);
 
-        // Kèm mã thiết bị: đây là danh sách gộp NHIỀU thiết bị, nên mỗi dòng phải tự nói được
-        // nó thuộc thiết bị nào. Chỉ riêng endpoint này cần — các endpoint calibration khác đều
-        // nằm trong ngữ cảnh một thiết bị đã biết.
-        // Một truy vấn cho cả lô thay vì mỗi dòng một lượt: nhiều channel chung một thiết bị.
-        var deviceIds = list.Select(c => c.IotDeviceId).Distinct().ToList();
-
-        var deviceCodes = await _unitOfWork.IotDevices.GetAllAsync()
-            .Where(d => !d.IsDeleted && deviceIds.Contains(d.Id))
-            .Select(d => new { d.Id, d.DeviceCode })
-            .ToDictionaryAsync(d => d.Id, d => d.DeviceCode, ct);
-
-        var data = list.Select(c =>
-        {
-            var dto = IotDeviceCalibrationMapper.ToDto(c);
-            // Thiếu mã (thiết bị đã xoá) KHÔNG loại dòng: calibration sắp hết hạn vẫn phải
-            // được nhìn thấy. FE lùi về IotDeviceId.
-            dto.IotDeviceCode = deviceCodes.GetValueOrDefault(c.IotDeviceId);
-            return dto;
-        }).ToList();
-
         return new CommonResponse<List<IotDeviceCalibrationDto>>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = data
+            Data = list.Select(IotDeviceCalibrationMapper.ToDto).ToList()
         };
     }
 }

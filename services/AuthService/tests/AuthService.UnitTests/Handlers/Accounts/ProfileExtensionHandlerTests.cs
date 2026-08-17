@@ -76,23 +76,13 @@ public class ProfileExtensionHandlerTests
     [Fact]
     public async Task GetStaff_FilterBySkill_ReturnsMatchingAssignmentProfiles()
     {
-        // GetStaffQueryHandler chỉ trả account role Staff — StaffProfile tồn tại KHÔNG chứng minh
-        // account là kỹ thuật viên (Manager cũng có thể được gán profile).
-        var staffRole = new Role
-        {
-            Id = Guid.NewGuid(),
-            Name = "Staff",
-            NormalizedName = "STAFF"
-        };
         var matchingAccount = new Account
         {
             Id = Guid.NewGuid(),
             Email = "staff@example.com",
             PasswordHash = "x",
             FullName = "Staff A",
-            Status = AccountStatusEnum.Active,
-            RoleId = staffRole.Id,
-            Role = staffRole
+            Status = AccountStatusEnum.Active
         };
         var otherAccount = new Account
         {
@@ -100,9 +90,7 @@ public class ProfileExtensionHandlerTests
             Email = "other@example.com",
             PasswordHash = "x",
             FullName = "Staff B",
-            Status = AccountStatusEnum.Active,
-            RoleId = staffRole.Id,
-            Role = staffRole
+            Status = AccountStatusEnum.Active
         };
         var matchingProfile = new StaffProfile
         {

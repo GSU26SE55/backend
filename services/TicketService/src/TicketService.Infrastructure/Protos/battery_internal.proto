@@ -16,9 +16,6 @@ service BatteryInternal {
 
 message SensorSnapshotRequest {
   string asset_id = 1;
-  // Thời điểm sự cố được khai báo (ISO-8601 UTC), rỗng = lấy số đo mới nhất.
-  // Xem ghi chú đầy đủ ở proto gốc bên BatteryService.
-  string detected_at = 2;
 }
 
 message SensorSnapshotResponse {
@@ -30,12 +27,4 @@ message SensorSnapshotResponse {
   double temperature = 6;
   double soc_percent = 7;
   bool has_active_alert = 8;
-
-  // Ngưỡng THẬT của loại pin (`threshold_configs`) — đi kèm số đo để AI verify chấm bằng
-  // đúng giới hạn mà `AnomalyRules` đã áp, thay vì hardcode một bộ số của riêng nó.
-  // 0 = loại pin chưa cấu hình ngưỡng đó ⇒ AI bỏ qua luật tương ứng.
-  double temperature_max = 9;
-  double temperature_min = 10;
-  double soc_warning_threshold = 11;
-  double soh_warning_threshold = 12;
 }

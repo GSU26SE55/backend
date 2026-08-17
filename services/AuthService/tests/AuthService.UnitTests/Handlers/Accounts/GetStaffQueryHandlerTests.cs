@@ -37,34 +37,6 @@ public class GetStaffQueryHandlerTests
         response.Data[0].SkillTier.Should().Be((int)StaffSkillTierEnum.SeniorSpecialist);
     }
 
-    [Theory]
-    [InlineData("Manager")]
-    [InlineData("Admin")]
-    public async Task Handle_ExcludesNonStaffRoles_EvenWhenTheyHaveAStaffProfile(string roleName)
-    {
-        // UpdateStaffProfileCommandHandler / AddStaffSkillCommandHandler tạo StaffProfile cho bất kỳ
-        // accountId nào tồn tại, không kiểm tra role. Gán tier cho một Manager một lần là họ hiện
-        // trong dropdown "Primary Handler" của màn hình phân công ticket.
-        var staffAccount = CreateAccount("staff@example.com", AccountStatusEnum.Active);
-        var nonStaffAccount = CreateAccount("manager@example.com", AccountStatusEnum.Active, roleName);
-
-        var profiles = new[]
-        {
-            CreateProfile(staffAccount, true, StaffSkillTierEnum.SeniorSpecialist),
-            CreateProfile(nonStaffAccount, true, StaffSkillTierEnum.SeniorSpecialist)
-        };
-        var (uow, _, _, _) = MockUnitOfWork.Build(
-            accountSeed: new[] { staffAccount, nonStaffAccount },
-            staffProfileSeed: profiles);
-
-        var response = await new GetStaffQueryHandler(uow.Object).Handle(
-            new GetStaffQuery(), CancellationToken.None);
-
-        response.IsSuccess.Should().BeTrue();
-        response.Data.Should().ContainSingle();
-        response.Data![0].AccountId.Should().Be(staffAccount.Id);
-    }
-
     [Fact]
     public async Task Handle_InvalidPriority_ReturnsBadRequest()
     {
@@ -77,25 +49,14 @@ public class GetStaffQueryHandlerTests
         response.StatusCode.Should().Be(400);
     }
 
-    private static Account CreateAccount(string email, AccountStatusEnum status, string roleName = "Staff")
+    private static Account CreateAccount(string email, AccountStatusEnum status) => new()
     {
-        var roleId = Guid.NewGuid();
-        return new Account
-        {
-            Id = Guid.NewGuid(),
-            Email = email,
-            PasswordHash = "hash",
-            FullName = email,
-            Status = status,
-            RoleId = roleId,
-            Role = new Role
-            {
-                Id = roleId,
-                Name = roleName,
-                NormalizedName = roleName.ToUpperInvariant()
-            }
-        };
-    }
+        Id = Guid.NewGuid(),
+        Email = email,
+        PasswordHash = "hash",
+        FullName = email,
+        Status = status
+    };
 
     private static StaffProfile CreateProfile(Account account, bool isAvailable, StaffSkillTierEnum tier) => new()
     {

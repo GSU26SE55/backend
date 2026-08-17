@@ -1,4 +1,3 @@
-using System.Globalization;
 using BatteryService.Grpc;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
@@ -27,8 +26,7 @@ public class BatterySensorGrpcClient : IBatterySensorClient
         _timeoutSeconds = timeoutSeconds;
     }
 
-    public async Task<TicketSensorSnapshotDto?> GetSnapshotAsync(
-        Guid assetId, DateTime? detectedAt, CancellationToken ct)
+    public async Task<TicketSensorSnapshotDto?> GetSnapshotAsync(Guid assetId, CancellationToken ct)
     {
         if (assetId == Guid.Empty)
             return null;
@@ -37,15 +35,7 @@ public class BatterySensorGrpcClient : IBatterySensorClient
         {
             var deadline = DateTime.UtcNow.AddSeconds(_timeoutSeconds);
             var resp = await _client.GetSensorSnapshotAsync(
-                new SensorSnapshotRequest
-                {
-                    AssetId = assetId.ToString(),
-                    // "O" = ISO-8601 round-trip; chuỗi rỗng khi không có mốc, để phía server
-                    // hiểu là "lấy số đo mới nhất" đúng như hợp đồng proto.
-                    DetectedAt = detectedAt.HasValue
-                        ? detectedAt.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
-                        : string.Empty
-                },
+                new SensorSnapshotRequest { AssetId = assetId.ToString() },
                 deadline: deadline,
                 cancellationToken: ct);
 
@@ -55,10 +45,6 @@ public class BatterySensorGrpcClient : IBatterySensorClient
 
             return new TicketSensorSnapshotDto
             {
-                TemperatureMax = resp.TemperatureMax,
-                TemperatureMin = resp.TemperatureMin,
-                SocWarningThreshold = resp.SocWarningThreshold,
-                SohWarningThreshold = resp.SohWarningThreshold,
                 SohPercent = resp.SohPercent,
                 Voltage = resp.Voltage,
                 Current = resp.Current,

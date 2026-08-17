@@ -20,14 +20,7 @@ service BatteryInternal {
 
 message SensorSnapshotRequest {
   // Guid BatteryAsset (dạng string "d3b0...").
-  //
-  // detected_at: thời điểm sự cố ĐƯỢC KHAI BÁO (ISO-8601 UTC), rỗng = lấy số đo mới nhất.
-  // Cần trường này vì Customer thường mở app hàng giờ sau khi thấy sự cố: đọc realtime lúc
-  // tạo ticket thì pin đã nguội, AI kết luận "sensor không thấy bất thường" và trừ điểm một
-  // báo cáo đúng. Có mốc này thì snapshot phản ánh tình trạng pin LÚC XẢY RA, không phải
-  // lúc gõ ticket. Ticket auto (máy sinh) truyền đúng mốc alert nên hành vi không đổi.
   string asset_id = 1;
-  string detected_at = 2;
 }
 
 message SensorSnapshotResponse {
@@ -41,12 +34,4 @@ message SensorSnapshotResponse {
   double soc_percent = 7;
   // true nếu pin đang có alert chưa resolved (ActiveAlerts > 0).
   bool has_active_alert = 8;
-
-  // Ngưỡng THẬT của loại pin (`threshold_configs`) — đi kèm số đo để AI verify chấm bằng
-  // đúng giới hạn mà `AnomalyRules` đã áp, thay vì hardcode một bộ số của riêng nó.
-  // 0 = loại pin chưa cấu hình ngưỡng đó ⇒ AI bỏ qua luật tương ứng.
-  double temperature_max = 9;
-  double temperature_min = 10;
-  double soc_warning_threshold = 11;
-  double soh_warning_threshold = 12;
 }

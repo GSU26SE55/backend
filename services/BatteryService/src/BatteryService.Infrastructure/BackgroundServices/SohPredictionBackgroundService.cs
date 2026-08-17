@@ -583,8 +583,8 @@ public class SohPredictionBackgroundService : BackgroundService
                              && existing.TicketId is null;
 
             // ⚠️ KHÔNG refresh DetectedAt mỗi tick: AlertEscalationService lọc alert cần escalate
-            // bằng `DetectedAt <= now - EscalationAfterMinutes` (1 phút), mà job này chạy mỗi
-            // IntervalMinutes → đẩy DetectedAt tiến lên liên tục thì alert không bao
+            // bằng `DetectedAt <= now - EscalationAfterMinutes` (5 phút), mà job này chạy mỗi
+            // IntervalMinutes (cũng 5 phút) → đẩy DetectedAt tiến lên liên tục thì alert không bao
             // giờ đủ già để escalate. DetectedAt = "lần đầu phát hiện", không phải "lần cuối thấy".
             existing.ActualValue = result.SohPercent;
             existing.DedupWindowEndUtc = now.AddHours(1);

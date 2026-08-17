@@ -65,17 +65,14 @@ public class IotDeviceWentOfflineConsumer : IConsumer<IotDeviceWentOfflineEvent>
                 var durationMinutes = Math.Round(evt.OfflineDurationSeconds / 60.0, 1);
                 var title = $"[IoT] Device offline — {evt.DeviceCode}";
                 var body = $"Device \"{evt.DisplayName}\" at site \"{evt.SiteName ?? evt.SiteId.ToString()}\" lost heartbeat for {durationMinutes} minutes " +
-                           $"(last seen {evt.LastSeenAt:HH:mm dd/MM/yyyy}). Affecting {evt.AffectedBatteryCount} battery asset(s).";
+                           $"(last seen {evt.LastSeenAt:O}). Affecting {evt.AffectedBatteryCount} battery asset(s).";
 
                 var payload = JsonSerializer.Serialize(new
                 {
                     iotDeviceId = evt.IotDeviceId,
                     deviceCode = evt.DeviceCode,
                     siteId = evt.SiteId,
-                    // Ngày giờ ĐÃ ĐỊNH DẠNG, không phải DateTime thô: bộ render Handlebars không
-                    // có helper format date, nên giá trị thô đi thẳng ra màn hình dưới dạng
-                    // "2026-08-17T00:30:53.958375Z" — đúng về dữ liệu nhưng không ai đọc như vậy.
-                    lastSeenAt = evt.LastSeenAt.ToString("HH:mm dd/MM/yyyy"),
+                    lastSeenAt = evt.LastSeenAt,
                     offlineDurationSeconds = evt.OfflineDurationSeconds,
                     affectedBatteryCount = evt.AffectedBatteryCount,
                     alertId = evt.AlertId

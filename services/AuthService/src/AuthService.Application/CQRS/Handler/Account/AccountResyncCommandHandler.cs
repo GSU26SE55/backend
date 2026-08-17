@@ -35,12 +35,7 @@ public class AccountResyncCommandHandler : IRequestHandler<AccountResyncCommand,
         // KHÔNG lọc !IsDeleted: account đã xoá mềm cũng phải được phát snapshot, nếu không thì
         // read-model bên kia không có cách nào biết mà đánh dấu xoá theo.
         // GetAllAsync là SYNC — trả IQueryable trực tiếp.
-        //
-        // IgnoreQueryFilters là BẮT BUỘC, không phải phòng hờ: AccountConfiguration đặt
-        // HasQueryFilter(a => !a.IsDeleted), nên nếu thiếu thì EF loại account đã xoá một cách im
-        // lặng và ý định ở comment trên không bao giờ thành hiện thực — mọi lượt đối soát đều báo
-        // DeletedAccounts = 0 và không sửa được read-model nào đang giữ account đã xoá.
-        var query = _unitOfWork.Accounts.GetAllAsync().IgnoreQueryFilters().Include(a => a.Role);
+        var query = _unitOfWork.Accounts.GetAllAsync().Include(a => a.Role);
 
         var accounts = request.AccountId.HasValue
             ? await query.Where(a => a.Id == request.AccountId.Value).ToListAsync(cancellationToken)

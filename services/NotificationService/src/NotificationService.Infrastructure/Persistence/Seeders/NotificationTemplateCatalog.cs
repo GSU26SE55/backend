@@ -100,10 +100,7 @@ public static class NotificationTemplateCatalog
                 ("Change recorded on battery {{assetSerialNumber}}",
                  "{{anomalyTypeName}} — measured value {{actualValue}}{{unit}}."),
             [NotificationTypeEnum.BatteryAlertEscalationPending] =
-                // Nêu tên pin, không nêu id alert: người nhận tra theo pin, và màn Alerts cũng
-                // lọc theo pin chứ không theo id. alertId vẫn nằm trong payload để deep link.
-                ("Battery alert not yet acknowledged",
-                 "The alert on battery {{assetSerialNumber}} has not been acknowledged after {{minutesSinceDetection}} minute(s)."),
+                ("Battery alert not yet acknowledged", "Alert {{alertId}} has not been acknowledged after {{minutesSinceDetection}} minute(s)."),
             [NotificationTypeEnum.CascadeRiskHigh] =
                 ("High cascade risk",
                  "Risk score {{cascadeRiskScore}} — this battery may affect nearby batteries."),

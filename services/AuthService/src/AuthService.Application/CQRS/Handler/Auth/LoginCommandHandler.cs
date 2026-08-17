@@ -128,23 +128,6 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                     account.Status = AccountStatusEnum.Active;
                     account.LockoutEndAt = null;
                     account.FailedLoginAttempts = 0;
-
-                    // GH-766 bịt nửa ĐI của cặp Active ↔ Locked (tự khoá có phát event) nhưng bỏ sót
-                    // nửa VỀ này. BatteryService.AccountStatusChangedConsumer đặt
-                    // IsActive = (NewStatus == 1): tự khoá đẩy IsActive=false, không phát gì ở đây thì
-                    // không có gì đưa nó về true — khách gõ sai mật khẩu 5 lần rồi đăng nhập lại bình
-                    // thường vẫn bị coi là ngừng hoạt động cho tới khi có người chạy resync thủ công.
-                    //
-                    // NotificationService KHÔNG bị ảnh hưởng bởi cặp chuyển này (IsNotifiable coi
-                    // Locked vẫn là còn nhận thông báo) — đó là lý do trước đây tưởng như không cần.
-                    //
-                    // Outbox ⇒ nguyên tử với SaveChangesAsync; mọi nhánh thoát phía sau đều gọi nó.
-                    await _messageProducer.PublishAsync(new AccountStatusChangedEvent(
-                        account.Id,
-                        account.Email,
-                        (int)AccountStatusEnum.Locked,
-                        (int)AccountStatusEnum.Active,
-                        "Lockout expired — auto-unlocked on login."), cancellationToken);
                 }
                 else
                 {

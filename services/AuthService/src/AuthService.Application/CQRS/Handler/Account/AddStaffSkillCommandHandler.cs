@@ -12,9 +12,6 @@ namespace AuthService.Application.CQRS.Handler.Account;
 
 public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand, AccountActionResponse>
 {
-    /// <summary>Chỉ account role Staff mới được có hồ sơ kỹ thuật viên — xem check trong Handle.</summary>
-    private const string StaffRoleName = "Staff";
-
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IMessageProducerService _messageProducer;
 
@@ -28,18 +25,12 @@ public class AddStaffSkillCommandHandler : IRequestHandler<AddStaffSkillCommand,
     {
         // #AUTH-36: ValidationBehavior pipeline đã chạy ValidateAsync TRƯỚC handler.
 
-        var account = await _unitOfWork.Accounts
+        var accountExists = await _unitOfWork.Accounts
             .GetAllAsync()
-            .Include(a => a.Role)
-            .FirstOrDefaultAsync(a => a.Id == request.StaffAccountId && !a.IsDeleted, cancellationToken);
+            .AnyAsync(a => a.Id == request.StaffAccountId && !a.IsDeleted, cancellationToken);
 
-        if (account is null)
+        if (!accountExists)
             return Fail(404, "Account not found.");
-
-        // Handler này TỰ TẠO StaffProfile nếu chưa có, nên gán skill cho một Manager là vô tình đưa
-        // họ vào "danh sách kỹ thuật viên" dùng cho phân công ticket. Chặn ngay từ đây.
-        if (account.RoleId is null || !string.Equals(account.Role?.Name, StaffRoleName, StringComparison.OrdinalIgnoreCase))
-            return Fail(409, "Account is not a Staff member. Only Staff accounts can have staff skills.");
 
         var staffProfile = await _unitOfWork.StaffProfiles
             .GetAllAsync()

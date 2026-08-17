@@ -1,7 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
-using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
@@ -69,15 +68,8 @@ public class TicketEscalateRequestCommandHandler : IRequestHandler<TicketEscalat
                 request.Note.Trim(), request.StaffId, transactionCt);
             await _activityLogger.LogAsync(ticket.Id, request.StaffId, ActorRoleEnum.Staff,
                 request.StaffName, ActivityActionEnum.EscalationRequested, reason: request.Note.Trim());
-            // PHẢI là TicketEscalatedEvent (SharedContracts), KHÔNG phải TicketEscalatedIntegrationEvent.
-            // OutboxRelayService publish theo runtime type để MassTransit định tuyến đúng exchange, mà
-            // NotificationService chỉ có IConsumer<TicketEscalatedEvent>. Ghi type nội bộ của TicketService
-            // thì message vẫn publish thành công nhưng không exchange nào có consumer ⇒ Manager/Admin
-            // không bao giờ nhận thông báo Staff xin escalate. Hai đường escalate còn lại
-            // (EscalationBackgroundService khi SLA breach, TicketEscalationDecisionCommandHandler) đã dùng
-            // đúng event này từ đầu — chỉ nhánh Staff-request bị lệch.
-            await _outboxWriter.WriteAsync(new TicketEscalatedEvent(
-                ticket.Id, ticket.Code, (int)request.Reason, request.Note.Trim(), request.StaffId, request.StaffName), transactionCt);
+            await _outboxWriter.WriteAsync(new TicketEscalatedIntegrationEvent(
+                ticket.Id, ticket.Code, request.Reason, request.Note.Trim(), request.StaffId, request.StaffName), transactionCt);
             await _uow.SaveChangesAsync(transactionCt);
         }, ct);
 

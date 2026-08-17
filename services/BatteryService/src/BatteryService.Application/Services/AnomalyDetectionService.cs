@@ -116,27 +116,17 @@ public class AnomalyDetectionService : IAnomalyDetectionService
                 }
 
                 // IOT3-106/M4 — tra phần CHƯA LƯU trước, rồi mới hỏi DB.
-                //
-                // Cả hai đường đều đòi alert cha có mức nghiêm trọng KHÔNG THẤP HƠN alert mới.
-                // Thiếu điều kiện đó thì một Warning đang mở nuốt trọn mọi Critical trong cửa sổ
-                // dedup: pin nóng nhẹ lúc 10:00 sinh Warning, 10:05 vọt 72°C thì alert Critical
-                // vào DB với `Status = Merged`, KHÔNG phát event, nên không saga, không ticket,
-                // không ai được gọi. Đã đo được trên máy: `merged=1, outbox=0`.
-                //
-                // Chiều ngược lại vẫn gộp, và đó là ý đồ ban đầu của dedup — Critical đang mở thì
-                // các Warning theo sau chỉ là tiếng vọng của cùng một sự cố.
                 var key = (reading.BatteryAssetId, anomaly.Type);
                 AlertEntity? existing = null;
                 if (pendingAlerts.TryGetValue(key, out var pendingParent)
-                    && pendingParent.DedupWindowEndUtc > now
-                    && pendingParent.Severity >= anomaly.Severity)
+                    && pendingParent.DedupWindowEndUtc > now)
                 {
                     existing = pendingParent;
                 }
                 else
                 {
                     existing = await FindActiveAlertToMergeAsync(
-                        reading.BatteryAssetId, anomaly.Type, anomaly.Severity, now, cancellationToken);
+                        reading.BatteryAssetId, anomaly.Type, now, cancellationToken);
                 }
 
                 if (existing is not null)
@@ -344,24 +334,14 @@ public class AnomalyDetectionService : IAnomalyDetectionService
         return !alreadyNotified;
     }
 
-    /// <summary>
-    /// Alert đang mở để gộp vào, hoặc null nếu phải tạo alert mới.
-    /// </summary>
-    /// <param name="newSeverity">
-    /// Mức nghiêm trọng của alert SẮP tạo. Chỉ gộp vào alert cha có mức bằng hoặc cao hơn —
-    /// một sự cố nặng lên phải được coi là sự kiện mới, không phải bản sao của cảnh báo nhẹ
-    /// trước đó. Xem chú thích tại chỗ gọi để biết hậu quả của việc thiếu điều kiện này.
-    /// </param>
     private async Task<AlertEntity?> FindActiveAlertToMergeAsync(
-        Guid batteryAssetId, AnomalyTypeEnum anomalyType, AlertSeverityEnum newSeverity,
-        DateTime now, CancellationToken ct)
+        Guid batteryAssetId, AnomalyTypeEnum anomalyType, DateTime now, CancellationToken ct)
     {
         return await _unitOfWork.Alerts
             .GetAllAsync()
             .Where(a => !a.IsDeleted
                         && a.BatteryAssetId == batteryAssetId
                         && a.AnomalyType == anomalyType
-                        && a.Severity >= newSeverity
                         && (a.Status == AlertStatusEnum.Open || a.Status == AlertStatusEnum.Acknowledged)
                         && a.DedupWindowEndUtc > now)
             .OrderByDescending(a => a.DetectedAt)

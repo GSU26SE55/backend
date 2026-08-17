@@ -458,7 +458,7 @@ config:
   AnomalyEngine__ScanIntervalSeconds: "30"
   AnomalyEngine__DedupWindowMinutes: "30"
   AnomalyEngine__OfflineThresholdMinutes: "10"
-  AnomalyEngine__EscalationAfterMinutes: "1"
+  AnomalyEngine__EscalationAfterMinutes: "5"
   AnomalyEngine__EscalationIntervalSeconds: "60"
   AnomalyEngine__OutboxRelayIntervalSeconds: "5"
   AnomalyEngine__OutboxRelayBatchSize: "100"

@@ -725,12 +725,10 @@ public class TicketChatsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Mark-read thành công.</response>
     /// <response code="400">Dữ liệu không hợp lệ.</response>
-    /// <response code="503">Hàng đợi read-receipt đầy — một phần chat chưa được đánh dấu, client nên thử lại.</response>
     [HttpPost("mark-read")]
     [ProducesResponseType(typeof(ChatMarkAsReadResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ChatMarkAsReadResponse), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> MarkChatsAsRead(Guid ticketId, [FromBody] ChatMarkAsReadCommand command, CancellationToken ct)
     {
         var actorId = GetCurrentUserId();
