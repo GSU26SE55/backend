@@ -13,6 +13,9 @@ namespace AuthService.Application.CQRS.Handler.Account;
 
 public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfileCommand, AccountActionResponse>
 {
+    /// <summary>Chỉ account role Staff mới được có hồ sơ kỹ thuật viên — xem check trong Handle.</summary>
+    private const string StaffRoleName = "Staff";
+
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IMessageProducerService _messageProducer;
 
@@ -26,12 +29,19 @@ public class UpdateStaffProfileCommandHandler : IRequestHandler<UpdateStaffProfi
     {
         // #AUTH-36: ValidationBehavior pipeline đã chạy ValidateAsync TRƯỚC handler.
 
-        var accountExists = await _unitOfWork.Accounts
+        var account = await _unitOfWork.Accounts
             .GetAllAsync()
-            .AnyAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
+            .Include(a => a.Role)
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
 
-        if (!accountExists)
+        if (account is null)
             return Fail(404, "Account not found.");
+
+        // Chỉ kiểm tra account tồn tại là chưa đủ: StaffProfile được các truy vấn phân công dùng làm
+        // "danh sách kỹ thuật viên", nên tạo profile cho một Manager là đưa họ vào dropdown phân công
+        // ticket và không có gì gỡ ra. Role phải là Staff mới được có hồ sơ kỹ thuật viên.
+        if (account.RoleId is null || !string.Equals(account.Role?.Name, StaffRoleName, StringComparison.OrdinalIgnoreCase))
+            return Fail(409, "Account is not a Staff member. Only Staff accounts can have a staff profile.");
 
         var employeeCode = string.IsNullOrWhiteSpace(request.EmployeeCode) ? null : request.EmployeeCode.Trim();
         if (employeeCode is not null)

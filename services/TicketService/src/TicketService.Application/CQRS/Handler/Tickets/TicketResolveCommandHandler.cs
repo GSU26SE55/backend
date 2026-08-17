@@ -11,6 +11,7 @@ using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Tickets;
@@ -83,6 +84,26 @@ public class TicketResolveCommandHandler : IRequestHandler<TicketResolveCommand,
             {
                 log.Summary = request.ResolutionSummary;
             }
+        }
+
+        // Bắt buộc phải có maintenance log làm bằng chứng xử lý trước khi complete —
+        // nếu Staff chưa từng ghi log nào cho ticket này, tự động tạo 1 log từ resolutionSummary.
+        var hasAnyLog = await _uow.MaintenanceLogs.GetAllAsync()
+            .AnyAsync(m => m.TicketId == ticket.Id && !m.IsDeleted, ct);
+
+        if (!hasAnyLog)
+        {
+            var now = DateTime.UtcNow;
+            await _uow.MaintenanceLogs.AddAsync(new MaintenanceLog
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticket.Id,
+                StaffId = request.StaffId,
+                LogType = MaintenanceLogTypeEnum.Completion,
+                Summary = request.ResolutionSummary,
+                StartedAt = now,
+                CompletedAt = now,
+            });
         }
 
         ticket.ResolutionSummary = request.ResolutionSummary;

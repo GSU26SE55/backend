@@ -64,3 +64,7 @@ deploy/helm/*/charts/
 .loop/guard.json
 .loop/last-run.json
 .loop/dispute.md
+
+# ---------- Test/coverage output (sinh tự động, không commit) ----------
+CoverageResults/
+IntegrationResults/

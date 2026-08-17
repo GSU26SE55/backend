@@ -144,6 +144,7 @@ public class ReportEnvironmentalIncidentCommandHandler
         IncidentType = i.IncidentType,
         Status = i.Status,
         Severity = i.Severity,
+        Notes = i.Notes,
         ReportedBy = i.ReportedBy,
         DetectedAt = i.DetectedAt,
         AcknowledgedAt = i.AcknowledgedAt,

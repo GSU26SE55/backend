@@ -43,6 +43,9 @@ public static class TicketQueryHelper
             Origin = t.Origin,
             ReopenCount = t.ReopenCount,
             IsIncident = t.IsIncident,
+            EnvironmentalIncidentId = t.EnvironmentalIncidentId.HasValue
+                ? t.EnvironmentalIncidentId.Value.ToString()
+                : null,
             ScheduledStartAtUtc = t.ScheduledStartAtUtc,
             ScheduleVersion = t.ScheduleVersion,
             PendingContext = t.PendingContext,
@@ -79,17 +82,24 @@ public static class TicketQueryHelper
             WarningSentAt = sla.WarningSentAt,
             BreachAt = sla.BreachAt,
             Status = sla.Status,
-            RemainingPercent = ComputeRemainingPercent(sla.Status, sla.StartedAt, sla.DueAt, DateTime.UtcNow)
+            RemainingPercent = ComputeRemainingPercent(sla.Status, sla.StartedAt, sla.DueAt, DateTime.UtcNow, sla.CurrentPauseStartedAt)
         };
     }
 
     /// <summary>
-    /// % SLA còn lại tại thời điểm <paramref name="atUtc"/> — 0 nếu timer không ở trạng thái Running hoặc đã quá hạn.
+    /// % SLA còn lại tại thời điểm <paramref name="atUtc"/>.
+    /// Khi Paused, timer không chạy nên % được đóng băng tại <paramref name="currentPauseStartedAt"/>
+    /// thay vì tính theo <paramref name="atUtc"/> — tránh hiện 0% giả (DueAt chưa cộng bù thời gian pause,
+    /// cộng bù chỉ xảy ra lúc Resume) khiến ticket trông như đã quá hạn dù SLA đang đứng yên.
     /// Dùng chung cho SlaTimerDTO và dashboard stats để hai nơi không lệch công thức.
     /// </summary>
-    public static double ComputeRemainingPercent(SlaTimerStatusEnum status, DateTime startedAt, DateTime dueAt, DateTime atUtc)
+    public static double ComputeRemainingPercent(SlaTimerStatusEnum status, DateTime startedAt, DateTime dueAt, DateTime atUtc, DateTime? currentPauseStartedAt = null)
     {
-        if (status != SlaTimerStatusEnum.Running || dueAt == startedAt)
+        if (dueAt == startedAt)
+            return 0d;
+        if (status == SlaTimerStatusEnum.Paused && currentPauseStartedAt.HasValue)
+            return Math.Max(0, (dueAt - currentPauseStartedAt.Value).TotalMinutes / (dueAt - startedAt).TotalMinutes * 100);
+        if (status != SlaTimerStatusEnum.Running)
             return 0d;
         return Math.Max(0, (dueAt - atUtc).TotalMinutes / (dueAt - startedAt).TotalMinutes * 100);
     }

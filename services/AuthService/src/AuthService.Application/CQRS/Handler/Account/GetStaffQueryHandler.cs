@@ -10,6 +10,12 @@ namespace AuthService.Application.CQRS.Handler.Account;
 
 public class GetStaffQueryHandler : IRequestHandler<GetStaffQuery, StaffAssignmentProfileListResponse>
 {
+    /// <summary>
+    /// Endpoint này phục vụ màn hình phân công ticket, nên chỉ trả kỹ thuật viên.
+    /// Manager/Admin bị loại kể cả khi họ có <c>StaffProfile</c>.
+    /// </summary>
+    private const string StaffRoleName = "Staff";
+
     private readonly IAuthUnitOfWork _unitOfWork;
 
     public GetStaffQueryHandler(IAuthUnitOfWork unitOfWork)
@@ -34,8 +40,17 @@ public class GetStaffQueryHandler : IRequestHandler<GetStaffQuery, StaffAssignme
             .AsNoTracking()
             .Include(profile => profile.Account)
                 .ThenInclude(account => account.Profile)
+            .Include(profile => profile.Account)
+                .ThenInclude(account => account.Role)
             .Include(profile => profile.Skills)
-            .Where(profile => !profile.IsDeleted && profile.Account != null && !profile.Account.IsDeleted);
+            .Where(profile => !profile.IsDeleted && profile.Account != null && !profile.Account.IsDeleted)
+            // Sự tồn tại của StaffProfile KHÔNG chứng minh account là kỹ thuật viên:
+            // UpdateStaffProfileCommandHandler và AddStaffSkillCommandHandler tạo profile cho bất kỳ
+            // accountId nào tồn tại, không kiểm tra role. Gán tier/skill cho một Manager một lần là
+            // họ nằm lại trong danh sách phân công vĩnh viễn. Role mới là nguồn sự thật.
+            // RoleId nullable: account tạo qua Google OAuth có thể chưa onboard nên chưa gán role —
+            // chưa gán thì chưa phải kỹ thuật viên, loại luôn.
+            .Where(profile => profile.Account.RoleId != null && profile.Account.Role.Name == StaffRoleName);
 
         if (!string.IsNullOrWhiteSpace(request.Skill))
         {

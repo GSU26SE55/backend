@@ -73,6 +73,10 @@ public class TicketAccountRoleChangedConsumer : IConsumer<AccountRoleChangedEven
                         AccountId = evt.AccountId,
                         Email = evt.Email,
                         FullName = evt.FullName,
+                        // Bỏ sót Role ở đây là bản ghi rơi vào mặc định "Staff" của entity, nên
+                        // Manager/Admin lọt vào mọi truy vấn "danh sách kỹ thuật viên" — điển hình
+                        // là gợi ý phân công (TicketStaffSuggestionsQueryHandler lọc Role == "Staff").
+                        Role = evt.NewRole,
                         Status = AccountStatusEnum.Active,
                         LastSyncedAt = now,
                     });
@@ -81,6 +85,9 @@ public class TicketAccountRoleChangedConsumer : IConsumer<AccountRoleChangedEven
                 {
                     staff.Email = evt.Email;
                     staff.FullName = evt.FullName;
+                    // Staff → Manager giữ nguyên bản ghi cũ, nên không ghi đè Role là vai trò cũ
+                    // ở lại vĩnh viễn: không có luồng đồng bộ nào khác sửa cột này về sau.
+                    staff.Role = evt.NewRole;
                     staff.Status = AccountStatusEnum.Active;
                     staff.LastSyncedAt = now;
                     _uow.StaffAccounts.UpdateAsync(staff);

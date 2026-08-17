@@ -89,6 +89,10 @@ public class BatteryAlertEscalationRequestedConsumer : IConsumer<BatteryAlertEsc
         var payload = JsonSerializer.Serialize(new
         {
             alertId = evt.AlertId,
+            // Bổ sung để template InApp/Push gọi được {{assetSerialNumber}} thay cho {{alertId}}:
+            // dòng thông báo trước đây mở đầu bằng "Alert 2489b6cd-b88b-…", một GUID mà người
+            // nhận không tra được ở đâu — màn Alerts tìm theo pin chứ không theo id.
+            assetSerialNumber = evt.AssetSerialNumber,
             batteryAssetId = evt.BatteryAssetId,
             severity = evt.Severity,
             anomalyType = evt.AnomalyType,

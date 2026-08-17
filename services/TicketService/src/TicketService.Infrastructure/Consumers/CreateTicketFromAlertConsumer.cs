@@ -25,7 +25,8 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
     private readonly ITicketUnitOfWork _uow;
     private readonly ILogger<CreateTicketFromAlertConsumer> _logger;
 
-    // PHẢI khớp index ux_tickets_active_auto_per_asset_category (status NOT IN 8,10,11,12).
+    // PHẢI khớp index ux_tickets_active_auto_per_asset_category (status NOT IN 6,7,8 —
+    // Completed/Closed/ClosedRejected, theo bảng mã GH-1176).
     // Lệch danh sách này với index → idempotency check cho qua rồi INSERT vỡ 23505.
     private static readonly TicketStatusEnum[] ActiveStatuses =
     {

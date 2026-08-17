@@ -104,7 +104,9 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                     Action = ActivityActionEnum.StatusChanged,
                     Ticket = source,
                     NewValue = TicketStatusEnum.Closed.ToString(),
-                    Reason = $"Merged into master ticket {master.Code} ({master.Id})."
+                    // Ticket code only: the reason is read by humans in the timeline, and the
+                    // Guid is already persisted on Ticket.MergedIntoTicketId for lookups.
+                    Reason = $"Merged into master ticket {master.Code}."
                 });
                 await _uow.TicketActivities.AddAsync(new TicketActivity
                 {
@@ -116,7 +118,8 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                     ActorDisplayName = managerDisplayName,
                     Action = ActivityActionEnum.StatusChanged,
                     Ticket = master,
-                    Reason = $"Source ticket {source.Code} ({source.Id}) was merged into this ticket."
+                    // Same here — SourceTicketId above carries the Guid for any caller that needs it.
+                    Reason = $"Source ticket {source.Code} was merged into this ticket."
                 });
 
                 await _outboxWriter.WriteAsync(new TicketMergedEvent(

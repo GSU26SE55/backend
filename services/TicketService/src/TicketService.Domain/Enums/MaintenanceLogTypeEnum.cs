@@ -12,5 +12,7 @@ public enum MaintenanceLogTypeEnum
     /// <summary>Thay thế linh kiện.</summary>
     PartReplacement = 3,
     /// <summary>Kiểm tra định kỳ.</summary>
-    Inspection = 4
+    Inspection = 4,
+    /// <summary>Log tự động/tạo khi Staff hoàn tất (complete) ticket.</summary>
+    Completion = 5
 }

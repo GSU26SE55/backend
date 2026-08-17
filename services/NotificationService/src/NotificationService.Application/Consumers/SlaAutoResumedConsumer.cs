@@ -47,7 +47,14 @@ public class SlaAutoResumedConsumer : IConsumer<SlaAutoResumedEvent>
             await NotificationWriter.WriteAsync(_unitOfWork, recipients, NotificationTypeEnum.SlaAutoResumed,
                 NotificationWriter.InAppPush, $"SLA auto-resumed{code}",
                 $"Ticket{code} SLA has auto-resumed and requires {audience} action.",
-                JsonSerializer.Serialize(new { ticketId = evt.TicketId, code = evt.Code, resumedAt = evt.ResumedAt }),
+                // resumedAt đã định dạng: template in thẳng biến này ra câu chữ, mà bộ render
+                // Handlebars không có helper format date — giá trị thô sẽ hiện dạng ISO.
+                JsonSerializer.Serialize(new
+                {
+                    ticketId = evt.TicketId,
+                    code = evt.Code,
+                    resumedAt = evt.ResumedAt.ToString("HH:mm dd/MM/yyyy")
+                }),
                 "Ticket", evt.TicketId, context.CancellationToken);
         });
 

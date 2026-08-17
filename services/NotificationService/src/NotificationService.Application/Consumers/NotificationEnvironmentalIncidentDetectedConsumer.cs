@@ -88,7 +88,9 @@ public class NotificationEnvironmentalIncidentDetectedConsumer : IConsumer<Envir
                 severity = evt.Severity,
                 alertId = evt.AlertId,
                 customerId = evt.CustomerId,
-                detectedAt = evt.DetectedAt,
+                // Đã định dạng: template in thẳng biến này ra câu chữ, mà bộ render Handlebars
+                // không có helper format date — giá trị thô sẽ hiện dạng ISO.
+                detectedAt = evt.DetectedAt.ToString("HH:mm dd/MM/yyyy"),
                 description = evt.Description,
                 screen = "IncidentDetail"
             });
