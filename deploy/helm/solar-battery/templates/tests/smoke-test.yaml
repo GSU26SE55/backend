@@ -69,6 +69,7 @@ spec:
           check_grafana_api() {
             resource_path="$1"
             resource_name="$2"
+            expected_pattern="${3:-}"
             if [ "${grafana_failed}" -ne 0 ]; then
               return
             fi
@@ -91,14 +92,24 @@ spec:
               fi
 
               if [ "${curl_status}" -eq 0 ] && [ "${code}" = "200" ]; then
-                echo "OK   Grafana ${resource_name}"
-                rm -f "${response_file}" "${error_file}"
-                return
+                if [ -z "${expected_pattern}" ] || \
+                  grep -Eq "${expected_pattern}" "${response_file}"
+                then
+                  echo "OK   Grafana ${resource_name}"
+                  rm -f "${response_file}" "${error_file}"
+                  return
+                fi
               fi
 
               attempts=$((attempts + 1))
               if [ "${attempts}" -ge 30 ]; then
-                if [ "${curl_status}" -eq 0 ]; then
+                if [ "${curl_status}" -eq 0 ] && \
+                  [ "${code}" = "200" ] && \
+                  [ -n "${expected_pattern}" ]
+                then
+                  echo "FAIL Grafana ${resource_name} returned HTTP 200 without the expected data"
+                  head -c 512 "${response_file}" || true
+                elif [ "${curl_status}" -eq 0 ]; then
                   echo "FAIL Grafana could not make ${resource_name} available (HTTP ${code})"
                   head -c 512 "${response_file}" || true
                 else
@@ -134,6 +145,7 @@ spec:
           # the deployed Loki handler sends PromQL `vector(1)+vector(1)` to
           # LogQL and reports a false 400 failure.
           check_grafana_api "/api/datasources/proxy/uid/prometheus/api/v1/query?query=up" "queried Prometheus API through datasource proxy"
+          check_grafana_api "/api/datasources/proxy/uid/prometheus/api/v1/alertmanagers" "confirmed Prometheus discovered Alertmanager" '"activeAlertmanagers"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'
           check_grafana_api "/api/datasources/proxy/uid/alertmanager/api/v2/status" "queried Alertmanager API through datasource proxy"
           {{- if (index .Values "loki-stack" "enabled") }}
           check_grafana_api "/api/datasources/proxy/uid/loki/loki/api/v1/labels" "queried Loki API through datasource proxy"
