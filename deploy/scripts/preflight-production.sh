@@ -6,6 +6,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 host_env="${root}/config/host.env"
 backend_env="${root}/secrets/backend.env"
 monitoring_env="${root}/secrets/monitoring.env"
+geoip_db="${root}/geoip/GeoLite2-City.mmdb"
 
 for tool in docker kubectl helm curl openssl base64 getent jq cosign ip grpcurl systemctl; do
   command -v "${tool}" >/dev/null 2>&1 || {
@@ -23,6 +24,55 @@ done
   exit 1
 }
 openssl pkey -pubin -in "${root}/config/cosign.pub" -noout
+
+validate_geoip_database() {
+  local database_path="$1"
+  local file_age_seconds
+  local file_mode
+  local file_size
+  local other_permissions
+
+  [[ -f "${database_path}" && -r "${database_path}" && -s "${database_path}" ]] || {
+    printf 'GeoLite2 City database is missing, unreadable or empty: %s\n' \
+      "${database_path}" >&2
+    return 1
+  }
+
+  file_size="$(stat -c '%s' "${database_path}")"
+  (( file_size >= 1048576 )) || {
+    printf 'GeoLite2 City database is unexpectedly small (%s bytes): %s\n' \
+      "${file_size}" "${database_path}" >&2
+    return 1
+  }
+
+  # Do not use grep -q in a pipe while pipefail is enabled: an early grep exit
+  # can SIGPIPE tail and turn a valid database into a false-negative preflight.
+  LC_ALL=C grep -aF 'MaxMind.com' \
+    < <(tail -c 131072 "${database_path}") >/dev/null || {
+    printf 'GeoLite2 City database is missing the MaxMind metadata marker: %s\n' \
+      "${database_path}" >&2
+    return 1
+  }
+
+  # The container runs as uid/gid 10001. GeoLite2 contains no secret material,
+  # so the host copy is deliberately 0644 and all parent directories 0755.
+  file_mode="$(stat -c '%a' "${database_path}")"
+  other_permissions="${file_mode: -1}"
+  (( (10#${other_permissions} & 4) != 0 )) || {
+    printf 'GeoLite2 City database must be readable by the non-root container (mode is %s): %s\n' \
+      "${file_mode}" "${database_path}" >&2
+    return 1
+  }
+
+  file_age_seconds="$(( $(date +%s) - $(stat -c '%Y' "${database_path}") ))"
+  (( file_age_seconds >= 0 && file_age_seconds <= 3888000 )) || {
+    printf 'GeoLite2 City database is older than 45 days or has a future timestamp: %s\n' \
+      "${database_path}" >&2
+    return 1
+  }
+}
+
+validate_geoip_database "${geoip_db}"
 
 read_env() {
   local key="$1"

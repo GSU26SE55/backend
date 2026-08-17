@@ -142,6 +142,10 @@ sudo install -d -o deploy -g solar-runtime -m 2770 \
   /opt/solar-iot/secrets/mosquitto/tls \
   /opt/solar-iot/data/mosquitto/data \
   /opt/solar-iot/data/mosquitto/log
+
+# GeoLite2 là dữ liệu vận hành dùng chung, không phải release payload. Pod chạy
+# uid 10001 nên thư mục phải traverse được và file MMDB sẽ được cài mode 0644.
+sudo install -d -o root -g root -m 0755 /opt/solar-platform/geoip
 ```
 
 Tạo kubeconfig đọc được bởi `deploy`:
@@ -257,6 +261,52 @@ Không thêm `/auth-service` vào redirect URI; ApiGateway public route không c
 Giá trị `Mqtt__Password` trong backend và IoT phải giống tuyệt đối; username production phải là `backend-bridge`. Có thể sinh secret bằng `openssl rand -base64 48`, nhưng tránh ký tự newline.
 
 Không dùng `minioadmin`, `guest`, khóa dev, `CHANGE_ME`, mật khẩu dưới 32 ký tự cho các API key/JWT, hoặc sender MailJet chưa verify. Script preflight sẽ chặn những trường hợp này.
+
+### GeoLite2 City cho AuditAggregatorService
+
+`GeoIp__DbPath` không nằm trong `backend.env`. Helm production cố định path trong
+container là `/app/geoip/GeoLite2-City.mmdb` và mount read-only file host
+`/opt/solar-platform/geoip/GeoLite2-City.mmdb`. File MMDB có license và vòng đời
+cập nhật riêng, vì vậy không commit vào Git hay đóng vào image.
+
+Tạo MaxMind account/license key rồi cài `geoipupdate` từ package chính thức cho
+Ubuntu. Cấu hình thật chỉ được lưu trên VPS:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y software-properties-common
+sudo add-apt-repository -y ppa:maxmind/ppa
+sudo apt-get update
+sudo apt-get install -y geoipupdate
+
+sudo install -o root -g root -m 0600 \
+  deploy/production/GeoIP.conf.example \
+  /opt/solar-platform/secrets/GeoIP.conf
+sudoedit /opt/solar-platform/secrets/GeoIP.conf
+```
+
+Điền `AccountID` và `LicenseKey` thật; giữ `EditionIDs GeoLite2-City`. Không chạy
+`cat` file này trong terminal được ghi log. Cài bộ sync và timer:
+
+```bash
+sudo install -o root -g root -m 0755 \
+  deploy/scripts/sync-geoip-database.sh \
+  /usr/local/sbin/solar-sync-geoip-database
+sudo install -o root -g root -m 0644 \
+  deploy/systemd/solar-geoip-sync.service \
+  deploy/systemd/solar-geoip-sync.timer \
+  /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now solar-geoip-sync.timer
+sudo systemctl start solar-geoip-sync.service
+sudo systemctl status solar-geoip-sync.service --no-pager --full
+sudo systemctl list-timers solar-geoip-sync.timer --no-pager
+```
+
+Script tải vào thư mục tạm, kiểm tra kích thước/metadata MaxMind, thay file theo
+kiểu atomic và chỉ sau đó restart rollout AuditAggregatorService nếu deployment
+đã tồn tại. File cũ vẫn nguyên vẹn nếu download/validation lỗi. Production
+preflight chặn deploy nếu MMDB thiếu, hỏng, không đọc được hoặc quá 45 ngày.
 
 ### Bắt buộc xoay secret đã từng xuất hiện trong Git
 
@@ -414,18 +464,20 @@ Production job cố ý tách khỏi Multibranch để tránh deadlock executor v
 1. Xác nhận 4 DNS A record đã cùng trả Reserved IP Platform từ authoritative DNS và resolver công cộng.
 2. Hoàn tất OS, Docker, K3s, Helm, cert-manager, Cosign, deploy user, kubeconfig và firewall.
 3. Tạo thư mục, host env, backend env, monitoring env, IoT runtime env, Cosign public key và GHCR login/pull secret.
-4. Cấu hình Jenkins credentials, labels, lock và bốn jobs.
-5. Cấu hình WireGuard và Loki bridge theo
+4. Cấu hình và chạy lần đầu `solar-geoip-sync.service`; xác nhận file
+   `/opt/solar-platform/geoip/GeoLite2-City.mmdb` tồn tại, mode 0644 và service thành công.
+5. Cấu hình Jenkins credentials, labels, lock và bốn jobs.
+6. Cấu hình WireGuard và Loki bridge theo
     `docs/runbooks/ai-wireguard-observability.md`.
-6. Deploy AI để exporter/Alloy bind lên `10.20.0.2`.
-7. Merge backend vào `main`.
-8. Chờ backend Multibranch xanh và `solar-backend-production` xanh; lần deploy
+7. Deploy AI để exporter/Alloy bind lên `10.20.0.2`.
+8. Merge backend vào `main`.
+9. Chờ backend Multibranch xanh và `solar-backend-production` xanh; lần deploy
    này tạo bốn Prometheus target và ép kết nối gRPC/HTTPS qua tunnel.
-9. Xác nhận certificate cho API/files/Grafana/MQTT Ready.
-10. Cài và chạy MQTT TLS sync timer; xác nhận `/opt/solar-iot/secrets/mosquitto/tls/tls.crt` và `tls.key` tồn tại, khớp nhau.
-11. Merge IoT vào `main`.
-12. Chờ IoT Multibranch và `solar-iot-production` xanh.
-13. Chạy toàn bộ smoke check ở mục 13 và acceptance matrix trong runbook WireGuard.
+10. Xác nhận certificate cho API/files/Grafana/MQTT Ready.
+11. Cài và chạy MQTT TLS sync timer; xác nhận `/opt/solar-iot/secrets/mosquitto/tls/tls.crt` và `tls.key` tồn tại, khớp nhau.
+12. Merge IoT vào `main`.
+13. Chờ IoT Multibranch và `solar-iot-production` xanh.
+14. Chạy toàn bộ smoke check ở mục 13 và acceptance matrix trong runbook WireGuard.
 
 Không deploy IoT trước khi cert MQTT được cấp và đồng bộ; preflight sẽ chặn.
 
@@ -446,7 +498,25 @@ sudo -u deploy -H docker compose \
   --env-file /opt/solar-iot/secrets/runtime.env \
   --env-file /opt/solar-iot/current/deploy/production/image-lock.env \
   -f /opt/solar-iot/current/infra/docker-compose.prod.yml ps
+
+AUDIT_POD="$(
+  sudo -u deploy -H env KUBECONFIG=/home/deploy/.kube/config \
+    kubectl -n solar-prod get pod \
+      -l app.kubernetes.io/component=auditaggregatorservice \
+      -o jsonpath='{.items[0].metadata.name}'
+)"
+sudo -u deploy -H env KUBECONFIG=/home/deploy/.kube/config \
+  kubectl -n solar-prod exec "$AUDIT_POD" -c auditaggregatorservice -- \
+    sh -ec 'printf "path=%s required=%s\\n" "$GeoIp__DbPath" "$GeoIp__Required"; test -r "$GeoIp__DbPath"; test -s "$GeoIp__DbPath"'
+sudo -u deploy -H env KUBECONFIG=/home/deploy/.kube/config \
+  kubectl -n solar-prod logs "$AUDIT_POD" -c auditaggregatorservice \
+    --since=30m --tail=500 | grep -F 'MaxMind GeoLite2 loaded'
 ```
+
+Các audit record mới có public actor IP phải bắt đầu có `geo_country`/`geo_city`
+khi MaxMind có dữ liệu cho IP đó. 33 record cũ đã được consumer xử lý idempotent
+sẽ không tự enrich lại; nếu cần dữ liệu lịch sử phải thiết kế backfill riêng có
+backup, dry-run và audit trail, không replay mù event production.
 
 Từ máy bên ngoài:
 
@@ -506,6 +576,8 @@ Pipeline/preflight sẽ fail nếu:
 - K3s node/ClusterIssuer chưa Ready, `ghcr-pull` thiếu.
 - Disk còn dưới 30 GiB hay RAM available dưới 2 GiB.
 - MQTT TLS thiếu, sắp hết hạn, hostname sai hoặc key không khớp certificate.
+- GeoLite2 City MMDB thiếu, hỏng, không đọc được, quá 45 ngày, mount sai hoặc
+  AuditAggregatorService không xác nhận load database lúc khởi động.
 - Mosquitto không healthy hoặc public TLS smoke check thất bại.
 
 Không bỏ các gate này để “deploy cho qua”; sửa nguyên nhân và chạy lại đúng commit.

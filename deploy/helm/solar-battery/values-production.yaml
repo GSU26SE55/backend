@@ -63,6 +63,11 @@ services:
     replicas: 1
     digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
     autoscaling: { enabled: false }
+    geoIp:
+      enabled: true
+      required: true
+      hostPath: /opt/solar-platform/geoip/GeoLite2-City.mmdb
+      mountPath: /app/geoip/GeoLite2-City.mmdb
 
 postgres:
   image: timescale/timescaledb:2.17.2-pg16
