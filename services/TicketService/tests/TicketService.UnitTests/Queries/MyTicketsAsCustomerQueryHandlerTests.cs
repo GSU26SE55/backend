@@ -28,7 +28,9 @@ public class MyTicketsAsCustomerQueryHandlerTests
         mockChats.Setup(r => r.GetAllAsync()).Returns(Array.Empty<TicketChat>().BuildMock());
         _mockUow.Setup(x => x.TicketChats).Returns(mockChats.Object);
 
-        _handler = new MyTicketsAsCustomerQueryHandler(_mockUow.Object, _mockCurrentUserService.Object);
+        _handler = new MyTicketsAsCustomerQueryHandler(
+            _mockUow.Object, _mockCurrentUserService.Object,
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator());
     }
 
     private static Ticket MakeTicket(Guid customerId, TicketStatusEnum status = TicketStatusEnum.Open) => new()

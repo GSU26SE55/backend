@@ -24,6 +24,7 @@ public class TicketDbContext : DbContext
     public virtual DbSet<TicketAttachment> TicketAttachments { get; set; }
     public virtual DbSet<SlaTimer> SlaTimers { get; set; }
     public virtual DbSet<SlaPauseEvent> SlaPauseEvents { get; set; }
+    public virtual DbSet<SlaNonWorkingPeriod> SlaNonWorkingPeriods { get; set; }
     public virtual DbSet<MaintenanceLog> MaintenanceLogs { get; set; }
     public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
     public virtual DbSet<TicketAuditLog> TicketAuditLogs { get; set; }       // Sprint audit #AUDIT-24

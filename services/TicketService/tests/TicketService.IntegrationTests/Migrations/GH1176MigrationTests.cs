@@ -17,23 +17,18 @@ public class GH1176MigrationTests : IAsyncLifetime
     private const string MigrationId = "20260811033315_GH1176ReviseTicketStatusSlaWorkflow";
     private const string PreviousMigrationId = "20260808054339_AddTicketAiSuggestionAndStaffRole";
 
-    [Obsolete]
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
         .WithDatabase("ticket_migration")
         .WithUsername("test")
         .WithPassword("test")
         .WithCleanUp(true)
         .Build();
 
-    [Obsolete]
     public Task InitializeAsync() => _postgres.StartAsync();
 
-    [Obsolete]
     public Task DisposeAsync() => _postgres.DisposeAsync().AsTask();
 
     [Fact]
-    [Obsolete]
     public async Task ApplyMigrations_CreatesGh1176ScheduleAndIncidentSchema()
     {
         await using var db = CreateDbContext();
@@ -75,7 +70,6 @@ public class GH1176MigrationTests : IAsyncLifetime
     }
 
     [Fact]
-    [Obsolete]
     public async Task OutboxPrimaryKey_RejectsDuplicateDeterministicEventId()
     {
         var eventId = Guid.NewGuid();
@@ -108,7 +102,6 @@ public class GH1176MigrationTests : IAsyncLifetime
     }
 
     [Fact]
-    [Obsolete]
     public async Task ApplyMigration_RemapLegacySlaPauseReasons()
     {
         await using var db = CreateDbContext();
@@ -175,7 +168,6 @@ public class GH1176MigrationTests : IAsyncLifetime
         reader.GetInt64(2).Should().Be(0);
     }
 
-    [Obsolete]
     private TicketDbContext CreateDbContext()
     {
         var currentUser = new Mock<ICurrentUserService>();

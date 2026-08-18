@@ -8,15 +8,13 @@ using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.Consumers;
-
 /// <summary>
-/// **DEPRECATED Sprint 5B #238** — Saga state machine giờ handle BatteryAnomalyDetectedEvent V1/V2.
-/// Consumer này KHÔNG được register vào endpoint khi feature flag <c>AlertTicketSagaEnabled=true</c>.
-/// Giữ class để rollback nếu Saga có vấn đề trong window cutover.
+/// Consumer fallback cho <see cref="BatteryAnomalyDetectedEvent"/> khi
+/// <c>AlertTicketSagaEnabled=false</c>. Khi Saga được bật, consumer này không được đăng ký
+/// để tránh cả hai luồng cùng tạo ticket từ một alert.
 ///
 /// Xem overall.md §53.7 (Saga participants + cutover), §40.6 (newcomer onboarding).
 /// </summary>
-[Obsolete("Replaced by AlertTicketSagaStateMachine + CreateTicketFromAlertConsumer (#238). Do not register when AlertTicketSagaEnabled=true.")]
 public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDetectedEvent>
 {
     private readonly IMediator _mediator;

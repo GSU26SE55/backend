@@ -7,12 +7,22 @@ public interface ISlaCalculator
 {
     DateTime CalculateSlaDueDate(Ticket ticket);
 
-    /// <summary>Sprint Bonus NS-12 (#656) — số giờ SLA theo priority (P1=4h · P2=24h · P3=72h).</summary>
+    /// <summary>Số giờ làm việc SLA theo priority (P1=4h · P2=24h · P3=72h).</summary>
     int GetSlaHours(TicketPriorityEnum priority);
 
-    /// <summary>
-    /// Sprint Bonus NS-12 (#656) — DueAt = <paramref name="startedAt"/> + giờ SLA của priority.
-    /// Dùng khi tạo timer lúc Assigned + recompute khi Priority đổi (cascade override).
-    /// </summary>
+    int GetSlaMinutes(TicketPriorityEnum priority);
+
+    bool IsWorkingTime(DateTime instantUtc);
+
+    DateTime NormalizeToNextWorkingInstant(DateTime instantUtc);
+
+    DateTime AddWorkingMinutes(DateTime startUtc, double minutes);
+
+    double GetWorkingMinutesBetween(DateTime startUtc, DateTime endUtc);
+
+    double GetRemainingPercent(SlaTimer timer, DateTime atUtc);
+
+    bool ShouldSendNextSessionReminder(DateTime warningSentAtUtc, DateTime atUtc);
+
     DateTime CalculateDueDate(DateTime startedAt, TicketPriorityEnum priority);
 }

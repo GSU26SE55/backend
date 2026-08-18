@@ -10,7 +10,6 @@ namespace TicketService.UnitTests.DependencyInjection;
 public class TicketServiceOutboxRegistrationTests
 {
     [Fact]
-    [Obsolete]
     public void AddTicketServiceInfrastructure_RegistersTransactionalOutboxWriter()
     {
         // Arrange
