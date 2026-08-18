@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
 
@@ -11,12 +12,16 @@ namespace TicketService.Infrastructure.BackgroundJobs;
 
 public class SlaTimerBackgroundService : BackgroundService
 {
+    private const double WarningThresholdPercent = 80d;
+
     private readonly ILogger<SlaTimerBackgroundService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly TimeProvider _timeProvider;
 
-    public SlaTimerBackgroundService(ILogger<SlaTimerBackgroundService> logger,
-        IServiceScopeFactory scopeFactory, TimeProvider? timeProvider = null)
+    public SlaTimerBackgroundService(
+        ILogger<SlaTimerBackgroundService> logger,
+        IServiceScopeFactory scopeFactory,
+        TimeProvider? timeProvider = null)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
@@ -28,9 +33,18 @@ public class SlaTimerBackgroundService : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             try
-            { await CheckSlaViolations(stoppingToken); }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception exception) { _logger.LogError(exception, "SLA timer tick failed."); }
+            {
+                await CheckSlaViolations(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "SLA timer tick failed.");
+            }
+
             await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
         }
     }
@@ -42,10 +56,11 @@ public class SlaTimerBackgroundService : BackgroundService
         {
             var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
             ids = await db.SlaTimers.AsNoTracking()
-                .Where(timer => !timer.IsDeleted && timer.Status == SlaTimerStatusEnum.Running
-                    && !timer.Ticket.IsDeleted
-                    && timer.Ticket.Status == TicketStatusEnum.InProgress
-                    && timer.Ticket.Priority != TicketPriorityEnum.Urgent)
+                .Where(timer => !timer.IsDeleted
+                                && timer.Status == SlaTimerStatusEnum.Running
+                                && !timer.Ticket.IsDeleted
+                                && timer.Ticket.Status == TicketStatusEnum.InProgress
+                                && timer.Ticket.Priority != TicketPriorityEnum.Urgent)
                 .OrderBy(timer => timer.DueAt)
                 .Select(timer => timer.Id)
                 .ToListAsync(ct);
@@ -60,16 +75,22 @@ public class SlaTimerBackgroundService : BackgroundService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
         var outbox = scope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>();
+        var slaCalculator = scope.ServiceProvider.GetRequiredService<ISlaCalculator>();
         await using var transaction = db.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory"
-            ? null : await db.Database.BeginTransactionAsync(ct);
+            ? null
+            : await db.Database.BeginTransactionAsync(ct);
+
         try
         {
             var timer = await db.SlaTimers
-                .Include(x => x.Ticket).ThenInclude(x => x.Assignments)
+                .Include(x => x.Ticket)
+                .ThenInclude(x => x.Assignments)
                 .SingleOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct);
-            if (timer is null || timer.Status != SlaTimerStatusEnum.Running ||
-                timer.Ticket.IsDeleted || timer.Ticket.Status != TicketStatusEnum.InProgress ||
-                timer.Ticket.Priority == TicketPriorityEnum.Urgent)
+            if (timer is null
+                || timer.Status != SlaTimerStatusEnum.Running
+                || timer.Ticket.IsDeleted
+                || timer.Ticket.Status != TicketStatusEnum.InProgress
+                || timer.Ticket.Priority == TicketPriorityEnum.Urgent)
             {
                 if (transaction is not null)
                     await transaction.RollbackAsync(ct);
@@ -91,19 +112,28 @@ public class SlaTimerBackgroundService : BackgroundService
             }
             else
             {
-                var total = timer.DueAt - timer.StartedAt;
-                var elapsed = nowUtc - timer.StartedAt;
-                var percent = total.TotalMinutes <= 0 ? 100 : elapsed.TotalMinutes / total.TotalMinutes * 100;
-                if (percent >= 80 && timer.WarningSentAt is null)
+                var remainingPercent = slaCalculator.GetRemainingPercent(timer, nowUtc);
+                var consumedPercent = 100d - remainingPercent;
+                var shouldSendInitialWarning = timer.WarningSentAt is null
+                                               && consumedPercent >= WarningThresholdPercent
+                                               && slaCalculator.IsWorkingTime(nowUtc);
+                var shouldSendReminder = timer.WarningSentAt.HasValue
+                                         && slaCalculator.ShouldSendNextSessionReminder(
+                                             timer.WarningSentAt.Value, nowUtc);
+
+                if (shouldSendInitialWarning || shouldSendReminder)
                 {
                     timer.WarningSentAt = nowUtc;
                     await outbox.WriteAsync(new SlaWarningEvent
                     {
                         TicketId = timer.TicketId,
                         WarningAt = nowUtc,
-                        Percentage = percent,
-                        StaffId = timer.Ticket.Assignments.FirstOrDefault(x => !x.IsDeleted && x.Role == AssignmentRoleEnum.PrimaryHandler)?.StaffId,
-                        Code = timer.Ticket.Code
+                        Percentage = consumedPercent,
+                        Code = timer.Ticket.Code,
+                        StaffId = timer.Ticket.Assignments
+                            .FirstOrDefault(x => !x.IsDeleted
+                                                 && x.Role == AssignmentRoleEnum.PrimaryHandler)
+                            ?.StaffId
                     }, ct);
                 }
             }

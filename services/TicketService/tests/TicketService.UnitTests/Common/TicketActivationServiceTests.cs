@@ -28,8 +28,27 @@ public class TicketActivationServiceTests
         result.Activated.Should().BeTrue();
         fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running);
         fixture.Timer.StartedAt.Should().Be(NowUtc);
-        fixture.Timer.DueAt.Should().Be(NowUtc.AddHours(72));
+        fixture.Timer.DueAt.Should().Be(
+            new SlaCalculator().CalculateDueDate(NowUtc, TicketPriorityEnum.P3Normal));
         fixture.Pause.ResumedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Activate_BeforeBusinessOpening_NormalizesEffectiveSlaStartTo0700()
+    {
+        var fixture = CreateFixture(PendingContextEnum.Scheduled);
+        var monday0600Local = new DateTime(2026, 8, 16, 23, 0, 0, DateTimeKind.Utc);
+        fixture.Ticket.ScheduledStartAtUtc = monday0600Local;
+        var request = fixture.Request(ActivationReason.ScheduledDue) with { NowUtc = monday0600Local };
+
+        var result = await fixture.Service.ActivateAsync(request, CancellationToken.None);
+
+        result.Activated.Should().BeTrue();
+        fixture.Timer.StartedAt.Should().Be(
+            new DateTime(2026, 8, 17, 0, 0, 0, DateTimeKind.Utc));
+        fixture.Timer.DueAt.Should().Be(
+            new SlaCalculator().CalculateDueDate(
+                fixture.Timer.StartedAt, TicketPriorityEnum.P3Normal));
     }
 
     [Theory]
@@ -45,7 +64,8 @@ public class TicketActivationServiceTests
         result.Activated.Should().BeTrue();
         fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running);
         fixture.Timer.StartedAt.Should().Be(NowUtc.AddHours(-10));
-        fixture.Timer.DueAt.Should().Be(originalDueAt.AddHours(2));
+        fixture.Timer.DueAt.Should().Be(
+            new SlaCalculator().AddWorkingMinutes(originalDueAt, 120));
         fixture.Pause.ResumedAt.Should().Be(NowUtc);
     }
 
@@ -116,7 +136,8 @@ public class TicketActivationServiceTests
 
         fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running);
         fixture.Timer.StartedAt.Should().Be(NowUtc);
-        fixture.Timer.DueAt.Should().Be(NowUtc.AddHours(72));
+        fixture.Timer.DueAt.Should().Be(
+            new SlaCalculator().CalculateDueDate(NowUtc, TicketPriorityEnum.P3Normal));
     }
 
     [Fact]

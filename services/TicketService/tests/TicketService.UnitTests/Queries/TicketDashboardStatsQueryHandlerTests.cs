@@ -58,6 +58,15 @@ public class TicketDashboardStatsQueryHandlerTests
         return new TicketDashboardStatsQueryHandler(uow.Object);
     }
 
+    private static TicketDashboardStatsQueryHandler MakeHandlerWithoutAssignments(params Ticket[] tickets)
+    {
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: tickets,
+            assignmentSeed: Array.Empty<TicketAssignment>());
+
+        return new TicketDashboardStatsQueryHandler(uow.Object);
+    }
+
     [Fact]
     public async Task Handle_Empty_ReturnsZeroFilledStats()
     {
@@ -73,6 +82,19 @@ public class TicketDashboardStatsQueryHandlerTests
         result.Data.CreatedTrend7Days.Should().HaveCount(7);
         result.Data.CreatedTrend7Days.Sum(p => p.Count).Should().Be(0);
         result.Data.OpenCountByStaff.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_NoAssignments_IgnoresInMemoryPrimaryHandlerStaffId()
+    {
+        var ticket = MakeTicket(staffId: Guid.NewGuid());
+
+        var result = await MakeHandlerWithoutAssignments(ticket)
+            .Handle(new TicketDashboardStatsQuery(), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.OpenCountByStaff.Should().BeEmpty(
+            "TicketAssignments is the only persisted source of staff assignment");
     }
 
     [Fact]

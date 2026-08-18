@@ -7,6 +7,7 @@ using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Ticket;
@@ -15,11 +16,16 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
 {
     private readonly ITicketUnitOfWork _unitOfWork;
     private readonly ITicketCurrentUserService _currentUserService;
+    private readonly ISlaCalculator _slaCalculator;
 
-    public ManagerQueueQueryHandler(ITicketUnitOfWork unitOfWork, ITicketCurrentUserService currentUserService)
+    public ManagerQueueQueryHandler(
+        ITicketUnitOfWork unitOfWork,
+        ITicketCurrentUserService currentUserService,
+        ISlaCalculator slaCalculator)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _slaCalculator = slaCalculator;
     }
 
     public async Task<CommonResponse<PaginationResponse<TicketDTO>>> Handle(ManagerQueueQuery request, CancellationToken cancellationToken)
@@ -105,7 +111,8 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = page.Map(t => TicketQueryHelper.MapToTicketDTO(t, unreadTicketIds.Contains(t.Id), staffNames))
+            Data = page.Map(t => TicketQueryHelper.MapToTicketDTO(
+                t, _slaCalculator, DateTime.UtcNow, unreadTicketIds.Contains(t.Id), staffNames))
         };
     }
 }

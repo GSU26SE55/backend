@@ -30,8 +30,8 @@ public class SlaTimerBackgroundServiceTests
         public async Task TriggerCheck(CancellationToken ct) => await CheckSlaViolations(ct);
     }
 
-    // Mốc thời gian cố định cho toàn bộ Test: 2026-06-03 12:00:00 UTC
-    private static readonly DateTime FixedNow = new DateTime(2026, 6, 3, 12, 0, 0, DateTimeKind.Utc);
+    // Mốc thời gian cố định: 2026-06-03 09:00 UTC = 16:00 Asia/Ho_Chi_Minh.
+    private static readonly DateTime FixedNow = new DateTime(2026, 6, 3, 9, 0, 0, DateTimeKind.Utc);
 
     [Fact]
     public async Task When_SLA_is_breached_Should_update_timer_status_to_Breached()

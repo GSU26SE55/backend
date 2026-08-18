@@ -25,7 +25,8 @@ public class SlaTimerConfiguration : IEntityTypeConfiguration<SlaTimer>
             .HasColumnName("started_at");
 
         builder.Property(e => e.DueAt)
-            .HasColumnName("due_at");
+            .HasColumnName("due_at")
+            .IsConcurrencyToken();
 
         builder.Property(e => e.OriginalDueAt)
             .HasColumnName("original_due_at");
@@ -37,14 +38,16 @@ public class SlaTimerConfiguration : IEntityTypeConfiguration<SlaTimer>
             .HasColumnName("current_pause_started_at");
 
         builder.Property(e => e.WarningSentAt)
-            .HasColumnName("warning_sent_at");
+            .HasColumnName("warning_sent_at")
+            .IsConcurrencyToken();
 
         builder.Property(e => e.BreachAt)
             .HasColumnName("breach_at");
 
         builder.Property(e => e.Status)
             .HasColumnName("status")
-            .HasConversion<int>();
+            .HasConversion<int>()
+            .IsConcurrencyToken();
 
         builder.Property(e => e.MaxTotalPauseMinutes)
             .HasColumnName("max_total_pause_minutes");

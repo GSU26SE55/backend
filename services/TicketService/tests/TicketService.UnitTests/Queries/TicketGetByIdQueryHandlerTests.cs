@@ -20,7 +20,9 @@ public class TicketGetByIdQueryHandlerTests
         _mockUow.Setup(x => x.Tickets).Returns(_mockRepo.Object);
         _mockParticipantRepo.Setup(r => r.GetAllAsync()).Returns(() => new TestAsyncEnumerable<TicketParticipant>([]));
         _mockUow.Setup(x => x.TicketParticipants).Returns(_mockParticipantRepo.Object);
-        _handler = new TicketGetByIdQueryHandler(_mockUow.Object);
+        _handler = new TicketGetByIdQueryHandler(
+            _mockUow.Object,
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator());
     }
 
     private static Ticket MakeTicket(Guid? customerId = null, Guid? PrimaryHandlerStaffId = null) => new()

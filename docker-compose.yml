@@ -600,6 +600,17 @@ services:
       # Sprint 5B #238 — Alert-Ticket Saga feature flags (cutover)
       AlertTicketSaga__AlertTicketDispatchEnabled: ${ALERT_TICKET_DISPATCH_ENABLED:-true}
       AlertTicketSaga__AlertTicketSagaEnabled: ${ALERT_TICKET_SAGA_ENABLED:-true}
+      # TicketService SLA business calendar. Values are supplied by .env.Docker.
+      SlaBusinessHours__TimeZoneId: ${SLA_BUSINESS_HOURS_TIME_ZONE_ID:-Asia/Ho_Chi_Minh}
+      SlaBusinessHours__Start: ${SLA_BUSINESS_HOURS_START:-07:00:00}
+      SlaBusinessHours__End: ${SLA_BUSINESS_HOURS_END:-17:00:00}
+      SlaBusinessHours__WorkingDays__0: ${SLA_BUSINESS_HOURS_WORKING_DAYS_0:-Sunday}
+      SlaBusinessHours__WorkingDays__1: ${SLA_BUSINESS_HOURS_WORKING_DAYS_1:-Monday}
+      SlaBusinessHours__WorkingDays__2: ${SLA_BUSINESS_HOURS_WORKING_DAYS_2:-Tuesday}
+      SlaBusinessHours__WorkingDays__3: ${SLA_BUSINESS_HOURS_WORKING_DAYS_3:-Wednesday}
+      SlaBusinessHours__WorkingDays__4: ${SLA_BUSINESS_HOURS_WORKING_DAYS_4:-Thursday}
+      SlaBusinessHours__WorkingDays__5: ${SLA_BUSINESS_HOURS_WORKING_DAYS_5:-Friday}
+      SlaBusinessHours__WorkingDays__6: ${SLA_BUSINESS_HOURS_WORKING_DAYS_6:-Saturday}
       # AI features — config loaded directly from .env.Docker via env_file (no substitution needed)
       # GH-ticket-verify — battery serial lookup (HTTP) + AI verify ticket (gRPC).
       # TicketAi__Enabled=false → consumer set Skipped (ticket vẫn tạo bình thường).

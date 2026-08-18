@@ -27,6 +27,7 @@ public class BatteryCascadeRiskHighConsumerTests
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();         // Sprint Bonus NS-13 (#657)
     // Sprint Bonus NS-12 (#656) — SlaCalculator thật (pure util) để assert DueAt recompute.
     private readonly ISlaCalculator _slaCalculator = new TicketService.Infrastructure.Implements.Utils.SlaCalculator();
+    private readonly Mock<TimeProvider> _timeProvider = new();
 
     public BatteryCascadeRiskHighConsumerTests()
     {
@@ -35,11 +36,13 @@ public class BatteryCascadeRiskHighConsumerTests
         _slaTimerRepo.Setup(r => r.GetAllAsync()).Returns(new List<SlaTimer>().AsQueryable().BuildMock());
         _codeGenerator.Setup(g => g.GenerateAsync()).ReturnsAsync("TKT-AUTO-001");
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _timeProvider.Setup(t => t.GetUtcNow())
+            .Returns(new DateTimeOffset(2026, 8, 17, 2, 0, 0, TimeSpan.Zero));
     }
 
     private TicketBatteryCascadeRiskHighConsumer Build() =>
         new(_uow.Object, _activityLogger.Object, _slaCalculator, _codeGenerator.Object, _outboxWriter.Object,
-            NullLogger<TicketBatteryCascadeRiskHighConsumer>.Instance);
+            _timeProvider.Object, NullLogger<TicketBatteryCascadeRiskHighConsumer>.Instance);
 
     private static ConsumeContext<BatteryCascadeRiskHighEvent> Ctx(BatteryCascadeRiskHighEvent evt)
     {
@@ -127,7 +130,9 @@ public class BatteryCascadeRiskHighConsumerTests
         created.Code.Should().Be("TKT-AUTO-001");
         timer.Should().NotBeNull("ticket P1 mới cần SlaTimer chạy ngay (NS-12 dependency)");
         timer!.Status.Should().Be(SlaTimerStatusEnum.Running);
-        (timer.DueAt - timer.StartedAt).Should().Be(TimeSpan.FromHours(4), "P1 = 4h");
+        new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
+            .GetWorkingMinutesBetween(timer.StartedAt, timer.DueAt)
+            .Should().Be(240, "P1 = 4 working hours");
         _outboxWriter.Verify(p => p.WriteAsync(It.IsAny<SharedContracts.Events.TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -220,7 +225,10 @@ public class BatteryCascadeRiskHighConsumerTests
 
         await Build().Consume(Ctx(Event(assetId, ticketId)));
 
-        timer.DueAt.Should().Be(startedAt.AddHours(4), "P1 = SLA 4h từ mốc StartedAt");
+        timer.DueAt.Should().Be(
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
+                .CalculateDueDate(startedAt, TicketPriorityEnum.P1Critical),
+            "P1 = 4 working hours từ mốc StartedAt");
         timer.Priority.Should().Be(TicketPriorityEnum.P1Critical);
         timer.WarningSentAt.Should().BeNull("reset để background service re-đánh giá 80% theo deadline mới");
         _slaTimerRepo.Verify(r => r.UpdateAsync(timer), Times.Once);
