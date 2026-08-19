@@ -14,6 +14,7 @@ payload_dir="$(cd -- "${script_dir}/../.." && pwd)"
 host_env="${root}/config/host.env"
 backend_env="${root}/secrets/backend.env"
 monitoring_env="${root}/secrets/monitoring.env"
+geoip_db="${root}/geoip/GeoLite2-City.mmdb"
 image_lock="${payload_dir}/deploy/production/image-lock.env"
 
 [[ -r "${image_lock}" ]] || {
@@ -222,6 +223,7 @@ helm_value_args=(
   --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].hostnames[0]=ai.${platform_domain}"
   --set-string "iot.mqttNodeIp=${mqtt_node_ip}"
   --set-string "iot.mqttPasswordSync.hostPath=${mqtt_auth_dir}"
+  --set-string "services.auditaggregatorservice.geoIp.hostPath=${geoip_db}"
 )
 
 helm_value_args+=(--set-string "services.apigateway.digest=$(read_env APIGATEWAY_DIGEST "${image_lock}")")
@@ -250,6 +252,7 @@ helm template "${helm_release}" "${chart_dir}" \
 
 "${script_dir}/verify-monitoring-resource-policy.sh" "${rendered_manifest}"
 "${script_dir}/verify-postgres-backup-policy.sh" "${rendered_manifest}"
+"${script_dir}/verify-geoip-production.sh" "${rendered_manifest}" "${geoip_db}"
 
 # The mandatory backup must use the target release's bounded pg_dump policy,
 # not the CronJob template left by the previous Helm revision. Pre-applying this
@@ -306,6 +309,65 @@ while IFS= read -r resource; do
     exit 1
   fi
 done < <(kubectl -n "${namespace}" get deployment,statefulset,daemonset -o name)
+
+verify_geoip_runtime() {
+  local configured_path
+  local geoip_logs
+  local pod
+
+  pod="$(
+    kubectl -n "${namespace}" get pod \
+      -l app.kubernetes.io/component=auditaggregatorservice \
+      -o json |
+      jq -er '
+        [.items[]
+          | select(.status.phase == "Running")
+          | select((.status.containerStatuses // []) | length > 0)
+          | select(all(.status.containerStatuses[]; .ready == true))]
+        | sort_by(.metadata.creationTimestamp)
+        | last
+        | .metadata.name
+      '
+  )" || {
+    kubectl -n "${namespace}" get pod \
+      -l app.kubernetes.io/component=auditaggregatorservice -o wide >&2 || true
+    printf 'unable to find a Ready AuditAggregatorService pod for GeoIP verification\n' >&2
+    return 1
+  }
+
+  configured_path="$(
+    kubectl -n "${namespace}" exec "${pod}" -c auditaggregatorservice -- \
+      printenv GeoIp__DbPath
+  )"
+  [[ "${configured_path}" == '/app/geoip/GeoLite2-City.mmdb' ]] || {
+    printf 'AuditAggregatorService has an unexpected GeoIp__DbPath: %s\n' \
+      "${configured_path}" >&2
+    return 1
+  }
+
+  # Expanded inside the container, not by this deployment shell.
+  # shellcheck disable=SC2016
+  kubectl -n "${namespace}" exec "${pod}" -c auditaggregatorservice -- \
+    sh -ec 'test "$GeoIp__Required" = "true" && test -r "$GeoIp__DbPath" && test -s "$GeoIp__DbPath"' || {
+      printf 'AuditAggregatorService cannot read the required GeoLite2 database\n' >&2
+      return 1
+    }
+
+  geoip_logs="$(
+    kubectl -n "${namespace}" logs "${pod}" -c auditaggregatorservice \
+      --tail=2000
+  )"
+  grep -F 'MaxMind GeoLite2 loaded' <<< "${geoip_logs}" >/dev/null || {
+    kubectl -n "${namespace}" logs "${pod}" -c auditaggregatorservice \
+      --tail=2000 >&2 || true
+    printf 'AuditAggregatorService did not confirm loading the GeoLite2 database\n' >&2
+    return 1
+  }
+
+  printf 'AuditAggregatorService loaded the required GeoLite2 City database.\n'
+}
+
+verify_geoip_runtime || exit 1
 
 # Helm does not wait for Prometheus Operator custom-resource conditions. In
 # particular, Alertmanager can exist while its StatefulSet was never created.

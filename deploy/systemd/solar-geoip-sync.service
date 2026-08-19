@@ -1,0 +1,26 @@
+[Unit]
+Description=Synchronize the production MaxMind GeoLite2 City database
+After=network-online.target k3s.service
+Wants=network-online.target
+Requires=k3s.service
+
+[Service]
+Type=oneshot
+Environment=SOLAR_PLATFORM_ROOT=/opt/solar-platform
+Environment=GEOIPUPDATE_CONFIG=/opt/solar-platform/secrets/GeoIP.conf
+Environment=GEOIP_DB_PATH=/opt/solar-platform/geoip/GeoLite2-City.mmdb
+Environment=KUBECONFIG=/home/deploy/.kube/config
+Environment=K3S_NAMESPACE=solar-prod
+ExecStart=/usr/local/sbin/solar-sync-geoip-database
+User=root
+Group=root
+UMask=0022
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=-/opt/solar-platform/geoip
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

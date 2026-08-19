@@ -10,25 +10,30 @@ namespace AuditAggregatorService.IntegrationTests;
 /// <summary>
 /// <b><c>#AUDIT-16</c> — geo enrichment.</b>
 ///
-/// <para><b>Sự thật cần biết trước khi đọc:</b> file <c>GeoLite2-City.mmdb</c> <b>KHÔNG có trong
-/// repo</b> (đã tìm toàn bộ cây thư mục ngày 2026-08-01). Nghĩa là ở mọi môi trường hiện tại —
-/// gồm cả production — <see cref="MaxMindGeoIpResolver"/> chạy ở chế độ <i>tắt</i>: constructor
-/// log cảnh báo rồi mọi <c>Lookup</c> trả <c>null</c>. Quyết định "Geo IP = MaxMind" hiện là quyết
-/// định trên giấy.</para>
+/// <para>GeoLite2 không được commit vào repo vì license và vòng đời cập nhật. Production provision
+/// file từ host rồi mount read-only; bộ test trong repo vẫn phải chốt cả chế độ optional của môi
+/// trường local và chế độ required fail-fast của production.</para>
 ///
-/// <para>Vì vậy bộ test này chốt đúng thứ đang chạy thật: <b>nhánh suy giảm êm</b>. Điều tối kỵ là
-/// resolver ném exception khi thiếu file — enrichment chỉ là phần thêm nếm, nó mà ném thì kéo sập
-/// cả pipeline audit. Khi nào file <c>.mmdb</c> được đưa vào repo thì bổ sung test tra cứu thật.</para>
+/// <para>Local/dev vẫn giữ <b>nhánh suy giảm êm</b> để enrichment optional không kéo sập audit.
+/// Production bật <c>GeoIp:Required</c>, vì vậy thiếu hoặc hỏng DB phải dừng rollout ngay.</para>
 /// </summary>
 public class MaxMindGeoIpResolverTests
 {
-    private static MaxMindGeoIpResolver Build(string? dbPath, out MemoryCache cache)
+    private static MaxMindGeoIpResolver Build(
+        string? dbPath,
+        out MemoryCache cache,
+        bool databaseRequired = false)
     {
         cache = new MemoryCache(new MemoryCacheOptions { SizeLimit = 10_000 });
+        var settings = new Dictionary<string, string?>
+        {
+            ["GeoIp:Required"] = databaseRequired.ToString(),
+        };
+        if (dbPath is not null)
+            settings["GeoIp:DbPath"] = dbPath;
+
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(dbPath is null
-                ? new Dictionary<string, string?>()
-                : new Dictionary<string, string?> { ["GeoIp:DbPath"] = dbPath })
+            .AddInMemoryCollection(settings)
             .Build();
 
         return new MaxMindGeoIpResolver(config, cache, NullLogger<MaxMindGeoIpResolver>.Instance);
@@ -41,6 +46,17 @@ public class MaxMindGeoIpResolverTests
 
         act.Should().NotThrow(
             "thiếu file .mmdb là trạng thái THẬT hiện nay; ném ở đây sẽ chặn cả pipeline audit");
+    }
+
+    [Fact]
+    public void Ctor_WithRequiredMissingDbFile_Throws()
+    {
+        var missingPath = $"khong-ton-tai/{Guid.NewGuid():N}/GeoLite2-City.mmdb";
+
+        var act = () => Build(missingPath, out _, databaseRequired: true);
+
+        act.Should().Throw<FileNotFoundException>()
+            .Which.FileName.Should().Be(missingPath);
     }
 
     [Fact]
@@ -71,6 +87,25 @@ public class MaxMindGeoIpResolverTests
             act.Should().NotThrow();
             resolver!.Lookup("8.8.8.8").Should().BeNull("DB hỏng ⇒ coi như không có DB");
             resolver.Dispose();
+        }
+        finally
+        {
+            File.Delete(bogus);
+        }
+    }
+
+    [Fact]
+    public void Ctor_WithRequiredCorruptDbFile_Throws()
+    {
+        var bogus = Path.Combine(Path.GetTempPath(), $"geoip-required-bogus-{Guid.NewGuid():N}.mmdb");
+        File.WriteAllText(bogus, "đây không phải file MaxMind");
+
+        try
+        {
+            var act = () => Build(bogus, out _, databaseRequired: true);
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("GeoIp:Required is enabled*");
         }
         finally
         {

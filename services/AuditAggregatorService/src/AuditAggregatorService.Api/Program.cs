@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using AuditAggregatorService.Application.Interfaces;
 using AuditAggregatorService.Infrastructure.DependencyInjection;
 using AuditAggregatorService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.RateLimiting;
@@ -44,6 +45,14 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+// Production sets GeoIp:Required=true. Resolve the singleton before opening
+// the HTTP listener so a missing, unreadable or corrupt MMDB fails the rollout
+// instead of silently disabling enrichment until the first audit event.
+if (builder.Configuration.GetValue("GeoIp:Required", false))
+{
+    _ = app.Services.GetRequiredService<IGeoIpResolver>();
+}
 
 using (var scope = app.Services.CreateScope())
 {

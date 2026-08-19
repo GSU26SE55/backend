@@ -1,0 +1,6 @@
+# Copy this file to /opt/solar-platform/secrets/GeoIP.conf as root:root mode
+# 0600. Obtain AccountID and LicenseKey from the MaxMind account portal. Never
+# commit the real credentials.
+AccountID MAXMIND_ACCOUNT_ID
+LicenseKey MAXMIND_LICENSE_KEY
+EditionIDs GeoLite2-City
