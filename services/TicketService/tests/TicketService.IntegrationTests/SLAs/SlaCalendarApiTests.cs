@@ -57,7 +57,10 @@ public class SlaCalendarApiTests : IClassFixture<TicketApiFactory>
         });
         update.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var delete = await _client.DeleteAsync($"/api/sla/non-working-periods/{id}");
+        using var deleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/sla/non-working-periods/{id}");
+        using var delete = await _client.SendAsync(deleteRequest);
         delete.StatusCode.Should().Be(HttpStatusCode.OK);
         var afterDelete = await _client.GetFromJsonAsync<CommonResponse<PaginationResponse<SlaNonWorkingPeriodDto>>>(
             "/api/sla/non-working-periods?pageNumber=1&pageSize=10");
