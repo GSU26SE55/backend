@@ -42,10 +42,11 @@ data:
   FILE_STORAGE_SERVICE_GRPC_SERVER_PORT: "8081"
   FILE_STORAGE_GRPC_CLIENT_ADDRESS: "http://filestorageservice:8081"
 
-  # Google OAuth callback — build theo domain
-  GoogleOAuth__RedirectUri: "https://api.{{ .Values.global.domain }}/api/auth/google/callback"
-  GoogleOAuth__AllowedRedirectUris__0: "https://api.{{ .Values.global.domain }}/api/auth/google/callback"
-  GoogleOAuth__FrontendCallbackUrl: {{ printf "%s/auth/google-callback" $frontendOrigin | quote }}
+  # Google OAuth callback — redirect_uri là TRANG FE, không phải endpoint API. Trang FE
+  # /auth/google/callback nhận ?code&state rồi gọi lại API bằng XHR (withCredentials) để đổi token.
+  # Login và exchange code phải dùng chính xác cùng một redirect URI đã đăng ký với Google.
+  GoogleOAuth__RedirectUri: {{ printf "%s/auth/google/callback" $frontendOrigin | quote }}
+  GoogleOAuth__AllowedRedirectUris__0: {{ printf "%s/auth/google/callback" $frontendOrigin | quote }}
 
   # Admin invite email link — EmailService append ?token=...
   AdminInvite__AcceptUrlBase: {{ printf "%s/auth/accept-invite" $frontendOrigin | quote }}

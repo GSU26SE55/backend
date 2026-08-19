@@ -671,7 +671,10 @@ public class AuthController : ControllerBase
     /// - Hệ thống tạo giá trị <c>state</c> ngẫu nhiên để chống CSRF OAuth.
     /// - <c>state</c> được lưu trong cookie HttpOnly tên <c>g_oauth_state</c>, thời hạn 10 phút.
     /// - URL authorization của Google được tạo với redirect URI cấu hình trong <c>GoogleOAuth:RedirectUri</c>.
-    /// - Sau khi người dùng chọn Google account, Google redirect về <c>GET /api/auth/google/callback</c>.
+    /// - Sau khi người dùng chọn Google account, Google redirect về trang frontend cấu hình tại
+    ///   <c>GoogleOAuth:RedirectUri</c> (production: <c>/auth/google/callback</c>).
+    /// - Frontend đọc <c>code</c>/<c>state</c> rồi gọi <c>GET /api/auth/google/callback</c>
+    ///   bằng XHR có credentials để backend exchange code.
     ///
     /// Lưu ý:
     /// - Endpoint này trả redirect, không trả JSON token trực tiếp.
@@ -693,8 +696,8 @@ public class AuthController : ControllerBase
     /// Callback Google OAuth, xử lý authorization code và trả token đăng nhập.
     /// </summary>
     /// <remarks>
-    /// Endpoint này là bước 2 của server-side Google OAuth. Google redirect về endpoint này với query string
-    /// <c>?code=...&amp;state=...</c>.
+    /// Endpoint này là bước 2 của server-side Google OAuth. Trang callback frontend chuyển tiếp
+    /// <c>?code=...&amp;state=...</c> từ Google tới endpoint này bằng XHR có credentials.
     ///
     /// Query parameters:
     /// - <c>code</c>: authorization code do Google cấp.
@@ -711,7 +714,7 @@ public class AuthController : ControllerBase
     ///
     /// Response thành công:
     /// - Trả JSON <see cref="LoginResponse"/> chứa access token và refresh token.
-    /// - Endpoint này không redirect về frontend sau callback, phù hợp cho Postman, WebView hoặc custom client flow.
+    /// - Endpoint này trả JSON cho trang callback frontend; endpoint không thực hiện browser redirect.
     /// </remarks>
     /// <param name="code">Authorization code do Google trả về.</param>
     /// <param name="state">State chống CSRF, phải khớp cookie đã lưu ở bước login.</param>
@@ -754,7 +757,9 @@ public class AuthController : ControllerBase
         Response.Cookies.Append(OAuthStateCookie, state, new CookieOptions
         {
             HttpOnly = true,
-            Secure = Request.IsHttps,
+            // AuthService nhận HTTP nội bộ từ ApiGateway nên Request.IsHttps có thể false dù client dùng HTTPS.
+            // Production/Staging vẫn phải bắt buộc Secure để state cookie không bao giờ đi qua HTTP công khai.
+            Secure = ShouldUseSecureOAuthCookie(),
             SameSite = SameSiteMode.Lax,
             MaxAge = TimeSpan.FromMinutes(10),
             Path = "/api/auth"
@@ -762,6 +767,16 @@ public class AuthController : ControllerBase
 
         var authUrl = _googleOAuthHelper.BuildAuthorizationUrl(state, redirectUri);
         return Redirect(authUrl);
+    }
+
+    private bool ShouldUseSecureOAuthCookie()
+    {
+        var environment = _configuration["ASPNETCORE_ENVIRONMENT"]
+                          ?? _configuration["DOTNET_ENVIRONMENT"];
+
+        return Request.IsHttps
+               || string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(environment, "Staging", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
