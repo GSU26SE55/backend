@@ -6,8 +6,10 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.BackgroundJobs;
+using TicketService.Infrastructure.Implements.Utils;
 using TicketService.Infrastructure.Persistence;
 using TicketService.IntegrationTests.Fixtures;
 
@@ -22,8 +24,14 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
     public SlaBreachScenarioTests(TicketApiFactory factory)
     {
         _timeProvider = new FakeTimeProvider();
-        _timeProvider.SetUtcNow(new DateTimeOffset(2026, 6, 1, 10, 0, 0, TimeSpan.Zero));
+        _timeProvider.SetUtcNow(Utc(2026, 8, 19, 7, 48)); // Wednesday 14:48 local
         _outboxWriterMock = new Mock<IIntegrationEventOutboxWriter>();
+        _outboxWriterMock
+            .Setup(x => x.WriteAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _outboxWriterMock
+            .Setup(x => x.WriteAsync(It.IsAny<SlaBreachedEvent>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         _factory = factory.WithWebHostBuilder(builder =>
         {
@@ -31,77 +39,110 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
             {
                 services.RemoveAll<TimeProvider>();
                 services.RemoveAll<IIntegrationEventOutboxWriter>();
-
                 services.AddSingleton<TimeProvider>(_timeProvider);
                 services.AddScoped<IIntegrationEventOutboxWriter>(_ => _outboxWriterMock.Object);
                 services.AddScoped<SlaTimerBackgroundService>();
-                services.AddScoped<EscalationBackgroundService>();
             });
         });
     }
 
     [Fact]
-    public async Task P1Ticket_Should_Escalate_When_Sla_Breached()
+    public async Task P2Timer_ShouldWarnLateDay_RemindOnceNextSession_ThenBreachAtBusinessDeadline()
     {
-        // 1. Create a P1 ticket
-        var client = _factory.CreateClient();
+        _ = _factory.CreateClient();
+        var startedAt = _timeProvider.GetUtcNow().UtcDateTime;
+        var dueAt = new SlaCalculator().CalculateDueDate(startedAt, TicketPriorityEnum.P2High);
+        var ticketId = Guid.NewGuid();
+        var timerId = Guid.NewGuid();
 
-        // Manual setup in DB for testing because we might not have the full create workflow ready/easy to call
-        using (var scope = _factory.Services.CreateScope())
+        await using (var seedScope = _factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
-
-            var ticket = new TicketService.Domain.Entities.Ticket
+            var db = seedScope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            var ticket = new Ticket
             {
-                Id = Guid.NewGuid(),
-                Code = "TKT-001",
-                Title = "Critical System Down",
-                Description = "Major outage",
+                Id = ticketId,
+                Code = "TKT-BUSINESS-HOURS",
+                Title = "Business-hours SLA",
+                Description = "Integration scenario",
+                Category = TicketCategoryEnum.Other,
+                CustomerId = Guid.NewGuid(),
+                BatteryAssetId = Guid.NewGuid(),
                 Status = TicketStatusEnum.InProgress,
-                Priority = TicketPriorityEnum.P1Critical,
-                CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
+                Priority = TicketPriorityEnum.P2High,
+                Origin = TicketOriginEnum.ManualByCustomer,
+                CreatedAt = startedAt,
                 CreatedBy = Guid.NewGuid()
             };
-
-            var timer = new TicketService.Domain.Entities.SlaTimer
-            {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                Status = SlaTimerStatusEnum.Running,
-                StartedAt = ticket.CreatedAt,
-                DueAt = ticket.CreatedAt.AddHours(4), // P1 SLA = 4h
-                OriginalDueAt = ticket.CreatedAt.AddHours(4),
-                Ticket = ticket
-            };
-
             db.Tickets.Add(ticket);
-            db.SlaTimers.Add(timer);
+            db.SlaTimers.Add(new SlaTimer
+            {
+                Id = timerId,
+                TicketId = ticketId,
+                Priority = TicketPriorityEnum.P2High,
+                Status = SlaTimerStatusEnum.Running,
+                StartedAt = startedAt,
+                DueAt = dueAt,
+                OriginalDueAt = dueAt
+            });
             await db.SaveChangesAsync();
-
-            // 2. Advance time to 85% (3.4h later)
-            _timeProvider.Advance(TimeSpan.FromHours(3.5));
-
-            // 3. Run SLA Timer Service manually
-            var slaService = scope.ServiceProvider.GetRequiredService<SlaTimerBackgroundService>();
-            await slaService.CheckSlaViolations(CancellationToken.None);
-
-            // Verify Warning sent
-            await db.Entry(timer).ReloadAsync();
-            var updatedTimer = await db.SlaTimers.FindAsync(timer.Id);
-            updatedTimer!.WarningSentAt.Should().NotBeNull();
-            _outboxWriterMock.Verify(x => x.WriteAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()), Times.Once);
-
-            // 4. Advance time past breach (another 1h)
-            _timeProvider.Advance(TimeSpan.FromHours(1));
-            await slaService.CheckSlaViolations(CancellationToken.None);
-
-            // Verify status is Breached
-            await db.Entry(timer).ReloadAsync();
-            updatedTimer = await db.SlaTimers.FindAsync(timer.Id);
-            updatedTimer!.Status.Should().Be(SlaTimerStatusEnum.Breached);
-
-            // Verify Breached Event Published
-            _outboxWriterMock.Verify(x => x.WriteAsync(It.IsAny<SlaBreachedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         }
+
+        // Exactly 80% consumed on Friday 16:00 local: first warning is late-day.
+        _timeProvider.SetUtcNow(Utc(2026, 8, 21, 9));
+        await RunWorkerOnce();
+        (await LoadTimer(timerId)).WarningSentAt.Should().Be(Utc(2026, 8, 21, 9));
+        _outboxWriterMock.Verify(
+            x => x.WriteAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        // Night/weekend passage neither breaches nor emits the reminder early.
+        _timeProvider.SetUtcNow(Utc(2026, 8, 21, 23, 59)); // Saturday 06:59 local
+        await RunWorkerOnce();
+        var beforeOpening = await LoadTimer(timerId);
+        beforeOpening.Status.Should().Be(SlaTimerStatusEnum.Running);
+        beforeOpening.WarningSentAt.Should().Be(Utc(2026, 8, 21, 9));
+        _outboxWriterMock.Verify(
+            x => x.WriteAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        // Reminder is emitted once when the next eligible SLA session starts.
+        _timeProvider.SetUtcNow(Utc(2026, 8, 22, 0)); // Saturday 07:00 local
+        await RunWorkerOnce();
+        (await LoadTimer(timerId)).WarningSentAt.Should().Be(Utc(2026, 8, 22, 0));
+        _outboxWriterMock.Verify(
+            x => x.WriteAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+
+        _timeProvider.SetUtcNow(Utc(2026, 8, 22, 0, 1));
+        await RunWorkerOnce();
+        _outboxWriterMock.Verify(
+            x => x.WriteAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+
+        _timeProvider.SetUtcNow(dueAt);
+        await RunWorkerOnce();
+        var breached = await LoadTimer(timerId);
+        breached.Status.Should().Be(SlaTimerStatusEnum.Breached);
+        breached.BreachAt.Should().Be(dueAt);
+        _outboxWriterMock.Verify(
+            x => x.WriteAsync(It.IsAny<SlaBreachedEvent>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
+
+    private async Task RunWorkerOnce()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var worker = scope.ServiceProvider.GetRequiredService<SlaTimerBackgroundService>();
+        await worker.CheckSlaViolations(CancellationToken.None);
+    }
+
+    private async Task<SlaTimer> LoadTimer(Guid timerId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+        return (await db.SlaTimers.FindAsync(timerId))!;
+    }
+
+    private static DateTime Utc(int year, int month, int day, int hour, int minute = 0) =>
+        new(year, month, day, hour, minute, 0, DateTimeKind.Utc);
 }

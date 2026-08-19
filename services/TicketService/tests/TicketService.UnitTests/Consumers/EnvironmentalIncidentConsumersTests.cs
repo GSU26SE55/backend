@@ -26,6 +26,7 @@ public class EnvironmentalIncidentConsumersTests
     private readonly Mock<ITicketCodeGenerator> _codeGenerator = new();
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly ISlaCalculator _slaCalculator = new TicketService.Infrastructure.Implements.Utils.SlaCalculator();
+    private readonly Mock<TimeProvider> _timeProvider = new();
 
     public EnvironmentalIncidentConsumersTests()
     {
@@ -35,6 +36,8 @@ public class EnvironmentalIncidentConsumersTests
         _slaTimerRepo.Setup(r => r.GetAllAsync()).Returns(new List<SlaTimer>().AsQueryable().BuildMock());
         _codeGenerator.Setup(g => g.GenerateAsync()).ReturnsAsync("TKT-ENV-001");
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _timeProvider.Setup(t => t.GetUtcNow())
+            .Returns(new DateTimeOffset(2026, 8, 17, 2, 0, 0, TimeSpan.Zero));
     }
 
     private static ConsumeContext<T> Ctx<T>(T msg) where T : class
@@ -52,7 +55,7 @@ public class EnvironmentalIncidentConsumersTests
 
     private TicketEnvironmentalIncidentDetectedConsumer BuildDetected() =>
         new(_uow.Object, _codeGenerator.Object, _slaCalculator, _activityLogger.Object, _outboxWriter.Object,
-            NullLogger<TicketEnvironmentalIncidentDetectedConsumer>.Instance);
+            _timeProvider.Object, NullLogger<TicketEnvironmentalIncidentDetectedConsumer>.Instance);
 
     private TicketEnvironmentalIncidentResolvedConsumer BuildResolved() =>
         new(_uow.Object, _activityLogger.Object, NullLogger<TicketEnvironmentalIncidentResolvedConsumer>.Instance);

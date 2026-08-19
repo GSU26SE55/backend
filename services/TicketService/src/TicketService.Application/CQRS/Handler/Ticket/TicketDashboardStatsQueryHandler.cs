@@ -118,22 +118,6 @@ public class TicketDashboardStatsQueryHandler
             }
         }
 
-        if (staffTicketsMap.Count == 0)
-        {
-            var legacyAssignments = await ticketsQuery
-                .Where(t => !TicketStatusGroups.Terminal.Contains(t.Status) && t.PrimaryHandlerStaffId != null)
-                .Select(t => new { t.Id, StaffId = t.PrimaryHandlerStaffId!.Value })
-                .ToListAsync(cancellationToken);
-
-            foreach (var assignment in legacyAssignments)
-            {
-                if (!staffTicketsMap.TryGetValue(assignment.StaffId, out var set))
-                    staffTicketsMap[assignment.StaffId] = set = new HashSet<Guid>();
-
-                set.Add(assignment.Id);
-            }
-        }
-
         var openCountByStaff = staffTicketsMap
             .Select(pair => new StaffOpenCountDto
             {

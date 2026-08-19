@@ -27,12 +27,29 @@ namespace TicketService.Infrastructure.DependencyInjection;
 
 public static class ManageDependencyInjection
 {
-    [Obsolete]
     public static IServiceCollection AddTicketServiceInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDatabase(configuration);
         services.AddRepositories();
         services.AddHelpers();
+        services.AddOptions<SlaBusinessHoursOptions>()
+            .Bind(configuration.GetSection(SlaBusinessHoursOptions.SectionName))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.TimeZoneId)
+                                 && SlaBusinessHoursOptions.IsValidTimeZone(options.TimeZoneId),
+                "SlaBusinessHours:TimeZoneId must be a valid time zone identifier.")
+            .Validate(options => options.Start >= TimeSpan.Zero
+                                 && options.End <= TimeSpan.FromDays(1)
+                                 && options.Start < options.End,
+                "SlaBusinessHours must define a non-empty interval within one day.")
+            .Validate(options => options.WorkingDays is { Length: > 0 }
+                                 && options.WorkingDays.All(Enum.IsDefined),
+                "SlaBusinessHours:WorkingDays must contain valid working days.")
+            .Validate(options => options.Start == TimeSpan.FromHours(7)
+                                 && options.End == TimeSpan.FromHours(17)
+                                 && options.WorkingDays.Distinct().Count() == 7,
+                "SlaBusinessHours must be 07:00-17:00 on all seven days.")
+            .ValidateOnStart();
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddOptions<TicketScheduleOptions>()
             .Bind(configuration.GetSection(TicketScheduleOptions.SectionName))
             .Validate(options => options.CurrentWindowMinutes > 0, "Ticket:Schedule:CurrentWindowMinutes must be greater than zero.")
@@ -51,7 +68,7 @@ public static class ManageDependencyInjection
 
         // Sprint 5B #237/#238 + #566 — add Sagas + consumers vào MassTransit bus.
         // FIX duplicate-ticket — khi Saga bật, consumer cũ TicketBatteryAnomalyDetectedConsumer
-        // ([Obsolete] #238) PHẢI không được đăng ký, nếu không cả 2 cùng tạo ticket từ 1 alert
+        // Consumer fallback #238 PHẢI không được đăng ký, nếu không cả 2 cùng tạo ticket từ 1 alert
         // (gây trùng mã ticket → 23505 duplicate key IX_tickets_code).
         var sagaEnabled = configuration.GetValue(
             $"{AlertTicketSagaOptions.SectionName}:{nameof(AlertTicketSagaOptions.AlertTicketSagaEnabled)}",
@@ -131,6 +148,8 @@ public static class ManageDependencyInjection
         services.AddScoped<ITicketCodeGenerator, TicketCodeGenerator>();
         services.AddScoped<IKbCodeGenerator, KbCodeGenerator>();
         services.AddScoped<ISlaCalculator, SlaCalculator>();
+        services.AddScoped<ISlaBusinessCalendarProvider, SlaBusinessCalendarProvider>();
+        services.AddScoped<ISlaDeadlineReconciler, SlaDeadlineReconciler>();
         services.AddScoped<ISlaService, SlaService>();
 
         // Override CurrentUserService from Shared

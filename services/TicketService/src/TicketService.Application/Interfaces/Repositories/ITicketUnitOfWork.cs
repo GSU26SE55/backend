@@ -17,6 +17,7 @@ public interface ITicketUnitOfWork : IUnitOfWork
     IGenericRepository<TicketAttachment> TicketAttachments { get; }
     IGenericRepository<SlaTimer> SlaTimers { get; }
     IGenericRepository<SlaPauseEvent> SlaPauseEvents { get; }
+    IGenericRepository<SlaNonWorkingPeriod> SlaNonWorkingPeriods { get; }
     IGenericRepository<MaintenanceLog> MaintenanceLogs { get; }
     IGenericRepository<OutboxMessage> OutboxMessages { get; }
     IGenericRepository<CustomerAccount> CustomerAccounts { get; }

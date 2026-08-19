@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Ticket;
@@ -18,12 +19,16 @@ public class MyTicketDashboardStatsAsStaffQueryHandler
 
     private readonly ITicketUnitOfWork _unitOfWork;
     private readonly ITicketCurrentUserService _currentUserService;
+    private readonly ISlaCalculator _slaCalculator;
 
     public MyTicketDashboardStatsAsStaffQueryHandler(
-        ITicketUnitOfWork unitOfWork, ITicketCurrentUserService currentUserService)
+        ITicketUnitOfWork unitOfWork,
+        ITicketCurrentUserService currentUserService,
+        ISlaCalculator slaCalculator)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _slaCalculator = slaCalculator;
     }
 
     public async Task<CommonResponse<StaffTicketDashboardStatsDto>> Handle(
@@ -95,8 +100,9 @@ public class MyTicketDashboardStatsAsStaffQueryHandler
             .Select(t => new
             {
                 t.SlaTimer!.Status,
-                t.SlaTimer.StartedAt,
-                t.SlaTimer.DueAt
+                t.SlaTimer.Priority,
+                t.SlaTimer.DueAt,
+                t.SlaTimer.CurrentPauseStartedAt
             })
             .ToListAsync(cancellationToken);
 
@@ -105,7 +111,13 @@ public class MyTicketDashboardStatsAsStaffQueryHandler
         var pausedCount = monitoredTimers.Count(x => x.Status == SlaTimerStatusEnum.Paused);
         var nearBreachCount = monitoredTimers.Count(x =>
             x.Status == SlaTimerStatusEnum.Running &&
-            TicketQueryHelper.ComputeRemainingPercent(x.Status, x.StartedAt, x.DueAt, now) <= NearBreachThresholdPercent);
+            TicketQueryHelper.ComputeRemainingPercent(
+                _slaCalculator,
+                x.Status,
+                x.Priority,
+                x.DueAt,
+                x.CurrentPauseStartedAt,
+                now) <= NearBreachThresholdPercent);
 
         var slaRisk = new SlaRiskDto
         {

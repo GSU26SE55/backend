@@ -34,6 +34,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
     private readonly ISlaCalculator _slaCalculator;
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<TicketEnvironmentalIncidentDetectedConsumer> _logger;
 
     public TicketEnvironmentalIncidentDetectedConsumer(
@@ -42,6 +43,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
         ISlaCalculator slaCalculator,
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
+        TimeProvider timeProvider,
         ILogger<TicketEnvironmentalIncidentDetectedConsumer> logger)
     {
         _uow = uow;
@@ -49,6 +51,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
         _slaCalculator = slaCalculator;
         _activityLogger = activityLogger;
         _outboxWriter = producer;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -67,7 +70,9 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
         }
 
         var priority = MapSeverityToPriority(evt.Severity);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(now);
+        var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, priority);
         var code = await _codeGenerator.GenerateAsync();
 
         var ticket = new Ticket
@@ -95,9 +100,9 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
             Priority = priority,
-            StartedAt = now,
-            DueAt = _slaCalculator.CalculateDueDate(now, priority),
-            OriginalDueAt = _slaCalculator.CalculateDueDate(now, priority),
+            StartedAt = effectiveStartedAt,
+            DueAt = dueAt,
+            OriginalDueAt = dueAt,
             Status = SlaTimerStatusEnum.Running
         });
 

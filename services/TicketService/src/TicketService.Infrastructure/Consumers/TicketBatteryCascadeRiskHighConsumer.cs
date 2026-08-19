@@ -42,6 +42,7 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
     private readonly ISlaCalculator _slaCalculator;   // Sprint Bonus NS-12 (#656)
     private readonly ITicketCodeGenerator _codeGenerator;   // Sprint Bonus NS-13 (#657)
     private readonly IIntegrationEventOutboxWriter _outboxWriter;     // Sprint Bonus NS-13 (#657)
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<TicketBatteryCascadeRiskHighConsumer> _logger;
 
     public TicketBatteryCascadeRiskHighConsumer(
@@ -50,6 +51,7 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
         ISlaCalculator slaCalculator,
         ITicketCodeGenerator codeGenerator,
         IIntegrationEventOutboxWriter producer,
+        TimeProvider timeProvider,
         ILogger<TicketBatteryCascadeRiskHighConsumer> logger)
     {
         _uow = uow;
@@ -57,6 +59,7 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
         _slaCalculator = slaCalculator;
         _codeGenerator = codeGenerator;
         _outboxWriter = producer;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -111,11 +114,14 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
         // (4h). Không đổi DueAt thì deadline vẫn là của priority cũ (vd 72h P3) — "P1 = SLA 4h" vô
         // nghĩa. Reset WarningSentAt để background service đánh giá lại mốc 80% theo deadline mới.
         var timer = await _uow.SlaTimers.GetAllAsync()
-            .FirstOrDefaultAsync(t => t.TicketId == ticket.Id, ct);
+            .FirstOrDefaultAsync(t => t.TicketId == ticket.Id && !t.IsDeleted, ct);
         if (timer is not null && timer.Status == SlaTimerStatusEnum.Running)
         {
             timer.Priority = TicketPriorityEnum.P1Critical;
-            timer.DueAt = _slaCalculator.CalculateDueDate(timer.StartedAt, TicketPriorityEnum.P1Critical);
+            timer.OriginalDueAt = _slaCalculator.CalculateDueDate(
+                timer.StartedAt, TicketPriorityEnum.P1Critical);
+            timer.DueAt = _slaCalculator.AddWorkingMinutes(
+                timer.OriginalDueAt, timer.TotalPausedMinutes);
             timer.WarningSentAt = null;
             _uow.SlaTimers.UpdateAsync(timer);
         }
@@ -144,7 +150,9 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
     /// </summary>
     private async Task AutoCreateP1TicketAsync(BatteryCascadeRiskHighEvent evt, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(now);
+        var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, TicketPriorityEnum.P1Critical);
         var code = await _codeGenerator.GenerateAsync();
 
         var ticket = new Ticket
@@ -171,9 +179,9 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
             Priority = TicketPriorityEnum.P1Critical,
-            StartedAt = now,
-            DueAt = _slaCalculator.CalculateDueDate(now, TicketPriorityEnum.P1Critical),
-            OriginalDueAt = _slaCalculator.CalculateDueDate(now, TicketPriorityEnum.P1Critical),
+            StartedAt = effectiveStartedAt,
+            DueAt = dueAt,
+            OriginalDueAt = dueAt,
             Status = SlaTimerStatusEnum.Running
         });
 
