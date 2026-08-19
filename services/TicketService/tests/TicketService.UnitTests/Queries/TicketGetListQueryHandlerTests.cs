@@ -34,7 +34,7 @@ public class TicketGetListQueryHandlerTests
     }
 
     private static Ticket MakeTicket(
-        TicketStatusEnum status = TicketStatusEnum.Open,
+        TicketStatusEnum status = TicketStatusEnum.Pending,
         TicketPriorityEnum? priority = null,
         TicketCategoryEnum category = TicketCategoryEnum.Other,
         string title = "Test Ticket",
