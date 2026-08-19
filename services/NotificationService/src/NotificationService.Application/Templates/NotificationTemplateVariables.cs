@@ -98,7 +98,7 @@ public static class NotificationTemplateVariables
             [NotificationTypeEnum.BatteryAnomalyWarning] = BatteryAnomalyKeys,
             [NotificationTypeEnum.BatteryAnomalyInfo] = BatteryAnomalyKeys,
             [NotificationTypeEnum.BatteryAlertEscalationPending] =
-                ["alertId", "batteryAssetId", "anomalyType", "severity", "minutesSinceDetection"],
+                ["alertId", "assetSerialNumber", "batteryAssetId", "anomalyType", "severity", "minutesSinceDetection"],
             [NotificationTypeEnum.CascadeRiskHigh] =
                 ["batteryAssetId", "siteId", "cascadeRiskScore", "relatedTicketId", "screen"],
             [NotificationTypeEnum.AlertTicketSagaFailed] =

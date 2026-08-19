@@ -189,6 +189,10 @@ pipeline {
 
                             ./deploy/scripts/verify-postgres-backup-policy.sh \
                               rendered-production.yaml
+
+                            ./deploy/scripts/verify-geoip-production.sh \
+                              rendered-production.yaml \
+                              /opt/solar-platform/geoip/GeoLite2-City.mmdb
                         '''
                     }
                 }

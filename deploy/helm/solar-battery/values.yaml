@@ -213,6 +213,13 @@ services:
     digest: ""
     replicas: 1
     port: 8080
+    # GeoLite2 is licensed operational data and must not be committed into the
+    # image/repository. Production mounts a host-managed MMDB read-only.
+    geoIp:
+      enabled: false
+      required: false
+      hostPath: ""
+      mountPath: /app/geoip/GeoLite2-City.mmdb
     resources:
       requests: { cpu: 100m, memory: 192Mi }
       limits:   { cpu: 500m, memory: 512Mi }
@@ -458,7 +465,7 @@ config:
   AnomalyEngine__ScanIntervalSeconds: "30"
   AnomalyEngine__DedupWindowMinutes: "30"
   AnomalyEngine__OfflineThresholdMinutes: "10"
-  AnomalyEngine__EscalationAfterMinutes: "5"
+  AnomalyEngine__EscalationAfterMinutes: "1"
   AnomalyEngine__EscalationIntervalSeconds: "60"
   AnomalyEngine__OutboxRelayIntervalSeconds: "5"
   AnomalyEngine__OutboxRelayBatchSize: "100"

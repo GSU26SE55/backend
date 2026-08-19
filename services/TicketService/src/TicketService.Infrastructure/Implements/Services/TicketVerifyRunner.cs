@@ -68,6 +68,29 @@ public class TicketVerifyRunner : ITicketVerifyRunner
         }
 
         // Dò candidate trùng: ticket khác cùng pin, cùng customer, còn mở, chưa merge.
+        //
+        // Lọc theo `Category` chỉ đúng khi CẢ HAI ticket đều do máy sinh, và khi đó là bắt buộc:
+        // mô tả auto dùng CHUNG một template ("Measured value X, exceeding the allowed threshold
+        // Y. Detected at … on device …"), phần khác nhau duy nhất là con số lại bị Jaccard tách
+        // thành token rời ("00", "18") nên gần như vô hình. Đo thật: Overheat 72°C và Undertemp
+        // −18°C trên cùng viên pin ra 58% tương đồng, vượt DUPLICATE_THRESHOLD 0.45 ⇒ hai lỗi
+        // ngược hẳn nhau bị gắn "Suspected duplicate". AI chỉ CỘNG 0.15 khi cùng category, KHÔNG
+        // trừ khi khác, nên nó không tự loại được ứng viên khác loại.
+        //
+        // Nhưng áp cùng luật đó cho ticket NGƯỜI tạo thì lại bỏ sót đúng ca cần merge nhất:
+        // Customer chỉ chọn được 4 mục thô (Charging / Overheat / NoPower / Other) trong khi máy
+        // gán 6 category tinh. Người thấy pin chai chọn "Other", máy phát hiện SohDegradation gán
+        // "Performance" — cùng một sự cố, khác category, và filter cứng sẽ loại thẳng ứng viên
+        // đó. Hệ quả là hai ticket song song cho một sự cố, không ai biết chúng trùng nhau.
+        //
+        // Việc chọn luật nào đã chuyển hẳn sang AI (`is_machine_written` trong VerifyTicketRequest):
+        // nó có đủ ngữ cảnh để so category, khoảng cách thời gian và mô tả cùng lúc, còn ở đây
+        // thì chỉ lọc được bằng SQL. Bộ lọc `isMachinePair` cũ đã bỏ — giữ lại là hai nơi cùng
+        // quyết một chuyện với hai định nghĩa "máy" khác nhau (BE tính mỗi AutoFromAlert, AI tính
+        // cả System), và ứng viên bị SQL loại thì AI không bao giờ thấy để mà cân nhắc.
+        //
+        // Tầng này giờ chỉ giới hạn PHẠM VI: ticket khác, cùng pin, cùng khách hàng, còn mở và
+        // chưa merge. Đó là những điều kiện cứng của nghiệp vụ, không phải phán đoán.
         var candidates = new List<DuplicateCandidateDto>();
         if (ticket.BatteryAssetId != Guid.Empty)
         {
@@ -81,14 +104,16 @@ public class TicketVerifyRunner : ITicketVerifyRunner
                     && OpenStatuses.Contains(t.Status))
                 .OrderByDescending(t => t.CreatedAt)
                 .Take(_options.MaxDuplicateCandidates)
-                .Select(t => new { t.Id, t.Description, t.Category })
+                .Select(t => new { t.Id, t.Description, t.Category, t.DetectedAt, t.Origin })
                 .ToListAsync(ct);
 
             candidates = raw.Select(t => new DuplicateCandidateDto
             {
                 TicketId = t.Id.ToString(),
                 Description = t.Description,
-                Category = (int)t.Category
+                Category = (int)t.Category,
+                DetectedAt = t.DetectedAt,
+                IsMachineWritten = t.Origin is TicketOriginEnum.AutoFromAlert or TicketOriginEnum.System
             }).ToList();
         }
 
@@ -97,7 +122,11 @@ public class TicketVerifyRunner : ITicketVerifyRunner
         TicketSensorSnapshotDto? sensor = null;
         if (ticket.BatteryAssetId != Guid.Empty)
         {
-            sensor = await _sensorClient.GetSnapshotAsync(ticket.BatteryAssetId, ct);
+            // Truyền `DetectedAt` để snapshot bám vào lúc XẢY RA sự cố, không phải lúc chạy
+            // verify. Ticket máy sinh mang đúng mốc alert nên không đổi hành vi; ticket người
+            // tạo mới là chỗ khác biệt — họ khai báo muộn, pin đã trở lại bình thường.
+            sensor = await _sensorClient.GetSnapshotAsync(
+                ticket.BatteryAssetId, ticket.DetectedAt, ct);
             if (sensor is not null)
                 _logger.LogInformation(
                     "TicketVerify: {Code} — đọc sensor pin thật (SOH={Soh:F0}% Temp={Temp:F0}°C Alert={Alert}).",
@@ -111,6 +140,7 @@ public class TicketVerifyRunner : ITicketVerifyRunner
             (int)ticket.Category,
             sensor,
             candidates,
+            isMachineWritten: ticket.Origin is TicketOriginEnum.AutoFromAlert or TicketOriginEnum.System,
             ct);
 
         if (result is null)

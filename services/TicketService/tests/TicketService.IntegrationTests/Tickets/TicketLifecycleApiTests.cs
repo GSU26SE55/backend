@@ -86,7 +86,7 @@ public class TicketLifecycleApiTests : IClassFixture<TicketApiFactory>
         {
             ResolutionSummary = "Fixed by integration test"
         };
-        var resolveRes = await _client.PostAsJsonAsync($"/api/staff/tickets/{ticket.Id}/resolve", resolveCmd);
+        var resolveRes = await _client.PostAsJsonAsync($"/api/staff/tickets/{ticket.Id}/complete", resolveCmd);
         resolveRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // 4. Approve Ticket (Manager)

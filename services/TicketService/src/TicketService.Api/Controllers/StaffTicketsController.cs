@@ -128,7 +128,7 @@ public class StaffTicketsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Báo cáo thành công.</response>
     /// <response code="403">Không đủ thẩm quyền (với ticket đã Escalated).</response>
-    [HttpPost("{id}/resolve")]
+    [HttpPost("{id}/complete")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]

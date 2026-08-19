@@ -15,5 +15,6 @@ public interface IAiTicketVerifyClient
         int category,
         TicketSensorSnapshotDto? sensor,
         IReadOnlyList<DuplicateCandidateDto> candidates,
+        bool isMachineWritten,
         CancellationToken ct);
 }

@@ -12,6 +12,15 @@ public class TicketSensorSnapshotDto
     public double Temperature { get; set; }
     public double SocPercent { get; set; }
     public bool HasActiveAlert { get; set; }
+
+    /// <summary>
+    /// Ngưỡng của loại pin, đi kèm số đo để AI verify chấm bằng đúng giới hạn mà
+    /// <c>AnomalyRules</c> đã áp. 0 = chưa cấu hình ⇒ AI bỏ qua luật tương ứng.
+    /// </summary>
+    public double TemperatureMax { get; set; }
+    public double TemperatureMin { get; set; }
+    public double SocWarningThreshold { get; set; }
+    public double SohWarningThreshold { get; set; }
 }
 
 /// <summary>1 ticket ứng viên để so trùng mô tả (đang mở, cùng pin).</summary>
@@ -20,6 +29,18 @@ public class DuplicateCandidateDto
     public string TicketId { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public int Category { get; set; }
+
+    /// <summary>Mốc phát hiện sự cố (UTC) — AI so khoảng cách thời gian giữa hai ticket.</summary>
+    public DateTime? DetectedAt { get; set; }
+
+    /// <summary>
+    /// Mô tả do MÁY sinh từ template cố định (<c>AutoFromAlert</c> / <c>System</c>).
+    ///
+    /// <para>AI chọn thuật toán dò trùng theo cờ này, vì hai loại mô tả hỏng theo hai kiểu ngược
+    /// nhau: mô tả máy dùng chung template nên đếm-từ-chung cho điểm cao giả tạo giữa các lỗi
+    /// khác hẳn nhau, còn mô tả người viết thì cùng một sự cố lại gần như không chung từ nào.</para>
+    /// </summary>
+    public bool IsMachineWritten { get; set; }
 }
 
 /// <summary>

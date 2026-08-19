@@ -116,11 +116,16 @@ public class TicketAccountStatusChangedConsumer : IConsumer<AccountStatusChanged
         // biến thành mất message vĩnh viễn (gửi lại thấy dấu → bỏ qua → ACK).
         await context.ProcessOnceAsync(_inbox, nameof(TicketAccountStatusChangedConsumer), async () =>
         {
+            // Event mang số của enum bên AuthService, KHÔNG phải của enum bên này — hai enum lệch
+            // nhau một bậc. Ép kiểu thẳng thì Locked(2) của Auth rơi trúng Active(2) của Ticket,
+            // tức là khoá tài khoản lại làm nó hợp lệ để giao ticket. Xem AuthAccountStatusMapper.
+            var status = AuthAccountStatusMapper.FromAuthStatus(@event.NewStatus);
+
             var staff = await _uow.StaffAccounts.GetAllAsync()
                 .FirstOrDefaultAsync(s => s.AccountId == @event.AccountId, context.CancellationToken);
             if (staff != null)
             {
-                staff.Status = (AccountStatusEnum)@event.NewStatus;
+                staff.Status = status;
                 staff.LastSyncedAt = DateTime.UtcNow;
                 _uow.StaffAccounts.UpdateAsync(staff);
             }
@@ -129,7 +134,7 @@ public class TicketAccountStatusChangedConsumer : IConsumer<AccountStatusChanged
                 .FirstOrDefaultAsync(c => c.AccountId == @event.AccountId, context.CancellationToken);
             if (customer != null)
             {
-                customer.Status = (AccountStatusEnum)@event.NewStatus;
+                customer.Status = status;
                 customer.LastSyncedAt = DateTime.UtcNow;
                 _uow.CustomerAccounts.UpdateAsync(customer);
             }

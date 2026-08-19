@@ -77,7 +77,7 @@ public class TicketCompletionAndReopenScenarioTests : IClassFixture<TicketApiFac
             Notes = "Assigned"
         })).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        (await _client.PostAsJsonAsync($"/api/staff/tickets/{id}/resolve", new TicketResolveCommand
+        (await _client.PostAsJsonAsync($"/api/staff/tickets/{id}/complete", new TicketResolveCommand
         {
             ResolutionSummary = "Resolved by E2E"
         })).StatusCode.Should().Be(HttpStatusCode.OK);

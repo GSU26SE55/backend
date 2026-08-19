@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily MaxMind GeoLite2 City database synchronization
+
+[Timer]
+OnBootSec=5min
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+Unit=solar-geoip-sync.service
+
+[Install]
+WantedBy=timers.target

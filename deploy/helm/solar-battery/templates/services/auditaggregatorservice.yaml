@@ -75,9 +75,21 @@ spec:
             secretKeyRef: { name: solar-secrets, key: POSTGRES_PASSWORD }
         - name: ConnectionStrings__AuditAggregatorDb
           value: "Host=postgres;Port=5432;Database={{ .Values.postgres.auditAggregatorDatabase }};Username={{ .Values.postgres.username }};Password=$(POSTGRES_PASSWORD);Maximum Pool Size={{ .Values.postgres.connectionPool.maximumPoolSize }};Minimum Pool Size={{ .Values.postgres.connectionPool.minimumPoolSize }}"
+        {{- if $svc.geoIp.enabled }}
+        - name: GeoIp__DbPath
+          value: {{ $svc.geoIp.mountPath | quote }}
+        - name: GeoIp__Required
+          value: {{ $svc.geoIp.required | quote }}
+        {{- end }}
         envFrom:
         - configMapRef: { name: solar-config }
         - secretRef:    { name: solar-secrets }
+        {{- if $svc.geoIp.enabled }}
+        volumeMounts:
+        - name: geoip-database
+          mountPath: {{ $svc.geoIp.mountPath | quote }}
+          readOnly: true
+        {{- end }}
         startupProbe:
           httpGet: { path: /metrics, port: http }
           failureThreshold: 30
@@ -91,6 +103,13 @@ spec:
           initialDelaySeconds: 20
         resources:
           {{- toYaml $svc.resources | nindent 10 }}
+      {{- if $svc.geoIp.enabled }}
+      volumes:
+      - name: geoip-database
+        hostPath:
+          path: {{ required "services.auditaggregatorservice.geoIp.hostPath is required when GeoIP is enabled" $svc.geoIp.hostPath | quote }}
+          type: File
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
