@@ -26,7 +26,8 @@ public class AuthControllerTests
         _config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["GoogleOAuth:RedirectUri"] = "https://test/api/auth/google/callback"
+                ["GoogleOAuth:RedirectUri"] = "https://web.test/auth/google/callback",
+                ["ASPNETCORE_ENVIRONMENT"] = "Production"
             })
             .Build();
     }
@@ -211,6 +212,10 @@ public class AuthControllerTests
         // State cookie phải được append
         ctx.Response.Headers.SetCookie.ToString().Should().Contain("g_oauth_state=");
         ctx.Response.Headers.SetCookie.ToString().Should().Contain("path=/api/auth");
+        ctx.Response.Headers.SetCookie.ToString().Should().Contain("secure");
+        _google.Verify(g => g.BuildAuthorizationUrl(
+            It.IsAny<string>(),
+            "https://web.test/auth/google/callback"), Times.Once);
     }
 
     [Fact]
@@ -273,7 +278,9 @@ public class AuthControllerTests
 
         result!.StatusCode.Should().Be(200);
         _mediator.Verify(m => m.Send(
-            It.Is<GoogleCallbackCommand>(c => c.Code == "code-y"),
+            It.Is<GoogleCallbackCommand>(c =>
+                c.Code == "code-y"
+                && c.RedirectUri == "https://web.test/auth/google/callback"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -1184,11 +1184,13 @@ Reset token chỉ dùng được **1 lần**. Sau khi validate JWT pass, handler
 
 **Lưu ý bảo mật:** Redirect URI không nhận từ query/body của client. Whitelist hiện tại là redirect URI cố định trong cấu hình `GoogleOAuth:RedirectUri` hoặc `GOOGLE_REDIRECT_URI` đã đăng ký với Google; request không thể truyền URI khác. Backend đồng thời sinh cookie HttpOnly `g_oauth_state` để chống CSRF OAuth.
 
+> ⚠️ **`GoogleOAuth:RedirectUri` PHẢI là trang FE `{web-origin}/auth/google/callback`, KHÔNG phải endpoint API.** Google điều hướng **cả browser** tới giá trị này; nếu trỏ vào `https://api.{domain}/api/auth/google/callback` thì user nhìn thấy JSON access/refresh token thô trong tab trình duyệt. Luồng đúng: `/google/login` → Google → **trang FE** `/auth/google/callback` → FE gọi XHR `GET /api/auth/google/callback?code&state` (kèm `withCredentials`) → nhận `LoginResultDto`.
+
 ---
 
 ### `GET /api/auth/google/callback`
 
-**Mục đích:** Server-side callback sau khi Google redirect về. Exchange authorization code lấy token.
+**Mục đích:** Endpoint server-side để trang callback frontend exchange authorization code lấy token. Google redirect về trang FE; FE chuyển tiếp `code`/`state` tới endpoint này bằng XHR có credentials.
 
 **Auth:** Không yêu cầu
 
@@ -1206,7 +1208,7 @@ Reset token chỉ dùng được **1 lần**. Sau khi validate JWT pass, handler
 
 **`GoogleOAuth:AllowedRedirectUris` (config array):**
 
-Backend đọc `GoogleOAuth:AllowedRedirectUris` (array) từ config. Nếu set, redirect URI dùng để exchange phải nằm trong whitelist; mismatch → 400 *"RedirectUri không hợp lệ."* Nếu **array rỗng** (default) thì handler không enforce — `GoogleOAuth:RedirectUri` đơn (1 giá trị) ở `/google/login` vẫn được dùng để gen authorization URL. Production luôn nên set whitelist non-empty để defense-in-depth.
+Backend đọc `GoogleOAuth:AllowedRedirectUris` (array) từ config. Nếu set, redirect URI dùng để exchange phải nằm trong whitelist; mismatch → 400 *"RedirectUri không hợp lệ."* Nếu **array rỗng** (default) thì handler không enforce — `GoogleOAuth:RedirectUri` đơn (1 giá trị) ở `/google/login` vẫn được dùng để gen authorization URL. Production chỉ cấu hình **một URI chuẩn** là `https://solars.io.vn/auth/google/callback` cho cả login và code exchange để tránh `redirect_uri_mismatch`.
 
 **#AUTH-20 — Email mismatch policy (3 nhánh):**
 
