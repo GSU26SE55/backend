@@ -42,23 +42,28 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
     private static SlaTimer HealthyTimer() => new()
     {
         Id = Guid.NewGuid(),
+        Priority = TicketPriorityEnum.P3Normal,
         Status = SlaTimerStatusEnum.Running,
         StartedAt = DateTime.UtcNow.AddMinutes(-10),
-        DueAt = DateTime.UtcNow.AddMinutes(100)
+        DueAt = new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
+            .AddWorkingMinutes(DateTime.UtcNow, 3000)
     };
 
     /// <summary>Timer Running còn ~9% thời gian — sắp breach (≤25%).</summary>
     private static SlaTimer NearBreachTimer() => new()
     {
         Id = Guid.NewGuid(),
+        Priority = TicketPriorityEnum.P3Normal,
         Status = SlaTimerStatusEnum.Running,
         StartedAt = DateTime.UtcNow.AddMinutes(-100),
-        DueAt = DateTime.UtcNow.AddMinutes(10)
+        DueAt = new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
+            .AddWorkingMinutes(DateTime.UtcNow, 600)
     };
 
     private static SlaTimer Timer(SlaTimerStatusEnum status) => new()
     {
         Id = Guid.NewGuid(),
+        Priority = TicketPriorityEnum.P3Normal,
         Status = status,
         StartedAt = DateTime.UtcNow.AddHours(-2),
         DueAt = DateTime.UtcNow.AddHours(2)
@@ -71,7 +76,9 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: tickets,
             assignmentSeed: assignments);
-        return new MyTicketDashboardStatsAsStaffQueryHandler(uow.Object, _mockCurrentUserService.Object);
+        return new MyTicketDashboardStatsAsStaffQueryHandler(
+            uow.Object, _mockCurrentUserService.Object,
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator());
     }
 
     [Fact]

@@ -128,7 +128,8 @@ public class TicketActivationService : ITicketActivationService
             return;
         }
 
-        var dueAt = _slaCalculator.CalculateDueDate(nowUtc, priority);
+        var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(nowUtc);
+        var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, priority);
         if (timer is null)
         {
             await _uow.SlaTimers.AddAsync(new SlaTimer
@@ -136,7 +137,7 @@ public class TicketActivationService : ITicketActivationService
                 Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
                 Priority = priority,
-                StartedAt = nowUtc,
+                StartedAt = effectiveStartedAt,
                 DueAt = dueAt,
                 OriginalDueAt = dueAt,
                 Status = SlaTimerStatusEnum.Running
@@ -145,7 +146,7 @@ public class TicketActivationService : ITicketActivationService
         }
 
         timer.Priority = priority;
-        timer.StartedAt = nowUtc;
+        timer.StartedAt = effectiveStartedAt;
         timer.DueAt = dueAt;
         timer.OriginalDueAt = dueAt;
         timer.TotalPausedMinutes = 0;
@@ -166,9 +167,10 @@ public class TicketActivationService : ITicketActivationService
         if (pause is not null)
         {
             pause.ResumedAt = nowUtc;
-            pause.DurationMinutes = Math.Max(0, (int)(nowUtc - pause.PausedAt).TotalMinutes);
+            pause.DurationMinutes = Math.Max(0,
+                (int)_slaCalculator.GetWorkingMinutesBetween(pause.PausedAt, nowUtc));
             timer.TotalPausedMinutes += pause.DurationMinutes.Value;
-            timer.DueAt = timer.DueAt.AddMinutes(pause.DurationMinutes.Value);
+            timer.DueAt = _slaCalculator.AddWorkingMinutes(timer.DueAt, pause.DurationMinutes.Value);
         }
         timer.Status = SlaTimerStatusEnum.Running;
         timer.CurrentPauseStartedAt = null;

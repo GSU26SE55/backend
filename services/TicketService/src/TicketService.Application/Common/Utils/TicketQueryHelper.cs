@@ -1,5 +1,6 @@
 using TicketService.Application.DTOs.Response.SLA;
 using TicketService.Application.DTOs.Response.Tickets;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
@@ -8,6 +9,8 @@ namespace TicketService.Application.Common.Utils;
 public static class TicketQueryHelper
 {
     /// <param name="t">Entity Ticket nguồn.</param>
+    /// <param name="slaCalculator">Business clock dùng để tính SLA còn lại.</param>
+    /// <param name="atUtc">Thời điểm UTC dùng cho phép tính SLA.</param>
     /// <param name="hasUnreadChat">Ticket có tin nhắn chưa đọc với actor hiện tại.</param>
     /// <param name="staffNames">
     /// Map StaffId → FullName để điền <c>TicketAssignmentDTO.StaffName</c>.
@@ -15,6 +18,8 @@ public static class TicketQueryHelper
     /// </param>
     internal static TicketDTO MapToTicketDTO(
         Ticket t,
+        ISlaCalculator slaCalculator,
+        DateTime atUtc,
         bool hasUnreadChat = false,
         IReadOnlyDictionary<Guid, string>? staffNames = null) => new()
         {
@@ -53,7 +58,7 @@ public static class TicketQueryHelper
             ActiveIncidentEpisodeId = t.ActiveIncidentEpisodeId?.ToString(),
             CreatedAt = t.CreatedAt,
             UpdatedAt = t.UpdatedAt,
-            SlaTimer = MapToSlaTimerDTO(t.SlaTimer),
+            SlaTimer = MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc),
             HasUnreadChat = hasUnreadChat,
             DetectedAt = t.DetectedAt,
             BatterySerialNumber = t.BatterySerialNumber,
@@ -66,7 +71,10 @@ public static class TicketQueryHelper
             CloseReason = t.CloseReason
         };
 
-    internal static SlaTimerDTO? MapToSlaTimerDTO(SlaTimer? sla)
+    internal static SlaTimerDTO? MapToSlaTimerDTO(
+        SlaTimer? sla,
+        ISlaCalculator slaCalculator,
+        DateTime atUtc)
     {
         if (sla is null)
             return null;
@@ -82,27 +90,35 @@ public static class TicketQueryHelper
             WarningSentAt = sla.WarningSentAt,
             BreachAt = sla.BreachAt,
             Status = sla.Status,
-            RemainingPercent = ComputeRemainingPercent(sla.Status, sla.StartedAt, sla.DueAt, DateTime.UtcNow, sla.CurrentPauseStartedAt)
+            RemainingPercent = ComputeRemainingPercent(slaCalculator, sla, atUtc)
         };
     }
 
     /// <summary>
     /// % SLA còn lại tại thời điểm <paramref name="atUtc"/>.
-    /// Khi Paused, timer không chạy nên % được đóng băng tại <paramref name="currentPauseStartedAt"/>
+    /// Khi Paused, timer không chạy nên % được đóng băng tại <c>timer.CurrentPauseStartedAt</c>
     /// thay vì tính theo <paramref name="atUtc"/> — tránh hiện 0% giả (DueAt chưa cộng bù thời gian pause,
     /// cộng bù chỉ xảy ra lúc Resume) khiến ticket trông như đã quá hạn dù SLA đang đứng yên.
     /// Dùng chung cho SlaTimerDTO và dashboard stats để hai nơi không lệch công thức.
     /// </summary>
-    public static double ComputeRemainingPercent(SlaTimerStatusEnum status, DateTime startedAt, DateTime dueAt, DateTime atUtc, DateTime? currentPauseStartedAt = null)
-    {
-        if (dueAt == startedAt)
-            return 0d;
-        if (status == SlaTimerStatusEnum.Paused && currentPauseStartedAt.HasValue)
-            return Math.Max(0, (dueAt - currentPauseStartedAt.Value).TotalMinutes / (dueAt - startedAt).TotalMinutes * 100);
-        if (status != SlaTimerStatusEnum.Running)
-            return 0d;
-        return Math.Max(0, (dueAt - atUtc).TotalMinutes / (dueAt - startedAt).TotalMinutes * 100);
-    }
+    public static double ComputeRemainingPercent(
+        ISlaCalculator slaCalculator,
+        SlaTimer timer,
+        DateTime atUtc) => slaCalculator.GetRemainingPercent(timer, atUtc);
+
+    public static double ComputeRemainingPercent(
+        ISlaCalculator slaCalculator,
+        SlaTimerStatusEnum status,
+        TicketPriorityEnum priority,
+        DateTime dueAt,
+        DateTime? currentPauseStartedAt,
+        DateTime atUtc) => slaCalculator.GetRemainingPercent(new SlaTimer
+        {
+            Status = status,
+            Priority = priority,
+            DueAt = dueAt,
+            CurrentPauseStartedAt = currentPauseStartedAt
+        }, atUtc);
 
     public static bool CanAccessTicket(
         Guid customerId,

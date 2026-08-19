@@ -30,7 +30,9 @@ public class TicketGetListQueryHandlerTests
         mockChats.Setup(r => r.GetAllAsync()).Returns(Array.Empty<TicketChat>().BuildMock());
         _mockUow.Setup(x => x.TicketChats).Returns(mockChats.Object);
 
-        _handler = new TicketGetListQueryHandler(_mockUow.Object, _mockCurrentUser.Object);
+        _handler = new TicketGetListQueryHandler(
+            _mockUow.Object, _mockCurrentUser.Object,
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator());
     }
 
     private static Ticket MakeTicket(

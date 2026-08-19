@@ -36,7 +36,7 @@ public class TicketConcurrencyExceptionMiddleware
                 "The data has been changed by another operation. Please reload and try again.",
                 data: new { errorCode = "CONCURRENCY_CONFLICT" });
         }
-        catch (DbUpdateException exception) when (IsAllowedUniqueConstraint(exception))
+        catch (DbUpdateException exception) when (IsAllowedConflictConstraint(exception))
         {
             if (context.Response.HasStarted)
             {
@@ -51,7 +51,7 @@ public class TicketConcurrencyExceptionMiddleware
         }
     }
 
-    private static bool IsAllowedUniqueConstraint(Exception exception)
+    private static bool IsAllowedConflictConstraint(Exception exception)
     {
         for (Exception? current = exception; current != null; current = current.InnerException)
         {
@@ -60,6 +60,14 @@ public class TicketConcurrencyExceptionMiddleware
                     SqlState: "23505",
                     ConstraintName: "ux_ticket_assignments_active_primary"
                         or "ux_ticket_participants_active_user"
+                })
+            {
+                return true;
+            }
+            if (current is PostgresException
+                {
+                    SqlState: "23P01",
+                    ConstraintName: "ex_sla_non_working_periods_no_active_overlap"
                 })
             {
                 return true;

@@ -1,5 +1,3 @@
-#pragma warning disable CS0618 // Disable obsolete warnings for testing deprecated class
-
 using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging.Abstractions;

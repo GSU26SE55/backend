@@ -28,6 +28,7 @@ public class UnitOfWork : ITicketUnitOfWork
     public IGenericRepository<TicketAttachment> TicketAttachments => new GenericRepository<TicketAttachment>(_context);
     public IGenericRepository<SlaTimer> SlaTimers => new GenericRepository<SlaTimer>(_context);
     public IGenericRepository<SlaPauseEvent> SlaPauseEvents => new GenericRepository<SlaPauseEvent>(_context);
+    public IGenericRepository<SlaNonWorkingPeriod> SlaNonWorkingPeriods => new GenericRepository<SlaNonWorkingPeriod>(_context);
     public IGenericRepository<MaintenanceLog> MaintenanceLogs => new GenericRepository<MaintenanceLog>(_context);
     public IGenericRepository<OutboxMessage> OutboxMessages => new GenericRepository<OutboxMessage>(_context);
     public IGenericRepository<CustomerAccount> CustomerAccounts => new GenericRepository<CustomerAccount>(_context);

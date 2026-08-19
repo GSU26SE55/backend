@@ -6,6 +6,7 @@ using TicketService.Application.CQRS.Query.Ticket;
 using TicketService.Application.DTOs.Response.Maintenances;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.CQRS.Handler.Ticket;
@@ -28,10 +29,12 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
     ];
 
     private readonly ITicketUnitOfWork _unitOfWork;
+    private readonly ISlaCalculator _slaCalculator;
 
-    public TicketGetByIdQueryHandler(ITicketUnitOfWork unitOfWork)
+    public TicketGetByIdQueryHandler(ITicketUnitOfWork unitOfWork, ISlaCalculator slaCalculator)
     {
         _unitOfWork = unitOfWork;
+        _slaCalculator = slaCalculator;
     }
 
     public async Task<CommonResponse<TicketDetailDTO>> Handle(TicketGetByIdQuery request, CancellationToken cancellationToken)
@@ -127,7 +130,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             SuspectedDuplicateOfTicketId = ticket.SuspectedDuplicateOfTicketId?.ToString(),
             DuplicateReason = ticket.DuplicateReason,
             MergedIntoTicketId = ticket.MergedIntoTicketId?.ToString(),
-            SlaTimer = TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer),
+            SlaTimer = TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer, _slaCalculator, DateTime.UtcNow),
             Activities = ticket.Activities
                 .Where(a => canViewInternalChats || !InternalOnlyActions.Contains(a.Action))
                 .Select(a => new TicketActivityDTO
