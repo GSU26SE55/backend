@@ -253,10 +253,12 @@ sudo chmod 0640 /opt/solar-platform/config/host.env \
 
 Trong Google Cloud Console, OAuth client của production phải có chính xác:
 
-- Authorized JavaScript origin: `https://solars.io.vn` (nếu client-side flow sử dụng origin này).
-- Authorized redirect URI: `https://api.solars.io.vn/api/auth/google/callback`.
+- Authorized JavaScript origin: `https://solars.io.vn`.
+- Authorized redirect URI: `https://solars.io.vn/auth/google/callback`.
 
-Không thêm `/auth-service` vào redirect URI; ApiGateway public route không có prefix đó.
+Google redirect browser về trang FE trên. Trang FE nhận `code`/`state`, sau đó gọi
+`https://api.solars.io.vn/api/auth/google/callback` bằng XHR có credentials để backend
+exchange code. Endpoint API không phải OAuth redirect URI và không thêm `/auth-service`.
 
 Giá trị `Mqtt__Password` trong backend và IoT phải giống tuyệt đối; username production phải là `backend-bridge`. Có thể sinh secret bằng `openssl rand -base64 48`, nhưng tránh ký tự newline.
 
