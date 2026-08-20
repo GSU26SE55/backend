@@ -114,6 +114,20 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.ScheduleVersion)
             .HasColumnName("schedule_version")
             .HasDefaultValue(0);
+        builder.Property(e => e.PeriodicMaintenanceSourceTicketId)
+            .HasColumnName("periodic_maintenance_source_ticket_id");
+        builder.Property(e => e.PeriodicMaintenanceDueAtUtc)
+            .HasColumnName("periodic_maintenance_due_at_utc");
+        builder.Property(e => e.PeriodicMaintenanceScheduleDeadlineAtUtc)
+            .HasColumnName("periodic_maintenance_schedule_deadline_at_utc");
+        builder.Property(e => e.PeriodicMaintenanceReminder1SentAtUtc)
+            .HasColumnName("periodic_maintenance_reminder_1_sent_at_utc");
+        builder.Property(e => e.PeriodicMaintenanceReminder2SentAtUtc)
+            .HasColumnName("periodic_maintenance_reminder_2_sent_at_utc");
+        builder.Property(e => e.PeriodicMaintenanceManagerEscalatedAtUtc)
+            .HasColumnName("periodic_maintenance_manager_escalated_at_utc");
+        builder.Property(e => e.PeriodicMaintenanceCustomerScheduledAtUtc)
+            .HasColumnName("periodic_maintenance_customer_scheduled_at_utc");
         builder.Property(e => e.PendingContext)
             .HasColumnName("pending_context")
             .HasConversion<int>();
@@ -175,5 +189,9 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(e => new { e.Status, e.ScheduledStartAtUtc })
             .HasDatabaseName("ix_tickets_due_activation")
             .HasFilter("is_deleted = false AND status = 2 AND scheduled_start_at_utc IS NOT NULL");
+        builder.HasIndex(e => new { e.BatteryAssetId, e.PeriodicMaintenanceDueAtUtc })
+            .IsUnique()
+            .HasDatabaseName("ux_tickets_periodic_maintenance_battery_due")
+            .HasFilter("is_deleted = false AND periodic_maintenance_due_at_utc IS NOT NULL");
     }
 }

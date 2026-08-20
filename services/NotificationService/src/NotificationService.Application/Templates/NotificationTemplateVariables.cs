@@ -62,6 +62,10 @@ public static class NotificationTemplateVariables
                 ["ticketId", "code", "startedAtUtc", "scheduleVersion", "activationReason", "screen"],
             [NotificationTypeEnum.TicketScheduleChanged] =
                 ["ticketId", "code", "previousScheduledStartAtUtc", "scheduledStartAtUtc", "scheduleVersion", "screen"],
+            [NotificationTypeEnum.PeriodicMaintenanceReminder] =
+                ["ticketId", "code", "batteryAssetId", "maintenanceDueAtUtc", "scheduleDeadlineAtUtc", "stage", "isOverdue", "screen"],
+            [NotificationTypeEnum.PeriodicMaintenanceScheduleChanged] =
+                ["ticketId", "code", "batteryAssetId", "previousScheduledStartAtUtc", "scheduledStartAtUtc", "scheduleVersion", "changedByRole", "changedByUserId", "reason", "maintenanceDueAtUtc", "isOverdue", "screen"],
             [NotificationTypeEnum.TicketStatusChanged] =
                 ["ticketId", "code", "oldStatus", "newStatus", "oldStatusName", "newStatusName", "screen"],
             [NotificationTypeEnum.TicketResolved] =

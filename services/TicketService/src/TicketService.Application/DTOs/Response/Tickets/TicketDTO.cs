@@ -49,6 +49,12 @@ public class TicketDTO
 
     public DateTime? ScheduledStartAtUtc { get; set; }
     public int ScheduleVersion { get; set; }
+    public string? PeriodicMaintenanceSourceTicketId { get; set; }
+    public DateTime? PeriodicMaintenanceDueAtUtc { get; set; }
+    public DateTime? PeriodicMaintenanceScheduleDeadlineAtUtc { get; set; }
+    public bool IsPeriodicMaintenance => PeriodicMaintenanceSourceTicketId is not null;
+    public bool IsPeriodicMaintenanceOverdue =>
+        PeriodicMaintenanceDueAtUtc.HasValue && PeriodicMaintenanceDueAtUtc.Value < DateTime.UtcNow;
     public PendingContextEnum? PendingContext { get; set; }
     public PauseReasonEnum? PendingReason { get; set; }
     public string? ActiveIncidentEpisodeId { get; set; }

@@ -125,6 +125,8 @@ public enum NotificationTypeEnum
     IotDeviceAutoDecommissioned = 37,
     TicketWorkStarted = 38,
     TicketScheduleChanged = 39,
+    PeriodicMaintenanceReminder = 40,
+    PeriodicMaintenanceScheduleChanged = 41,
 
     System = 99
 }

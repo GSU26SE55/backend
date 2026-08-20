@@ -1253,6 +1253,34 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("pending_reason");
 
+                    b.Property<DateTime?>("PeriodicMaintenanceCustomerScheduledAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("periodic_maintenance_customer_scheduled_at_utc");
+
+                    b.Property<DateTime?>("PeriodicMaintenanceDueAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("periodic_maintenance_due_at_utc");
+
+                    b.Property<DateTime?>("PeriodicMaintenanceManagerEscalatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("periodic_maintenance_manager_escalated_at_utc");
+
+                    b.Property<DateTime?>("PeriodicMaintenanceReminder1SentAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("periodic_maintenance_reminder_1_sent_at_utc");
+
+                    b.Property<DateTime?>("PeriodicMaintenanceReminder2SentAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("periodic_maintenance_reminder_2_sent_at_utc");
+
+                    b.Property<DateTime?>("PeriodicMaintenanceScheduleDeadlineAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("periodic_maintenance_schedule_deadline_at_utc");
+
+                    b.Property<Guid?>("PeriodicMaintenanceSourceTicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("periodic_maintenance_source_ticket_id");
+
                     b.Property<int?>("Priority")
                         .HasColumnType("integer")
                         .HasColumnName("priority");
@@ -1343,6 +1371,11 @@ namespace TicketService.Infrastructure.Migrations
                     b.HasIndex("Priority");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("BatteryAssetId", "PeriodicMaintenanceDueAtUtc")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tickets_periodic_maintenance_battery_due")
+                        .HasFilter("is_deleted = false AND periodic_maintenance_due_at_utc IS NOT NULL");
 
                     b.HasIndex("Status", "ScheduledStartAtUtc")
                         .HasDatabaseName("ix_tickets_due_activation")

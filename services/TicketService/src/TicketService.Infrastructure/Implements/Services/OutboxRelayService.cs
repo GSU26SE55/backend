@@ -41,6 +41,8 @@ public class OutboxRelayService : IOutboxRelayService
         { nameof(TicketReopenedEvent), typeof(TicketReopenedEvent) },
         { nameof(TicketRatingRequestedEvent), typeof(TicketRatingRequestedEvent) },
         { nameof(TicketScheduleChangedEvent), typeof(TicketScheduleChangedEvent) },
+        { nameof(PeriodicMaintenanceReminderDueEvent), typeof(PeriodicMaintenanceReminderDueEvent) },
+        { nameof(PeriodicMaintenanceScheduleChangedEvent), typeof(PeriodicMaintenanceScheduleChangedEvent) },
         { nameof(TicketWorkStartedEvent), typeof(TicketWorkStartedEvent) },
         { nameof(BatteryIsolationRequestedEvent), typeof(BatteryIsolationRequestedEvent) },
         { nameof(TicketResolvedIntegrationEvent), typeof(TicketResolvedIntegrationEvent) },

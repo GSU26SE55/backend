@@ -85,6 +85,8 @@ public class NotificationDispatchOptions
             [NotificationTypeEnum.TicketAssigned] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
             [NotificationTypeEnum.TicketWorkStarted] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
             [NotificationTypeEnum.TicketScheduleChanged] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
+            [NotificationTypeEnum.PeriodicMaintenanceReminder] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
+            [NotificationTypeEnum.PeriodicMaintenanceScheduleChanged] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.TicketStatusChanged] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
             [NotificationTypeEnum.TicketResolved] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push, NotificationChannelEnum.Email],
             [NotificationTypeEnum.TicketClosed] = [NotificationChannelEnum.InApp, NotificationChannelEnum.Push],
