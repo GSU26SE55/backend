@@ -49,6 +49,20 @@ public static class ManageDependencyInjection
         // Sprint IoT-1 (#243) — per-device API key.
         services.AddScoped<IIotApiKeyService, IotApiKeyService>();
 
+        // Import dữ liệu bên thứ ba (Admin tải file CSV lên).
+        services.Configure<BatteryService.Application.Import.ImportOptions>(
+            configuration.GetSection(BatteryService.Application.Import.ImportOptions.SectionName));
+        services.AddScoped<BatteryService.Application.Import.IImportFileParser,
+            BatteryService.Application.Import.CsvImportFileParser>();
+        services.AddScoped<BatteryService.Application.Import.IImportRowValidator,
+            BatteryService.Application.Import.ImportRowValidator>();
+        services.AddScoped<BatteryService.Application.Import.IBatteryTypeResolver,
+            BatteryService.Application.Import.BatteryTypeResolver>();
+        services.AddScoped<BatteryService.Application.Import.IImportCommitService,
+            BatteryService.Application.Import.ImportCommitService>();
+        services.AddHostedService<ImportBatchProcessorBackgroundService>();
+        services.AddHostedService<ImportRetentionBackgroundService>();
+
         // Sprint IoT-2 #IoT2-38 — Prometheus IoT metrics recorder.
         services.AddSingleton<IIotMetricsRecorder, BatteryService.Infrastructure.Observability.IotMetricsRecorder>();
 

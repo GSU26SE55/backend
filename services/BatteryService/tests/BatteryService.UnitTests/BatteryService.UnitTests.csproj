@@ -32,6 +32,9 @@
     </ItemGroup>
 
     <ItemGroup>
+      <!-- Cần để kiểm hợp đồng phân quyền của controller bằng phản chiếu. Cùng cách
+           AuthService.UnitTests đã làm với Api của nó. -->
+      <ProjectReference Include="..\..\src\BatteryService.Api\BatteryService.Api.csproj" />
       <ProjectReference Include="..\..\src\BatteryService.Application\BatteryService.Application.csproj" />
       <ProjectReference Include="..\..\src\BatteryService.Domain\BatteryService.Domain.csproj" />
       <ProjectReference Include="..\..\src\BatteryService.Infrastructure\BatteryService.Infrastructure.csproj" />

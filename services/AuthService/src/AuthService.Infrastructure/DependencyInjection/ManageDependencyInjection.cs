@@ -17,6 +17,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SharedContracts.Interfaces;
 using SharedInfrastructure.Bus;
 using SharedInfrastructure.DependencyInjection;
+using SharedInfrastructure.Idempotency;
 
 namespace AuthService.Infrastructure.DependencyInjection;
 
@@ -35,6 +36,14 @@ public static class ManageDependencyInjection
             configuration,
             typeof(AuthService.Application.Authorization.PermissionResolver).Assembly,
             typeof(ManageDependencyInjection).Assembly);
+
+        // Consumer của AuthService dùng ProcessOnceAsync để chống xử lý trùng, mà hàm đó cần
+        // IInboxStore. Trước đây AuthService không có consumer nào dùng nên chưa đăng ký; thiếu
+        // dòng này thì consumer mới chết ngay lúc container dựng, không phải lúc chạy.
+        //
+        // IConnectionMultiplexer đã được AddIdempotencyKey đăng ký ở Program.cs; cả hai extension
+        // dùng TryAdd nên AuthService chỉ giữ một kết nối Redis dùng chung.
+        services.AddInboxIdempotency(configuration);
 
         // Outbox Pattern: override IMessageProducerService bằng OutboxMessagePublisher.
         // Handler publish event → INSERT vào DbContext.OutboxMessages, atomic với business data.

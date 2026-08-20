@@ -62,6 +62,11 @@ public class ApplicationDbContext : DbContext
     // Sprint IoT-2 #IoT2-16 (S3-BE-03) — idempotency persistence cho sensor batch ingest.
     public virtual DbSet<SensorIngestIdempotencyRecord> SensorIngestIdempotencyRecords { get; set; }
 
+    // Import dữ liệu bên thứ ba
+    public virtual DbSet<ImportBatch> ImportBatches { get; set; }
+    public virtual DbSet<ImportRow> ImportRows { get; set; }
+    public virtual DbSet<ImportEntityLink> ImportEntityLinks { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (_auditableEntityInterceptor is not null)

@@ -68,11 +68,32 @@ builder.Services.AddSwaggerGen(options =>
 
     options.AddSecurityDefinition(ApiKeyAuthenticationHandler.SchemeName, new OpenApiSecurityScheme
     {
-        Description = "API key for IoT sensor ingest. Send it via X-Api-Key.",
+        Description = "Khoá API của thiết bị IoT (tiền tố \"iotk_\"), gửi qua header X-Api-Key.",
         Name = ApiKeyAuthenticationHandler.HeaderName,
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
         Scheme = ApiKeyAuthenticationHandler.SchemeName
+    });
+
+    // Chỉ khai định nghĩa là chưa đủ: Swagger UI chỉ dựng ô nhập cho scheme nào thực sự được một
+    // endpoint YÊU CẦU. Thiếu khối dưới đây thì hộp thoại Authorize chỉ có Bearer, và mọi endpoint
+    // xác thực bằng khoá thiết bị IoT đều không thử được từ trang tài liệu.
+    //
+    // Khai thành yêu cầu RIÊNG, không gộp chung với Bearer: gộp lại nghĩa là phải có CẢ HAI mới
+    // gọi được, trong khi thực tế là dùng MỘT trong hai.
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = ApiKeyAuthenticationHandler.SchemeName
+                }
+            },
+            Array.Empty<string>()
+        }
     });
 });
 

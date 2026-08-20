@@ -40,6 +40,11 @@ public sealed class MockUnitOfWorkBuilder
     // Sprint IoT-2 #IoT2-16 — idempotency.
     public Mock<IGenericRepository<SensorIngestIdempotencyRecord>> SensorIngestIdempotencyRecords { get; } = new();
 
+    // Import dữ liệu bên thứ ba.
+    public Mock<IGenericRepository<ImportBatch>> ImportBatches { get; } = new();
+    public Mock<IGenericRepository<ImportRow>> ImportRows { get; } = new();
+    public Mock<IGenericRepository<ImportEntityLink>> ImportEntityLinks { get; } = new();
+
     public MockUnitOfWorkBuilder()
     {
         UnitOfWork.SetupGet(x => x.BatteryTypes).Returns(BatteryTypes.Object);
@@ -64,6 +69,9 @@ public sealed class MockUnitOfWorkBuilder
         UnitOfWork.SetupGet(x => x.IotFirmwareReleases).Returns(IotFirmwareReleases.Object);
         UnitOfWork.SetupGet(x => x.IotFirmwareUpdateLogs).Returns(IotFirmwareUpdateLogs.Object);
         UnitOfWork.SetupGet(x => x.SensorIngestIdempotencyRecords).Returns(SensorIngestIdempotencyRecords.Object);
+        UnitOfWork.SetupGet(x => x.ImportBatches).Returns(ImportBatches.Object);
+        UnitOfWork.SetupGet(x => x.ImportRows).Returns(ImportRows.Object);
+        UnitOfWork.SetupGet(x => x.ImportEntityLinks).Returns(ImportEntityLinks.Object);
         UnitOfWork.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         UnitOfWork.Setup(x => x.BeginTransactionAsync()).Returns(Task.CompletedTask);
         UnitOfWork.Setup(x => x.CommitTransactionAsync()).Returns(Task.CompletedTask);
@@ -91,6 +99,9 @@ public sealed class MockUnitOfWorkBuilder
         Seed(IotFirmwareReleases, Array.Empty<IotFirmwareRelease>());
         Seed(IotFirmwareUpdateLogs, Array.Empty<IotFirmwareUpdateLog>());
         Seed(SensorIngestIdempotencyRecords, Array.Empty<SensorIngestIdempotencyRecord>());
+        Seed(ImportBatches, Array.Empty<ImportBatch>());
+        Seed(ImportRows, Array.Empty<ImportRow>());
+        Seed(ImportEntityLinks, Array.Empty<ImportEntityLink>());
     }
 
     public MockUnitOfWorkBuilder WithIotDevices(params IotDevice[] data) { Seed(IotDevices, data); return this; }
@@ -114,6 +125,10 @@ public sealed class MockUnitOfWorkBuilder
     public MockUnitOfWorkBuilder WithNoiseBreachEvents(params NoiseBreachEvent[] data) { Seed(NoiseBreachEvents, data); return this; }
     public MockUnitOfWorkBuilder WithAnomalyClassifications(params AnomalyClassification[] data) { Seed(AnomalyClassifications, data); return this; }
     public MockUnitOfWorkBuilder WithSohPredictions(params SohPrediction[] data) { Seed(SohPredictions, data); return this; }
+
+    public MockUnitOfWorkBuilder WithImportBatches(params ImportBatch[] data) { Seed(ImportBatches, data); return this; }
+    public MockUnitOfWorkBuilder WithImportRows(params ImportRow[] data) { Seed(ImportRows, data); return this; }
+    public MockUnitOfWorkBuilder WithImportEntityLinks(params ImportEntityLink[] data) { Seed(ImportEntityLinks, data); return this; }
 
     public IBatteryUnitOfWork Build() => UnitOfWork.Object;
 
