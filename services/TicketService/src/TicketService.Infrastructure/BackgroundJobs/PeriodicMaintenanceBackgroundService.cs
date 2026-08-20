@@ -194,7 +194,7 @@ public sealed class PeriodicMaintenanceBackgroundService : BackgroundService
                     BatteryAssetId = anchor.BatteryAssetId,
                     CustomerId = anchor.CustomerId,
                     Title = "Periodic battery maintenance",
-                    Description = $"Scheduled six-month maintenance for battery {anchor.BatteryAssetId}.",
+                    Description = $"Scheduled {_options.Value.CycleMonths}-month maintenance for battery {anchor.BatteryAssetId}.",
                     Category = TicketCategoryEnum.Repair,
                     Priority = null,
                     Status = TicketStatusEnum.Open,
