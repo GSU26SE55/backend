@@ -96,8 +96,11 @@ public class MyTicketsAsCustomerQueryHandler : IRequestHandler<MyTicketsAsCustom
         {
             IsSuccess = true,
             StatusCode = 200,
+            // GH-1242 — endpoint này luôn phục vụ Customer nên ẩn hẳn SlaTimer;
+            // họ chỉ cần ExpectedCompletionAtUtc (ngày dự kiến hoàn thành).
             Data = page.Map(t => TicketQueryHelper.MapToTicketDTO(
-                t, _slaCalculator, DateTime.UtcNow, unreadTicketIds.Contains(t.Id), staffNames))
+                t, _slaCalculator, DateTime.UtcNow, unreadTicketIds.Contains(t.Id), staffNames,
+                canViewSlaTimer: false))
         };
     }
 }

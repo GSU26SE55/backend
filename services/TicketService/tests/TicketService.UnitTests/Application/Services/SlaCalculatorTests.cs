@@ -12,9 +12,31 @@ public class SlaCalculatorTests
     private readonly SlaCalculator _sut = new();
 
     [Theory]
-    [InlineData(TicketPriorityEnum.P1Critical, 240)]
-    [InlineData(TicketPriorityEnum.P2High, 1440)]
-    [InlineData(TicketPriorityEnum.P3Normal, 4320)]
+    [InlineData(TicketPriorityEnum.P1Critical, 14)]
+    [InlineData(TicketPriorityEnum.P2High, 3)]
+    [InlineData(TicketPriorityEnum.P3Normal, 2)]
+    public void GetSlaWorkingDays_ShouldReturnDayBudget(
+        TicketPriorityEnum priority,
+        int expectedDays)
+    {
+        _sut.GetSlaWorkingDays(priority).Should().Be(expectedDays);
+    }
+
+    [Theory]
+    [InlineData(TicketPriorityEnum.P1Critical, 140)]
+    [InlineData(TicketPriorityEnum.P2High, 30)]
+    [InlineData(TicketPriorityEnum.P3Normal, 20)]
+    public void GetSlaHours_ShouldDeriveFromWorkingDayBudget(
+        TicketPriorityEnum priority,
+        int expectedHours)
+    {
+        _sut.GetSlaHours(priority).Should().Be(expectedHours);
+    }
+
+    [Theory]
+    [InlineData(TicketPriorityEnum.P1Critical, 8400)]
+    [InlineData(TicketPriorityEnum.P2High, 1800)]
+    [InlineData(TicketPriorityEnum.P3Normal, 1200)]
     public void GetSlaMinutes_ShouldReturnWorkingMinuteBudget(
         TicketPriorityEnum priority,
         int expectedMinutes)
@@ -53,31 +75,33 @@ public class SlaCalculatorTests
     }
 
     [Fact]
-    public void CalculateDueDate_P1StartingFridayAt1600_ShouldBeSaturdayAt1000()
+    public void CalculateDueDate_P1StartingFridayAt1600_ShouldBeFourteenCalendarDaysLater()
     {
         var friday1600Local = Utc(2026, 8, 21, 9);
 
+        // 14 ngày làm việc, mà working days = cả 7 ngày ⇒ deadline rơi đúng cùng giờ,
+        // 14 ngày lịch sau: 04/09/2026 16:00 local.
         _sut.CalculateDueDate(friday1600Local, TicketPriorityEnum.P1Critical)
-            .Should().Be(Utc(2026, 8, 22, 3));
+            .Should().Be(Utc(2026, 9, 4, 9));
     }
 
     [Fact]
-    public void CalculateDueDate_P2StartingMondayAt0700_ShouldBeWednesdayAt1100()
+    public void CalculateDueDate_P2StartingMondayAt0700_ShouldBeWednesdayAt1700()
     {
         var monday0700Local = Utc(2026, 8, 17, 0);
 
         _sut.CalculateDueDate(monday0700Local, TicketPriorityEnum.P2High)
-            .Should().Be(Utc(2026, 8, 19, 4));
+            .Should().Be(Utc(2026, 8, 19, 10));
     }
 
     [Fact]
-    public void CalculateDueDate_P3_ShouldConsumeExactly4320WorkingMinutes()
+    public void CalculateDueDate_P3_ShouldConsumeExactly1200WorkingMinutes()
     {
         var monday0700Local = Utc(2026, 8, 17, 0);
         var dueAt = _sut.CalculateDueDate(monday0700Local, TicketPriorityEnum.P3Normal);
 
-        dueAt.Should().Be(Utc(2026, 8, 24, 2));
-        _sut.GetWorkingMinutesBetween(monday0700Local, dueAt).Should().Be(4320);
+        dueAt.Should().Be(Utc(2026, 8, 18, 10));
+        _sut.GetWorkingMinutesBetween(monday0700Local, dueAt).Should().Be(1200);
     }
 
     [Fact]
@@ -96,7 +120,7 @@ public class SlaCalculatorTests
         var startedAt = Utc(2026, 8, 17, 2).AddTicks(1);
         var dueAt = _sut.CalculateDueDate(startedAt, TicketPriorityEnum.P1Critical);
 
-        _sut.GetWorkingMinutesBetween(startedAt, dueAt).Should().Be(240);
+        _sut.GetWorkingMinutesBetween(startedAt, dueAt).Should().Be(8400);
     }
 
     [Fact]
@@ -104,10 +128,10 @@ public class SlaCalculatorTests
     {
         var timer = new SlaTimer
         {
-            Priority = TicketPriorityEnum.P1Critical,
+            Priority = TicketPriorityEnum.P3Normal,
             Status = SlaTimerStatusEnum.Running,
             StartedAt = Utc(2026, 8, 21, 9),
-            DueAt = Utc(2026, 8, 22, 3)
+            DueAt = Utc(2026, 8, 23, 5)
         };
 
         var fridayClose = _sut.GetRemainingPercent(timer, Utc(2026, 8, 21, 10));
@@ -139,8 +163,9 @@ public class SlaCalculatorTests
 
         calculator.NormalizeToNextWorkingInstant(Utc(2026, 8, 22, 0))
             .Should().Be(Utc(2026, 8, 23, 0));
+        // Không có ngày nghỉ thì hạn là 04/09; nghỉ 22/08 đẩy thêm đúng 1 ngày.
         calculator.CalculateDueDate(Utc(2026, 8, 21, 9), TicketPriorityEnum.P1Critical)
-            .Should().Be(Utc(2026, 8, 23, 3));
+            .Should().Be(Utc(2026, 9, 5, 9));
     }
 
     [Theory]

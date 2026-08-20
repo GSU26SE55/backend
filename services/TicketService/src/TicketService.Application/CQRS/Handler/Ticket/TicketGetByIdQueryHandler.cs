@@ -67,6 +67,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
         var participantCanViewInternal = request.ActorUserId.HasValue
             && activeParticipants.Any(p => p.UserId == request.ActorUserId.Value && p.CanViewInternal);
         var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
+        var canViewSlaTimer = TicketQueryHelper.CanViewSlaTimer(request.ActorRoles);
 
         // Tên staff phụ trách — lấy từ StaffAccount đã sync, để mọi role (kể cả
         // Staff) hiển thị được tên mà không cần gọi /api/staff (Admin/Manager only).
@@ -130,7 +131,12 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             SuspectedDuplicateOfTicketId = ticket.SuspectedDuplicateOfTicketId?.ToString(),
             DuplicateReason = ticket.DuplicateReason,
             MergedIntoTicketId = ticket.MergedIntoTicketId?.ToString(),
-            SlaTimer = TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer, _slaCalculator, DateTime.UtcNow),
+            // GH-1242 — SLA là chỉ số nội bộ: Customer chỉ nhận ExpectedCompletionAtUtc,
+            // không thấy BreachAt/WarningSentAt/RemainingPercent.
+            SlaTimer = canViewSlaTimer
+                ? TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer, _slaCalculator, DateTime.UtcNow)
+                : null,
+            ExpectedCompletionAtUtc = ticket.SlaTimer?.DueAt,
             Activities = ticket.Activities
                 .Where(a => canViewInternalChats || !InternalOnlyActions.Contains(a.Action))
                 .Select(a => new TicketActivityDTO

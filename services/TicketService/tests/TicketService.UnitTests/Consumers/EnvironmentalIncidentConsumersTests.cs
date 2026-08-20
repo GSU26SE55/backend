@@ -79,7 +79,9 @@ public class EnvironmentalIncidentConsumersTests
         created.IsIncident.Should().BeTrue();
         created.Origin.Should().Be(TicketOriginEnum.System);
         timer.Should().NotBeNull();
-        (timer!.DueAt - timer.StartedAt).Should().Be(TimeSpan.FromHours(4));
+        new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
+            .GetWorkingMinutesBetween(timer!.StartedAt, timer.DueAt)
+            .Should().Be(8400, "P1 = 14 ngày làm việc");
         _outboxWriter.Verify(p => p.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 

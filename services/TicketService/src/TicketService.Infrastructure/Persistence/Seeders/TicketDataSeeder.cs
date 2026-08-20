@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Sagas;
@@ -10,11 +11,16 @@ namespace TicketService.Infrastructure.Persistence.Seeders;
 public class TicketDataSeeder
 {
     private readonly TicketDbContext _context;
+    private readonly ISlaCalculator _slaCalculator;
     private readonly ILogger<TicketDataSeeder>? _logger;
 
-    public TicketDataSeeder(TicketDbContext context, ILogger<TicketDataSeeder>? logger = null)
+    public TicketDataSeeder(
+        TicketDbContext context,
+        ISlaCalculator slaCalculator,
+        ILogger<TicketDataSeeder>? logger = null)
     {
         _context = context;
+        _slaCalculator = slaCalculator;
         _logger = logger;
     }
 
@@ -479,15 +485,9 @@ public class TicketDataSeeder
             return;
 
         var timers = new List<SlaTimer>();
-        foreach (var ticket in tickets.Where(t => t.Priority.HasValue))
+        // Urgent không bao giờ có SLA timer (ApplySlaAsync chặn) — seed cũng phải bỏ qua.
+        foreach (var ticket in tickets.Where(t => t.Priority.HasValue && t.Priority != TicketPriorityEnum.Urgent))
         {
-            var sla = ticket.Priority!.Value switch
-            {
-                TicketPriorityEnum.P1Critical => TimeSpan.FromHours(4),
-                TicketPriorityEnum.P2High => TimeSpan.FromHours(24),
-                _ => TimeSpan.FromHours(72)
-            };
-
             var status = ticket.Status switch
             {
                 TicketStatusEnum.Completed or TicketStatusEnum.Closed => SlaTimerStatusEnum.Met,
@@ -495,8 +495,10 @@ public class TicketDataSeeder
                 _ => SlaTimerStatusEnum.Running
             };
 
+            // GH-1242 — dùng chung business clock với production thay vì cộng thẳng giờ đồng hồ,
+            // để data seed phản ánh đúng SLA theo ngày làm việc.
             var startedAt = ticket.CreatedAt;
-            var dueAt = startedAt + sla;
+            var dueAt = _slaCalculator.CalculateDueDate(startedAt, ticket.Priority!.Value);
 
             timers.Add(new SlaTimer
             {

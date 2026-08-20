@@ -295,11 +295,12 @@ ClosedPendingRate → Closed (Customer rate / System auto-close / Admin) | → O
 
 ### `TicketPriorityEnum`
 
-| Giá trị | Int | SLA | Ý nghĩa |
-|---|---|---|---|
-| `P1Critical` | 1 | 4h | Nghiêm trọng — mất điện/nguy cơ an toàn/diện rộng |
-| `P2High` | 2 | 24h | Cao — degradation đáng kể |
-| `P3Normal` | 3 | 72h | Bình thường — bất thường nhẹ/bảo trì định kỳ |
+| Giá trị | Int | SLA | Giờ làm việc | Ý nghĩa |
+|---|---|---|---|---|
+| `P1Critical` | 1 | 14 ngày | 140h | Nghiêm trọng — mất điện/nguy cơ an toàn/diện rộng |
+| `P2High` | 2 | 3 ngày | 30h | Cao — degradation đáng kể |
+| `P3Normal` | 3 | 2 ngày | 20h | Bình thường — bất thường nhẹ/bảo trì định kỳ |
+| `Urgent` | 4 | — | — | Incident — không tiêu thụ SLA timer |
 
 **Lưu ý:** Priority được tính tự động từ `ImpactScope × UrgencyLevel` matrix tại bước triage. **Không thay đổi** trong toàn bộ vòng đời ticket. Override thủ công chỉ khi có lý do an toàn (`priorityOverrideReason`).
 
@@ -582,7 +583,8 @@ Phong cách gợi ý AI cho endpoint `POST /chats/suggest`.
 | `isIncident` | `bool` | Không | Có được đánh dấu là Incident không |
 | `createdAt` | `string` | Không | Thời điểm tạo (ISO 8601 UTC) |
 | `updatedAt` | `string?` | Null nếu chưa cập nhật | Thời điểm cập nhật gần nhất |
-| `slaTimer` | `SlaTimerDTO?` | **Null khi chưa có SLA timer** | Thông tin SLA timer hiện tại. Timer được tạo khi ticket chuyển sang **`Assigned`** (Sprint Bonus NS-12 #656 — trước đó timer không được tạo ở runtime); ticket auto-tạo P1 (cascade NS-13 / env incident NS-22) có timer **ngay khi tạo**. `null` ở các state trước khi có timer (`New`/`Open`) |
+| `slaTimer` | `SlaTimerDTO?` | **Null khi chưa có SLA timer — và luôn null với role Customer** | Thông tin SLA timer hiện tại. Timer được tạo khi ticket chuyển sang **`Assigned`** (Sprint Bonus NS-12 #656 — trước đó timer không được tạo ở runtime); ticket auto-tạo P1 (cascade NS-13 / env incident NS-22) có timer **ngay khi tạo**. `null` ở các state trước khi có timer (`New`/`Open`). **GH-1242:** SLA là chỉ số nội bộ — Customer không nhận block này, chỉ nhận `expectedCompletionAtUtc` |
+| `expectedCompletionAtUtc` | `string?` | Null khi chưa có SLA timer | **GH-1242** — ngày dự kiến hoàn thành (UTC), lấy từ `slaTimer.dueAt`. Trả cho **mọi role**; FE dành cho Customer format **date-only** theo `Asia/Ho_Chi_Minh`. Không được suy ra từ `createdAt` khi null |
 | `hasUnreadChat` | `bool` | Không | Ticket có chat chưa đọc với **user hiện tại** không — dùng để chấm badge trên danh sách |
 | `detectedAt` | `string?` | Null | Thời điểm Customer khai báo phát hiện sự cố (`incidentDetectedAt` lúc tạo) |
 | `batterySerialNumber` | `string?` | Null nếu lookup fail | Serial pin snapshot lúc tạo ticket |
@@ -643,6 +645,9 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `breachAt` | `string?` | Null nếu chưa breach | Thời điểm SLA bị vi phạm |
 | `status` | `SlaTimerStatusEnum` | Không | Trạng thái SLA timer |
 | `remainingPercent` | `number` | Không | Phần trăm thời gian còn lại (0–100) |
+| `slaWorkingDays` | `int` | Không | **GH-1242** — budget SLA theo số ngày làm việc của priority (P1=14 · P2=3 · P3=2) |
+| `slaWorkingHours` | `int` | Không | **GH-1242** — budget SLA quy ra giờ làm việc (P1=140 · P2=30 · P3=20). FE không tự nhân số ngày với độ dài cửa sổ làm việc |
+| `remainingWorkingMinutes` | `int` | Không | **GH-1242** — số phút làm việc còn lại tới `dueAt`; `0` khi timer không ở trạng thái `Running`/`Paused`. Đóng băng tại `currentPauseStartedAt` khi đang Paused, cùng quy ước với `remainingPercent` |
 
 ### `TicketActivityDTO`
 

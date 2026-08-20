@@ -110,8 +110,8 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
         var oldPriority = ticket.Priority;
         ticket.Priority = TicketPriorityEnum.P1Critical;
 
-        // Sprint Bonus NS-12 (#656, R1) — recompute DueAt của SlaTimer từ mốc start với giờ SLA P1
-        // (4h). Không đổi DueAt thì deadline vẫn là của priority cũ (vd 72h P3) — "P1 = SLA 4h" vô
+        // Sprint Bonus NS-12 (#656, R1) — recompute DueAt của SlaTimer từ mốc start theo budget SLA
+        // của P1. Không đổi DueAt thì deadline vẫn là của priority cũ (vd P3) — "nâng lên P1" vô
         // nghĩa. Reset WarningSentAt để background service đánh giá lại mốc 80% theo deadline mới.
         var timer = await _uow.SlaTimers.GetAllAsync()
             .FirstOrDefaultAsync(t => t.TicketId == ticket.Id && !t.IsDeleted, ct);
@@ -145,7 +145,7 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
 
     /// <summary>
     /// Sprint Bonus NS-13 (#657, R2) — auto-tạo ticket P1 (Origin=System) khi pin có cascade risk
-    /// High mà không có ticket incident active. SLA clock chạy ngay từ lúc tạo (P1=4h) — tạo SlaTimer
+    /// High mà không có ticket incident active. SLA clock chạy ngay từ lúc tạo — tạo SlaTimer
     /// Running luôn (NS-12 dependency: ticket mới cần timer đúng).
     /// </summary>
     private async Task AutoCreateP1TicketAsync(BatteryCascadeRiskHighEvent evt, CancellationToken ct)
