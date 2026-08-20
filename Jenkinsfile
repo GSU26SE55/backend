@@ -165,7 +165,25 @@ pipeline {
                               'GoogleOAuth__AllowedRedirectUris__0: "https://solars.io.vn/auth/google/callback"' \
                               'Ai__GrpcAddress: "https://ai.solars.io.vn"' \
                               'Ai__HttpBaseUrl: "https://ai.solars.io.vn"' \
-                              'TicketAi__AiGrpcAddress: "https://ai.solars.io.vn"'
+                              'TicketAi__AiGrpcAddress: "https://ai.solars.io.vn"' \
+                              'Ticket__PeriodicMaintenance__Enabled: "true"' \
+                              'Ticket__PeriodicMaintenance__TimeZoneId: "Asia/Ho_Chi_Minh"' \
+                              'Ticket__PeriodicMaintenance__CycleMonths: "6"' \
+                              'Ticket__PeriodicMaintenance__LeadDays: "7"' \
+                              'Ticket__PeriodicMaintenance__OverdueScheduleWindowDays: "7"' \
+                              'Ticket__PeriodicMaintenance__ReminderTime: "08:00:00"' \
+                              'Ticket__PeriodicMaintenance__PollIntervalSeconds: "60"' \
+                              'Ticket__PeriodicMaintenance__BatchSize: "100"' \
+                              'SlaBusinessHours__TimeZoneId: "Asia/Ho_Chi_Minh"' \
+                              'SlaBusinessHours__Start: "07:00:00"' \
+                              'SlaBusinessHours__End: "17:00:00"' \
+                              'SlaBusinessHours__WorkingDays__0: "Sunday"' \
+                              'SlaBusinessHours__WorkingDays__1: "Monday"' \
+                              'SlaBusinessHours__WorkingDays__2: "Tuesday"' \
+                              'SlaBusinessHours__WorkingDays__3: "Wednesday"' \
+                              'SlaBusinessHours__WorkingDays__4: "Thursday"' \
+                              'SlaBusinessHours__WorkingDays__5: "Friday"' \
+                              'SlaBusinessHours__WorkingDays__6: "Saturday"'
                             do
                               grep -Fq "${expected}" rendered-production.yaml || {
                                 echo "Missing production URL contract: ${expected}" >&2

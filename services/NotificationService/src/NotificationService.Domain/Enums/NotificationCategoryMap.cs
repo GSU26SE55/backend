@@ -19,6 +19,8 @@ public static class NotificationCategoryMap
             [NotificationTypeEnum.TicketAssigned] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketWorkStarted] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketScheduleChanged] = NotificationCategoryEnum.Ticket,
+            [NotificationTypeEnum.PeriodicMaintenanceReminder] = NotificationCategoryEnum.Ticket,
+            [NotificationTypeEnum.PeriodicMaintenanceScheduleChanged] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketStatusChanged] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketResolved] = NotificationCategoryEnum.Ticket,
             [NotificationTypeEnum.TicketClosed] = NotificationCategoryEnum.Ticket,

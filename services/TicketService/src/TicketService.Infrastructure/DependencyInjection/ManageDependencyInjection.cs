@@ -56,6 +56,37 @@ public static class ManageDependencyInjection
             .Validate(options => options.PollIntervalSeconds > 0, "Ticket:Schedule:PollIntervalSeconds must be greater than zero.")
             .Validate(options => options.BatchSize > 0, "Ticket:Schedule:BatchSize must be greater than zero.")
             .ValidateOnStart();
+        services.AddOptions<PeriodicMaintenanceOptions>()
+            .Bind(configuration.GetSection(PeriodicMaintenanceOptions.SectionName))
+            .Validate(options => options.CycleMonths > 0,
+                "Ticket:PeriodicMaintenance:CycleMonths must be greater than zero.")
+            .Validate(options => options.LeadDays > 0,
+                "Ticket:PeriodicMaintenance:LeadDays must be greater than zero.")
+            .Validate(options => options.OverdueScheduleWindowDays > 0,
+                "Ticket:PeriodicMaintenance:OverdueScheduleWindowDays must be greater than zero.")
+            .Validate(options => options.PollIntervalSeconds > 0,
+                "Ticket:PeriodicMaintenance:PollIntervalSeconds must be greater than zero.")
+            .Validate(options => options.BatchSize > 0,
+                "Ticket:PeriodicMaintenance:BatchSize must be greater than zero.")
+            .Validate(options => options.ReminderTime >= TimeSpan.Zero && options.ReminderTime < TimeSpan.FromDays(1),
+                "Ticket:PeriodicMaintenance:ReminderTime must be within one local day.")
+            .Validate(options =>
+            {
+                try
+                {
+                    _ = TimeZoneInfo.FindSystemTimeZoneById(options.TimeZoneId);
+                    return true;
+                }
+                catch (TimeZoneNotFoundException)
+                {
+                    return false;
+                }
+                catch (InvalidTimeZoneException)
+                {
+                    return false;
+                }
+            }, "Ticket:PeriodicMaintenance:TimeZoneId is invalid.")
+            .ValidateOnStart();
         services.AddAiVerify(configuration);
         services.AddOutbox(configuration);
 
@@ -124,6 +155,7 @@ public static class ManageDependencyInjection
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
         services.AddHostedService<TicketScheduleActivationBackgroundService>();
+        services.AddHostedService<PeriodicMaintenanceBackgroundService>();
 
         // Read receipt — channel-based bulk writer (#541/#542)
         services.AddSingleton<IChatReadReceiptQueue, ChatReadReceiptQueue>();

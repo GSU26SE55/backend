@@ -52,6 +52,10 @@ public static class NotificationTemplateCatalog
                 ("Work started on ticket {{code}}", "Work began at {{startedAtUtc}}. Open the ticket to view progress."),
             [NotificationTypeEnum.TicketScheduleChanged] =
                 ("Schedule changed for ticket {{code}}", "The next work time is {{scheduledStartAtUtc}}."),
+            [NotificationTypeEnum.PeriodicMaintenanceReminder] =
+                ("Periodic maintenance for ticket {{code}}", "Maintenance is due at {{maintenanceDueAtUtc}}. Please arrange a visit schedule."),
+            [NotificationTypeEnum.PeriodicMaintenanceScheduleChanged] =
+                ("Maintenance schedule changed for {{code}}", "The maintenance visit is scheduled for {{scheduledStartAtUtc}}."),
             [NotificationTypeEnum.TicketStatusChanged] =
                 ("Ticket {{code}} status changed", "From {{oldStatusName}} to {{newStatusName}}."),
             [NotificationTypeEnum.TicketResolved] =

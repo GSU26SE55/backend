@@ -128,6 +128,30 @@ config:
   TicketAi__TimeoutSeconds: "5"
   TicketAi__MaxDuplicateCandidates: "10"
 
+  # GH-1244 — TicketService periodic maintenance. The deploy script requires
+  # the same values in host.env and overrides these defaults explicitly.
+  Ticket__PeriodicMaintenance__Enabled: "true"
+  Ticket__PeriodicMaintenance__TimeZoneId: Asia/Ho_Chi_Minh
+  Ticket__PeriodicMaintenance__CycleMonths: "6"
+  Ticket__PeriodicMaintenance__LeadDays: "7"
+  Ticket__PeriodicMaintenance__OverdueScheduleWindowDays: "7"
+  Ticket__PeriodicMaintenance__ReminderTime: "08:00:00"
+  Ticket__PeriodicMaintenance__PollIntervalSeconds: "60"
+  Ticket__PeriodicMaintenance__BatchSize: "100"
+
+  # TicketService SLA business calendar. TicketService validates this on
+  # startup; keep the seven entries explicit so Helm cannot collapse the list.
+  SlaBusinessHours__TimeZoneId: Asia/Ho_Chi_Minh
+  SlaBusinessHours__Start: "07:00:00"
+  SlaBusinessHours__End: "17:00:00"
+  SlaBusinessHours__WorkingDays__0: Sunday
+  SlaBusinessHours__WorkingDays__1: Monday
+  SlaBusinessHours__WorkingDays__2: Tuesday
+  SlaBusinessHours__WorkingDays__3: Wednesday
+  SlaBusinessHours__WorkingDays__4: Thursday
+  SlaBusinessHours__WorkingDays__5: Friday
+  SlaBusinessHours__WorkingDays__6: Saturday
+
   # Mosquitto runs under Docker on the same VPS. The deploy job supplies a
   # same-VPS/VPC address as iot.mqttNodeIp while TLS still validates this DNS name.
   Mqtt__Enabled: "true"

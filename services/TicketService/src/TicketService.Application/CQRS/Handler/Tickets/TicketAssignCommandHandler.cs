@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events;
+using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
 using TicketService.Application.Common.Models;
@@ -58,6 +59,23 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
 
         if (ticket == null)
             return Fail(404, "Ticket not found.");
+
+        var previousSchedule = ticket.ScheduledStartAtUtc;
+        var hasCustomerPeriodicSchedule =
+            ticket.PeriodicMaintenanceSourceTicketId.HasValue &&
+            ticket.PeriodicMaintenanceCustomerScheduledAtUtc.HasValue &&
+            previousSchedule.HasValue;
+        var customerScheduleExpired =
+            hasCustomerPeriodicSchedule && previousSchedule!.Value < nowUtc;
+        var replacesExpiredCustomerSchedule =
+            customerScheduleExpired && schedule.ScheduledStartAtUtc != previousSchedule;
+
+        if (hasCustomerPeriodicSchedule && !customerScheduleExpired &&
+            schedule.ScheduledStartAtUtc != previousSchedule)
+            return Fail(409, "The Customer-selected periodic-maintenance schedule is still valid and cannot be changed.");
+
+        if (customerScheduleExpired && string.IsNullOrWhiteSpace(request.Notes))
+            return Fail(400, "Notes are required after contacting the Customer to replace an expired schedule.");
 
         // Validate PrimaryHandler
         var primaryStaff = await _uow.StaffAccounts.GetAllAsync()
@@ -242,6 +260,39 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
                 ticket.ScheduledStartAtUtc,
                 ticket.ScheduleVersion,
                 targetStatus == TicketStatusEnum.InProgress), ct);
+
+            if (replacesExpiredCustomerSchedule && ticket.PeriodicMaintenanceDueAtUtc.HasValue)
+            {
+                var scheduleChanged = new PeriodicMaintenanceScheduleChangedEvent(
+                    ticket.Id,
+                    ticket.Code,
+                    ticket.BatteryAssetId,
+                    ticket.CustomerId,
+                    previousSchedule,
+                    ticket.ScheduledStartAtUtc!.Value,
+                    ticket.ScheduleVersion,
+                    nameof(ActorRoleEnum.Manager),
+                    request.ManagerId,
+                    request.Notes,
+                    ticket.PeriodicMaintenanceDueAtUtc.Value,
+                    ticket.PeriodicMaintenanceDueAtUtc.Value < nowUtc)
+                {
+                    Id = DeterministicEventId.From(
+                        ticket.Id,
+                        $"periodic-maintenance-schedule:{ticket.ScheduleVersion}")
+                };
+
+                await _outboxWriter.WriteAsync(scheduleChanged, transactionCt);
+                await _activityLogger.LogAsync(
+                    ticket.Id,
+                    request.ManagerId,
+                    ActorRoleEnum.Manager,
+                    request.ManagerName,
+                    ActivityActionEnum.PeriodicMaintenanceScheduleChanged,
+                    previousSchedule?.ToString("O"),
+                    ticket.ScheduledStartAtUtc.Value.ToString("O"),
+                    request.Notes);
+            }
 
             if (targetStatus == TicketStatusEnum.Pending)
             {
