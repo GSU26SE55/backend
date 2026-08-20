@@ -443,4 +443,83 @@ else
   FAILED=1
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 12: GH-1244 TicketService scheduling configuration must be wired from
+# the host contract through preflight/deployment into the rendered Helm
+# ConfigMap. Defaults in values-production.yaml alone are insufficient because
+# operators edit /opt/solar-platform/config/host.env between releases.
+# ---------------------------------------------------------------------------
+HOST_ENV_EXAMPLE="deploy/production/host.env.example"
+PRODUCTION_PREFLIGHT="deploy/scripts/preflight-production.sh"
+PRODUCTION_DEPLOY="deploy/scripts/deploy-production.sh"
+PERIODIC_HOST_KEYS="
+TICKET_PERIODIC_MAINTENANCE_ENABLED
+TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID
+TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS
+TICKET_PERIODIC_MAINTENANCE_LEAD_DAYS
+TICKET_PERIODIC_MAINTENANCE_OVERDUE_WINDOW_DAYS
+TICKET_PERIODIC_MAINTENANCE_REMINDER_TIME
+TICKET_PERIODIC_MAINTENANCE_POLL_INTERVAL_SECONDS
+TICKET_PERIODIC_MAINTENANCE_BATCH_SIZE
+SLA_BUSINESS_HOURS_TIME_ZONE_ID
+SLA_BUSINESS_HOURS_START
+SLA_BUSINESS_HOURS_END
+SLA_BUSINESS_HOURS_WORKING_DAYS_0
+SLA_BUSINESS_HOURS_WORKING_DAYS_1
+SLA_BUSINESS_HOURS_WORKING_DAYS_2
+SLA_BUSINESS_HOURS_WORKING_DAYS_3
+SLA_BUSINESS_HOURS_WORKING_DAYS_4
+SLA_BUSINESS_HOURS_WORKING_DAYS_5
+SLA_BUSINESS_HOURS_WORKING_DAYS_6
+"
+PERIODIC_CONFIG_KEYS="
+Ticket__PeriodicMaintenance__Enabled
+Ticket__PeriodicMaintenance__TimeZoneId
+Ticket__PeriodicMaintenance__CycleMonths
+Ticket__PeriodicMaintenance__LeadDays
+Ticket__PeriodicMaintenance__OverdueScheduleWindowDays
+Ticket__PeriodicMaintenance__ReminderTime
+Ticket__PeriodicMaintenance__PollIntervalSeconds
+Ticket__PeriodicMaintenance__BatchSize
+SlaBusinessHours__TimeZoneId
+SlaBusinessHours__Start
+SlaBusinessHours__End
+SlaBusinessHours__WorkingDays__0
+SlaBusinessHours__WorkingDays__1
+SlaBusinessHours__WorkingDays__2
+SlaBusinessHours__WorkingDays__3
+SlaBusinessHours__WorkingDays__4
+SlaBusinessHours__WorkingDays__5
+SlaBusinessHours__WorkingDays__6
+"
+PERIODIC_CONFIG_FAILED=0
+
+for host_key in ${PERIODIC_HOST_KEYS}; do
+  if ! grep -Eq "^${host_key}=" "${HOST_ENV_EXAMPLE}"; then
+    echo "FAIL: ${HOST_ENV_EXAMPLE} is missing ${host_key}"
+    PERIODIC_CONFIG_FAILED=1
+  fi
+  if ! grep -Fq "read_env ${host_key}" "${PRODUCTION_PREFLIGHT}"; then
+    echo "FAIL: ${PRODUCTION_PREFLIGHT} does not read ${host_key}"
+    PERIODIC_CONFIG_FAILED=1
+  fi
+  if ! grep -Fq "read_env ${host_key} \"\${host_env}\"" "${PRODUCTION_DEPLOY}"; then
+    echo "FAIL: ${PRODUCTION_DEPLOY} does not read ${host_key} from host.env"
+    PERIODIC_CONFIG_FAILED=1
+  fi
+done
+
+for config_key in ${PERIODIC_CONFIG_KEYS}; do
+  if ! grep -Fq "config.${config_key}=" "${PRODUCTION_DEPLOY}"; then
+    echo "FAIL: ${PRODUCTION_DEPLOY} does not pass config.${config_key} to Helm"
+    PERIODIC_CONFIG_FAILED=1
+  fi
+done
+
+if [ "${PERIODIC_CONFIG_FAILED}" -eq 0 ]; then
+  echo "PASS: GH-1244 host.env, preflight and Helm deployment configuration are wired end-to-end"
+else
+  FAILED=1
+fi
+
 exit "$FAILED"

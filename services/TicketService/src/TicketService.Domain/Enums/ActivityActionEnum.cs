@@ -36,5 +36,6 @@ public enum ActivityActionEnum
     ParticipantAdded = 31,
     ParticipantRemoved = 32,
     ParticipantRoleChanged = 33,
-    IncidentDeclassified = 34
+    IncidentDeclassified = 34,
+    PeriodicMaintenanceScheduleChanged = 35
 }
