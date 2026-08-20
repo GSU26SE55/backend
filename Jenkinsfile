@@ -163,7 +163,6 @@ pipeline {
                               'Frontend__WebBaseUrl: "https://solars.io.vn"' \
                               'GoogleOAuth__RedirectUri: "https://solars.io.vn/auth/google/callback"' \
                               'GoogleOAuth__AllowedRedirectUris__0: "https://solars.io.vn/auth/google/callback"' \
-                              'PartnerImport__ResetPasswordUrlBase: "https://solars.io.vn/forgot-password"' \
                               'Ai__GrpcAddress: "https://ai.solars.io.vn"' \
                               'Ai__HttpBaseUrl: "https://ai.solars.io.vn"' \
                               'TicketAi__AiGrpcAddress: "https://ai.solars.io.vn"'
@@ -173,6 +172,20 @@ pipeline {
                                 exit 1
                               }
                             done
+
+                            # This setting is scoped to EmailService's Deployment env list,
+                            # not the shared ConfigMap rendered as key/value YAML.
+                            if ! grep -F -A1 -- \
+                              '- name: PartnerImport__ResetPasswordUrlBase' \
+                              rendered-production.yaml | \
+                              grep -Fq \
+                                'value: "https://solars.io.vn/forgot-password"'
+                            then
+                              echo \
+                                'Missing EmailService PartnerImport reset-password URL contract' \
+                                >&2
+                              exit 1
+                            fi
 
                             if grep -Fq \
                               'GoogleOAuth__AllowedRedirectUris__1:' \
