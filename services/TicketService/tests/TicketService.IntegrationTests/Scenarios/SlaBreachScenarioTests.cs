@@ -24,7 +24,7 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
     public SlaBreachScenarioTests(TicketApiFactory factory)
     {
         _timeProvider = new FakeTimeProvider();
-        _timeProvider.SetUtcNow(Utc(2026, 8, 19, 7, 48)); // Wednesday 14:48 local
+        _timeProvider.SetUtcNow(Utc(2026, 8, 19, 5)); // Wednesday 12:00 local
         _outboxWriterMock = new Mock<IIntegrationEventOutboxWriter>();
         _outboxWriterMock
             .Setup(x => x.WriteAsync(It.IsAny<SlaWarningEvent>(), It.IsAny<CancellationToken>()))
@@ -87,7 +87,9 @@ public class SlaBreachScenarioTests : IClassFixture<TicketApiFactory>
             await db.SaveChangesAsync();
         }
 
-        // Exactly 80% consumed on Friday 16:00 local: first warning is late-day.
+        // GH-1242 — P2 budget = 3 ngày làm việc (1800 phút) ⇒ DueAt = Saturday 12:00 local.
+        // Mốc Friday 16:00 local còn đúng 360 phút làm việc = 20% ⇒ 80% consumed, và rơi vào
+        // giờ chót của ca ⇒ warning là late-day, reminder phải chờ tới ca kế tiếp.
         _timeProvider.SetUtcNow(Utc(2026, 8, 21, 9));
         await RunWorkerOnce();
         (await LoadTimer(timerId)).WarningSentAt.Should().Be(Utc(2026, 8, 21, 9));

@@ -276,9 +276,9 @@ stateDiagram-v2
 
     note right of ASSIGNED
         SLA Timer:
-        P1 Critical: 4h
-        P2 High: 24h
-        P3 Normal: 72h
+        P1 Critical: 14 ngày
+        P2 High: 3 ngày
+        P3 Normal: 2 ngày
     end note
 
     note right of WAITING_CUSTOMER
@@ -322,19 +322,19 @@ stateDiagram-v2
 flowchart LR
     Start([Ticket ASSIGNED<br/>SLA timer start])
 
-    Start --> P1{P1 Critical<br/>4 giờ}
+    Start --> P1{P1 Critical<br/>14 ngày}
     P1 -->|Staff xử lý xong| OK1[✅ RESOLVED]
     P1 -->|80% SLA| W1[⚠️ Warning<br/>notify Staff + Manager]
     W1 --> P1
     P1 -->|Breach 100%| E1[🔺 Auto-escalate<br/>Manager + Senior Staff]
 
-    Start --> P2{P2 High<br/>24 giờ}
+    Start --> P2{P2 High<br/>3 ngày}
     P2 -->|Staff xử lý xong| OK2[✅ RESOLVED]
     P2 -->|80% SLA| W2[⚠️ Warning<br/>notify Staff]
     W2 --> P2
     P2 -->|Breach 100%| E2[🔺 Escalate<br/>Manager reassign senior]
 
-    Start --> P3{P3 Normal<br/>72 giờ}
+    Start --> P3{P3 Normal<br/>2 ngày}
     P3 -->|Staff xử lý xong| OK3[✅ RESOLVED]
     P3 -->|80% SLA| W3[⚠️ Reminder<br/>notify Staff]
     W3 --> P3
@@ -406,7 +406,7 @@ flowchart TD
     BA3 --> BA4[View asset history<br/>alerts / tickets / sensor readings]
 
     T3 --> SR1[Set response time per priority<br/>+ Staff tier tương ứng]
-    SR1 --> SR2[P1: 4h → Staff Tier 1<br/>P2: 24h → Staff Tier 2<br/>P3: 72h → Staff Tier 3]
+    SR1 --> SR2[P1: 14 ngày → Staff Tier 1<br/>P2: 3 ngày → Staff Tier 2<br/>P3: 2 ngày → Staff Tier 3]
     SR2 --> SR3[Set escalation threshold<br/>Escalate chủ động tại 2/3 SLA<br/>Breach 100% → auto-escalate]
     SR3 --> SR4[Set priority mapping<br/>anomaly type → priority<br/>dependency → nâng priority]
 
@@ -675,9 +675,9 @@ flowchart TD
 
 | Priority | SLA | Trigger | Staff tier | Breach action |
 |----------|-----|---------|------------|---------------|
-| P1 Critical | 4h | Rủi ro an toàn, mất điện, nguy cơ hư hại | Tier 1 (tổng thể) | Manager reassign Senior + notify Admin → Critical Incident nếu vẫn fail |
-| P2 High | 24h | Suy giảm hiệu năng rõ rệt, lỗi sạc/xả | Tier 2 (theo module) | Manager reassign Tier 1 (priority giữ P2) |
-| P3 Normal | 72h | Bất thường nhẹ, câu hỏi vận hành | Tier 3 (chuyên sâu) | Escalate xử lý theo chuẩn P2 — Manager reassign senior |
+| P1 Critical | 14 ngày (140h làm việc) | Rủi ro an toàn, mất điện, nguy cơ hư hại | Tier 1 (tổng thể) | Manager reassign Senior + notify Admin → Critical Incident nếu vẫn fail |
+| P2 High | 3 ngày (30h làm việc) | Suy giảm hiệu năng rõ rệt, lỗi sạc/xả | Tier 2 (theo module) | Manager reassign Tier 1 (priority giữ P2) |
+| P3 Normal | 2 ngày (20h làm việc) | Bất thường nhẹ, câu hỏi vận hành | Tier 3 (chuyên sâu) | Escalate xử lý theo chuẩn P2 — Manager reassign senior |
 
 > **Priority do System tính tự động** từ classification + dependency. Manager **xem xét và có thể điều chỉnh 1 lần** khi triage (OPEN → ASSIGNED) — phải ghi lý do vào Activity Timeline. Sau đó **không thay đổi** trong toàn bộ vòng đời ticket. Breach SLA → escalate thêm *nhân lực/cấp bậc*, không phải đổi deadline hay priority. Giữ priority cố định đảm bảo audit trail chính xác và SLA report không bị skew.
 

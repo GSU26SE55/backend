@@ -16,12 +16,18 @@ public static class TicketQueryHelper
     /// Map StaffId → FullName để điền <c>TicketAssignmentDTO.StaffName</c>.
     /// Truyền null thì StaffName để trống (FE tự fallback sang StaffId).
     /// </param>
+    /// <param name="canViewSlaTimer">
+    /// GH-1242 — SLA là chỉ số nội bộ của Staff. Customer chỉ được thấy
+    /// <c>ExpectedCompletionAtUtc</c>; truyền false để ẩn cả block <c>SlaTimer</c>
+    /// (gồm BreachAt, WarningSentAt, RemainingPercent).
+    /// </param>
     internal static TicketDTO MapToTicketDTO(
         Ticket t,
         ISlaCalculator slaCalculator,
         DateTime atUtc,
         bool hasUnreadChat = false,
-        IReadOnlyDictionary<Guid, string>? staffNames = null) => new()
+        IReadOnlyDictionary<Guid, string>? staffNames = null,
+        bool canViewSlaTimer = true) => new()
         {
             Id = t.Id.ToString(),
             Code = t.Code,
@@ -58,7 +64,8 @@ public static class TicketQueryHelper
             ActiveIncidentEpisodeId = t.ActiveIncidentEpisodeId?.ToString(),
             CreatedAt = t.CreatedAt,
             UpdatedAt = t.UpdatedAt,
-            SlaTimer = MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc),
+            SlaTimer = canViewSlaTimer ? MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc) : null,
+            ExpectedCompletionAtUtc = t.SlaTimer?.DueAt,
             HasUnreadChat = hasUnreadChat,
             DetectedAt = t.DetectedAt,
             BatterySerialNumber = t.BatterySerialNumber,
@@ -90,8 +97,30 @@ public static class TicketQueryHelper
             WarningSentAt = sla.WarningSentAt,
             BreachAt = sla.BreachAt,
             Status = sla.Status,
-            RemainingPercent = ComputeRemainingPercent(slaCalculator, sla, atUtc)
+            RemainingPercent = ComputeRemainingPercent(slaCalculator, sla, atUtc),
+            SlaWorkingDays = slaCalculator.GetSlaWorkingDays(sla.Priority),
+            SlaWorkingHours = slaCalculator.GetSlaHours(sla.Priority),
+            RemainingWorkingMinutes = ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc)
         };
+    }
+
+    /// <summary>
+    /// Số phút làm việc còn lại tới <c>timer.DueAt</c> — đồng hồ đếm ngược phía Staff.
+    /// Dùng cùng quy ước đóng băng khi Paused như <see cref="ComputeRemainingPercent(ISlaCalculator, SlaTimer, DateTime)"/>
+    /// để hai con số không lệch nhau.
+    /// </summary>
+    public static int ComputeRemainingWorkingMinutes(
+        ISlaCalculator slaCalculator,
+        SlaTimer timer,
+        DateTime atUtc)
+    {
+        if (timer.Status is not (SlaTimerStatusEnum.Running or SlaTimerStatusEnum.Paused))
+            return 0;
+
+        var observedAt = timer.Status == SlaTimerStatusEnum.Paused && timer.CurrentPauseStartedAt.HasValue
+            ? timer.CurrentPauseStartedAt.Value
+            : atUtc;
+        return (int)slaCalculator.GetWorkingMinutesBetween(observedAt, timer.DueAt);
     }
 
     /// <summary>
@@ -157,6 +186,10 @@ public static class TicketQueryHelper
 
     public static bool IsManagerOrAdmin(IReadOnlyCollection<string> actorRoles)
         => HasAnyRole(actorRoles, "Admin", "Manager");
+
+    /// <summary>GH-1242 — chỉ nội bộ mới thấy SLA timer; Customer chỉ thấy ngày dự kiến hoàn thành.</summary>
+    public static bool CanViewSlaTimer(IReadOnlyCollection<string> actorRoles)
+        => HasAnyRole(actorRoles, "Admin", "Manager", "Staff");
 
     private static bool HasAnyRole(IReadOnlyCollection<string> roles, params string[] check)
         => check.Any(r => HasRole(roles, r));

@@ -42,11 +42,16 @@ Chi tiết rules → [tech/fe.md](tech/fe.md)
 
 > **Stance (B5/ADR 0005):** Áp dụng **ITIL 4 Service Value System** góc nhìn Service Provider → External Customer, KHÔNG áp dụng ITIL phiên bản internal-IT. Xem `docs/adr/0005-b2b-itil-stance.md`.
 
-| Priority | SLA | Trigger | Breach action |
-|----------|-----|---------|---------------|
-| P1 Critical | < 4h | Pin mất điện / nguy cơ an toàn / scope Site hoặc MultiSite | Reassign Senior (Tier 3) + notify Admin |
-| P2 High | < 24h | Degradation đáng kể / SingleAsset urgency cao hoặc Site urgency thấp–TB | Manager reassign Tier 2/3 |
-| P3 Standard | < 72h | Bất thường nhẹ / bảo trì định kỳ / scope SingleAsset | Manager review |
+| Priority | SLA | Giờ làm việc | Trigger | Breach action |
+|----------|-----|--------------|---------|---------------|
+| P1 Critical | 14 ngày | 140h | Pin mất điện / nguy cơ an toàn / scope Site hoặc MultiSite | Reassign Senior (Tier 3) + notify Admin |
+| P2 High | 3 ngày | 30h | Degradation đáng kể / SingleAsset urgency cao hoặc Site urgency thấp–TB | Manager reassign Tier 2/3 |
+| P3 Standard | 2 ngày | 20h | Bất thường nhẹ / bảo trì định kỳ / scope SingleAsset | Manager review |
+
+> **Đơn vị (GH-1242):** SLA khai bằng **ngày làm việc**; số giờ suy ra từ cửa sổ 07:00–17:00
+> (10h/ngày, 7 ngày/tuần). Vì working days là cả 7 ngày nên N ngày làm việc = đúng N ngày lịch.
+> **Customer chỉ thấy ngày dự kiến hoàn thành** (`expectedCompletionAtUtc`); số giờ và trạng thái
+> breach là chỉ số nội bộ của Staff/Manager.
 
 - Priority **tính từ Priority Matrix Impact × Urgency** (`overall.md §2.4bis`), KHÔNG nhập thẳng
 - Priority cố định trong vòng đời ticket — Breach → escalate thêm nhân lực/cấp bậc, không extend deadline
