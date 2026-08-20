@@ -47,4 +47,9 @@ public interface IBatteryUnitOfWork : IUnitOfWork
 
     // Sprint IoT-2 #IoT2-16 — idempotency persistence.
     IGenericRepository<SensorIngestIdempotencyRecord> SensorIngestIdempotencyRecords { get; }
+
+    // Import dữ liệu bên thứ ba
+    IGenericRepository<ImportBatch> ImportBatches { get; }
+    IGenericRepository<ImportRow> ImportRows { get; }
+    IGenericRepository<ImportEntityLink> ImportEntityLinks { get; }
 }

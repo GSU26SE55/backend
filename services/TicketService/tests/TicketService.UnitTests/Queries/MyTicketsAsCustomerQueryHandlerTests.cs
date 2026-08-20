@@ -106,4 +106,35 @@ public class MyTicketsAsCustomerQueryHandlerTests
         result.Data!.Items.Should().HaveCount(1);
         result.Data.TotalItems.Should().Be(4);
     }
+
+    [Fact]
+    public async Task Handle_HidesSlaTimer_ButExposesExpectedCompletion()
+    {
+        // GH-1242 — danh sách của Customer chỉ được thấy ngày dự kiến hoàn thành.
+        var myId = Guid.NewGuid();
+        _mockCurrentUserService.Setup(s => s.UserId).Returns(myId.ToString());
+
+        var ticket = MakeTicket(myId);
+        var dueAt = DateTime.UtcNow.AddDays(2);
+        ticket.SlaTimer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Priority = TicketPriorityEnum.P3Normal,
+            StartedAt = DateTime.UtcNow,
+            DueAt = dueAt,
+            OriginalDueAt = dueAt,
+            Status = SlaTimerStatusEnum.Running
+        };
+        SetupMock([ticket]);
+
+        var result = await _handler.Handle(new MyTicketsAsCustomerQuery
+        {
+            PageNumber = 1,
+            PageSize = 10
+        }, default);
+
+        result.Data!.Items[0].SlaTimer.Should().BeNull();
+        result.Data.Items[0].ExpectedCompletionAtUtc.Should().Be(dueAt);
+    }
 }

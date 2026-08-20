@@ -173,6 +173,20 @@ pipeline {
                               }
                             done
 
+                            # This setting is scoped to EmailService's Deployment env list,
+                            # not the shared ConfigMap rendered as key/value YAML.
+                            if ! grep -F -A1 -- \
+                              '- name: PartnerImport__ResetPasswordUrlBase' \
+                              rendered-production.yaml | \
+                              grep -Fq \
+                                'value: "https://solars.io.vn/forgot-password"'
+                            then
+                              echo \
+                                'Missing EmailService PartnerImport reset-password URL contract' \
+                                >&2
+                              exit 1
+                            fi
+
                             if grep -Fq \
                               'GoogleOAuth__AllowedRedirectUris__1:' \
                               rendered-production.yaml

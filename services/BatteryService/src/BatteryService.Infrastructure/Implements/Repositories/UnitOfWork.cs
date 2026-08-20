@@ -60,6 +60,11 @@ public class UnitOfWork : IBatteryUnitOfWork
     // Sprint IoT-2 #IoT2-16 — idempotency persistence.
     public IGenericRepository<SensorIngestIdempotencyRecord> SensorIngestIdempotencyRecords => new GenericRepository<SensorIngestIdempotencyRecord>(_context);
 
+    // Import dữ liệu bên thứ ba
+    public IGenericRepository<ImportBatch> ImportBatches => new GenericRepository<ImportBatch>(_context);
+    public IGenericRepository<ImportRow> ImportRows => new GenericRepository<ImportRow>(_context);
+    public IGenericRepository<ImportEntityLink> ImportEntityLinks => new GenericRepository<ImportEntityLink>(_context);
+
     public async Task BeginTransactionAsync()
     {
         if (_currentTransaction is not null)

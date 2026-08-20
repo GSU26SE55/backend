@@ -8122,7 +8122,7 @@ Chuẩn hóa cho FE handle dễ hơn. Trả về trong `CommonResponse.Message` 
 - [ ] BatteryType CRUD — BatteryService §1
 - [ ] ThresholdConfig CRUD — §1
 - [ ] BatteryAsset CRUD + TransferOwner — §1
-- [x] SLA rules hardcoded P1/P2/P3 = 4/24/72h — không cần CRUD
+- [x] SLA rules hardcoded P1/P2/P3 = 14/3/2 ngày làm việc (GH-1242; trước đó 4/24/72h) — không cần CRUD
 - [x] Audit log endpoint — AuthService DONE
 - [ ] **Sprint audit Phase 1** — `auth_audit_logs` refactor (14 cột + outbox + trigger soft) — `#AUDIT-06..12` (§17 + §69.11)
 - [ ] **Sprint audit Phase 3** — BatteryService audit + local endpoint `/api/admin/battery/audit-logs` — `#AUDIT-20..23`

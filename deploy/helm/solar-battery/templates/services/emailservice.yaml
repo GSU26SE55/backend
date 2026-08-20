@@ -1,4 +1,5 @@
 {{- $svc := .Values.services.emailservice -}}
+{{- $frontendOrigin := .Values.global.frontendOrigin | default (printf "https://%s" .Values.global.domain) -}}
 {{- if $svc.enabled -}}
 ---
 apiVersion: apps/v1
@@ -37,6 +38,10 @@ spec:
           {{- include "solar.containerSecurityContext" . | nindent 10 }}
         ports:
         - { name: http, containerPort: {{ $svc.port }} }
+        env:
+        # Partner import welcome email — không khai báo thì code fallback về localhost:5173.
+        - name: PartnerImport__ResetPasswordUrlBase
+          value: {{ printf "%s/forgot-password" $frontendOrigin | quote }}
         envFrom:
         - configMapRef: { name: solar-config }
         - secretRef:    { name: solar-secrets }

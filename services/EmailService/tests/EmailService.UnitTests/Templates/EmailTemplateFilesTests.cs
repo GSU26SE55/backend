@@ -75,6 +75,9 @@ public class EmailTemplateFilesTests
         { EmailTemplates.RefreshTokenReuse, ["AppName", "UserName", "IpAddress", "UserAgent", "DetectedAt", "RevokedSessions"] },
         // GH-768 — link xác nhận bật 2FA xuyên thiết bị.
         { EmailTemplates.TwoFactorCrossDeviceConfirm, ["AppName", "UserName", "Email", "ConfirmUrl", "ExpiresInMinutes"] },
+        // Thư chào mừng khách hàng nhập từ dữ liệu bên thứ ba. Không có key mật khẩu: thư chỉ dẫn
+        // sang màn đặt lại mật khẩu, không mang mật khẩu đi theo.
+        { EmailTemplates.PartnerImportWelcome, ["AppName", "UserName", "Email", "AcceptUrl"] },
     };
 
     public static TheoryData<string> AllTemplateNames()

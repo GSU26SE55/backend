@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SharedInfrastructure.Middleware;
 using StackExchange.Redis;
 
@@ -17,7 +18,7 @@ public static class IdempotencyKeyExtensions
         services.Configure<IdempotencyOptions>(configuration.GetSection(IdempotencyOptions.SectionName));
 
         // Idempotent: chỉ register IConnectionMultiplexer nếu chưa có service nào khác làm.
-        services.AddSingleton<IConnectionMultiplexer>(sp =>
+        services.TryAddSingleton<IConnectionMultiplexer>(_ =>
         {
             var connStr = configuration.GetConnectionString("Redis")
                           ?? configuration["Redis:ConnectionString"]

@@ -193,4 +193,67 @@ public class TicketGetByIdQueryHandlerTests
         result.Data!.Chats.Should().HaveCount(1);
         result.Data.Chats[0].IsInternal.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task Handle_SlaTimerHiddenFromCustomer_ButExpectedCompletionExposed()
+    {
+        // GH-1242 — SLA là chỉ số nội bộ của Staff. Customer chỉ được biết ngày dự kiến
+        // hoàn thành, không thấy BreachAt/WarningSentAt/RemainingPercent.
+        var customerId = Guid.NewGuid();
+        var ticket = MakeTicket(customerId: customerId);
+        var dueAt = DateTime.UtcNow.AddDays(2);
+        ticket.SlaTimer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Priority = TicketPriorityEnum.P3Normal,
+            StartedAt = DateTime.UtcNow,
+            DueAt = dueAt,
+            OriginalDueAt = dueAt,
+            Status = SlaTimerStatusEnum.Running
+        };
+        SetupMock([ticket]);
+
+        var result = await _handler.Handle(new TicketGetByIdQuery
+        {
+            Id = ticket.Id,
+            ActorUserId = customerId,
+            ActorRoles = ["Customer"]
+        }, default);
+
+        result.Data!.SlaTimer.Should().BeNull();
+        result.Data.ExpectedCompletionAtUtc.Should().Be(dueAt);
+    }
+
+    [Fact]
+    public async Task Handle_SlaTimerVisibleToStaff_WithWorkingDayBudget()
+    {
+        var staffId = Guid.NewGuid();
+        var ticket = MakeTicket(PrimaryHandlerStaffId: staffId);
+        var dueAt = DateTime.UtcNow.AddDays(2);
+        ticket.SlaTimer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Priority = TicketPriorityEnum.P3Normal,
+            StartedAt = DateTime.UtcNow,
+            DueAt = dueAt,
+            OriginalDueAt = dueAt,
+            Status = SlaTimerStatusEnum.Running
+        };
+        SetupMock([ticket]);
+
+        var result = await _handler.Handle(new TicketGetByIdQuery
+        {
+            Id = ticket.Id,
+            ActorUserId = staffId,
+            ActorRoles = ["Staff"]
+        }, default);
+
+        result.Data!.SlaTimer.Should().NotBeNull();
+        result.Data.SlaTimer!.SlaWorkingDays.Should().Be(2, "P3 = 2 ngày làm việc");
+        result.Data.SlaTimer.SlaWorkingHours.Should().Be(20, "2 ngày × 10h/ngày");
+        result.Data.SlaTimer.RemainingWorkingMinutes.Should().BePositive();
+        result.Data.ExpectedCompletionAtUtc.Should().Be(dueAt);
+    }
 }

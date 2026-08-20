@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using StackExchange.Redis;
 
 namespace SharedInfrastructure.Idempotency;
@@ -13,7 +14,7 @@ public static class IdempotencyServiceExtensions
     public static IServiceCollection AddInboxIdempotency(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<InboxOptions>(configuration.GetSection(InboxOptions.SectionName));
-        services.AddSingleton<IConnectionMultiplexer>(sp =>
+        services.TryAddSingleton<IConnectionMultiplexer>(_ =>
         {
             var connStr = configuration.GetConnectionString("Redis")
                           ?? configuration["Redis:ConnectionString"]

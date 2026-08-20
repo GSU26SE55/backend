@@ -22,4 +22,10 @@ public static class EmailTemplates
     /// không thể hoàn tất — API vẫn báo thành công.
     /// </summary>
     public const string TwoFactorCrossDeviceConfirm = "TwoFactorCrossDeviceConfirm";
+
+    /// <summary>
+    /// Thư chào mừng khách hàng được tạo tài khoản từ dữ liệu nhập của bên thứ ba.
+    /// Không mang mật khẩu — chỉ dẫn khách sang màn đặt lại mật khẩu.
+    /// </summary>
+    public const string PartnerImportWelcome = "PartnerImportWelcome";
 }

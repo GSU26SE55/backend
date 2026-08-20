@@ -58,6 +58,12 @@ public class TicketDTO
     /// </summary>
     public DateTime? UpdatedAt { get; set; }
     public SlaTimerDTO? SlaTimer { get; set; }
+
+    /// <summary>
+    /// Ngày dự kiến hoàn thành (UTC) — lấy từ <c>SlaTimer.DueAt</c>. Đây là field duy nhất
+    /// Customer thấy về SLA; FE format DATE-ONLY. Null khi ticket chưa có SLA timer.
+    /// </summary>
+    public DateTime? ExpectedCompletionAtUtc { get; set; }
     public bool HasUnreadChat { get; set; }
 
     // ── Verify + merge (GH-ticket-verify) ──

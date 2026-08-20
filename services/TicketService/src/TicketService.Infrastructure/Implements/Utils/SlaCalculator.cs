@@ -12,6 +12,7 @@ public class SlaCalculator : ISlaCalculator
     private readonly TimeSpan _start;
     private readonly TimeSpan _end;
     private readonly HashSet<DayOfWeek> _workingDays;
+    private readonly int _workingMinutesPerDay;
     private readonly ISlaBusinessCalendarProvider? _calendarProvider;
 
     public SlaCalculator() : this(Options.Create(new SlaBusinessHoursOptions()), null)
@@ -31,6 +32,7 @@ public class SlaCalculator : ISlaCalculator
         _start = value.Start;
         _end = value.End;
         _workingDays = value.WorkingDays.ToHashSet();
+        _workingMinutesPerDay = (int)(_end - _start).TotalMinutes;
         _calendarProvider = calendarProvider;
     }
 
@@ -45,19 +47,24 @@ public class SlaCalculator : ISlaCalculator
     public DateTime CalculateDueDate(DateTime startedAt, TicketPriorityEnum priority)
         => AddWorkingMinutes(startedAt, GetSlaMinutes(priority));
 
-    public int GetSlaHours(TicketPriorityEnum priority)
+    public int GetSlaWorkingDays(TicketPriorityEnum priority)
     {
         return priority switch
         {
-            TicketPriorityEnum.P1Critical => 4,
-            TicketPriorityEnum.P2High => 24,
-            TicketPriorityEnum.P3Normal => 72,
+            TicketPriorityEnum.P1Critical => 14,
+            TicketPriorityEnum.P2High => 3,
+            TicketPriorityEnum.P3Normal => 2,
             _ => throw new ArgumentOutOfRangeException(nameof(priority),
                 $"Priority value {priority} is not supported for SLA calculation.")
         };
     }
 
-    public int GetSlaMinutes(TicketPriorityEnum priority) => checked(GetSlaHours(priority) * 60);
+    public int GetSlaHours(TicketPriorityEnum priority) => GetSlaMinutes(priority) / 60;
+
+    // Budget suy ra từ chính cửa sổ giờ làm việc đang cấu hình — khai số ngày ở một nơi duy nhất,
+    // số giờ tính ra. Hard-code cả ngày lẫn giờ sẽ khiến nhãn "N ngày" lệch DueAt khi đổi cửa sổ.
+    public int GetSlaMinutes(TicketPriorityEnum priority)
+        => checked(GetSlaWorkingDays(priority) * _workingMinutesPerDay);
 
     public bool IsWorkingTime(DateTime instantUtc)
     {
