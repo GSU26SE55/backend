@@ -390,6 +390,15 @@ config:
   Outbox__IntervalSeconds: "1"
   Notification__Dispatch__PollIntervalSeconds: "1"
 
+  # ---------- Partner data import ----------
+  # Ghim rõ các giới hạn production thay vì phụ thuộc hoàn toàn vào default trong code.
+  Import__MaxRowsPerBatch: "5000"
+  Import__AccountSyncTimeoutMinutes: "10"
+  Import__PollIntervalSeconds: "5"
+  Import__RetentionDays: "90"
+  Import__MaxInstallDateAgeYears: "15"
+  Import__MaxRowAttempts: "5"
+
   # MailJet__FromEmail belongs to solar-secrets because production must use a
   # sender address verified by the account, never a repository default.
   MailJet__DisplayName: Solar Panel Battery Maintainance

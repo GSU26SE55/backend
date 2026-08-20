@@ -26,7 +26,11 @@ public sealed record BatteryAuditTrailNotification(
         IReadOnlyDictionary<string, object?>? metadata = null)
     {
         var code = action.ToString();
-        var severity = action is BatteryAuditActionEnum.BatteryDeleted or BatteryAuditActionEnum.StatusChanged
+        // PartnerImportReverted gỡ hàng loạt bản ghi trong một nhịp, nên xếp cùng mức cảnh báo với
+        // xoá pin: đây là loại thao tác mà người vận hành cần nhìn thấy ngay trong dòng audit.
+        var severity = action is BatteryAuditActionEnum.BatteryDeleted
+            or BatteryAuditActionEnum.StatusChanged
+            or BatteryAuditActionEnum.PartnerImportReverted
             ? Severities.Warning : Severities.Info;
         var category = action is BatteryAuditActionEnum.ThresholdConfigChanged
             ? AuditCategories.Configuration : AuditCategories.DataModification;

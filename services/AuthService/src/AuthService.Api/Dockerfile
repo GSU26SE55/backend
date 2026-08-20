@@ -28,6 +28,13 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 COPY --from=build --chown=10001:10001 /app/publish .
 
+# Thư mục khoá Data Protection phải tồn tại SẴN trong ảnh và thuộc về đúng UID chạy ứng dụng.
+# Docker chỉ sao chép quyền sở hữu từ ảnh sang volume có tên vào LẦN GẮN ĐẦU TIÊN, và chỉ khi
+# đường dẫn đó đã có trong ảnh. Thiếu dòng này thì Docker tự tạo thư mục thuộc root, còn tiến
+# trình chạy bằng UID 10001 không ghi được — service chết ngay lúc khởi động với thông báo
+# "Cannot write to '/app/keys'", và triệu chứng là container lặp vô hạn.
+RUN mkdir -p /app/keys && chown -R 10001:10001 /app/keys
+
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 ENV DOTNET_EnableDiagnostics=0

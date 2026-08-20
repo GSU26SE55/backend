@@ -87,4 +87,8 @@ public enum AuditActionEnum
     // Account Merge (130-139) — #AUTH-47
     AccountMerged = 130,
     AccountMergeRejected = 131,
+
+    // Import dữ liệu bên thứ ba
+    /// <summary>Tài khoản khách hàng được cấp tự động từ dữ liệu nhập của bên thứ ba.</summary>
+    AccountProvisionedFromPartnerImport = 140,
 }

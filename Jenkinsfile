@@ -163,6 +163,7 @@ pipeline {
                               'Frontend__WebBaseUrl: "https://solars.io.vn"' \
                               'GoogleOAuth__RedirectUri: "https://solars.io.vn/auth/google/callback"' \
                               'GoogleOAuth__AllowedRedirectUris__0: "https://solars.io.vn/auth/google/callback"' \
+                              'PartnerImport__ResetPasswordUrlBase: "https://solars.io.vn/forgot-password"' \
                               'Ai__GrpcAddress: "https://ai.solars.io.vn"' \
                               'Ai__HttpBaseUrl: "https://ai.solars.io.vn"' \
                               'TicketAi__AiGrpcAddress: "https://ai.solars.io.vn"'

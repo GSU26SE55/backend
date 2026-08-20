@@ -1,0 +1,4 @@
+external_asset_code,external_site_code,serial_number,battery_type_name,manufacturer,nominal_capacity_ah,nominal_voltage,chemistry,install_date,warranty_end_date,location,notes
+AS-TAY-0001,ST-TAY-001,pyl/binhminh 001,US3000C-TAY,Pylontech,74,48,LiFePO4,2019-06-01,2027-06-01,Rack A-01,Serial ban co dinh viet thuong va dau gach cheo
+AS-TAY-0002,ST-TAY-001,PYL-BINHMINH-002,US3000C-TAY,Pylontech,74,48,LiFePO4,2018-01-15,2026-01-15,Rack A-02,Ngay lap 8 nam truoc - duong tao tay se tu choi
+AS-TAY-0003,ST-TAY-002,PYL-SOLARVIET-001,US3000C-TAY,Pylontech,74,48,LiFePO4,2030-01-01,,Rack B-01,Ngay lap tuong lai - sai co y

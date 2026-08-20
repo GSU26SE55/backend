@@ -1,6 +1,6 @@
 namespace BatteryService.Domain.Enums;
 
-/// <summary>12 action audit của BatteryService (Sprint audit #AUDIT-20). Enum bắt đầu từ 1.</summary>
+/// <summary>14 action audit của BatteryService (Sprint audit #AUDIT-20). Enum bắt đầu từ 1.</summary>
 public enum BatteryAuditActionEnum
 {
     BatteryCreated = 1,
@@ -15,4 +15,10 @@ public enum BatteryAuditActionEnum
     StatusChanged = 10,
     MaintenanceLogged = 11,
     CalibrationApplied = 12,
+
+    /// <summary>Đã ghi thật một lô dữ liệu nhập từ bên thứ ba.</summary>
+    PartnerImportCommitted = 13,
+
+    /// <summary>Đã hoàn tác một lô dữ liệu nhập từ bên thứ ba.</summary>
+    PartnerImportReverted = 14,
 }

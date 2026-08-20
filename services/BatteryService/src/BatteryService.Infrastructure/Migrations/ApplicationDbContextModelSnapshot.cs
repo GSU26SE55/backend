@@ -17,7 +17,7 @@ namespace BatteryService.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.2")
+                .HasAnnotation("ProductVersion", "8.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -967,6 +967,271 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasDatabaseName("ix_environmental_incidents_site_status");
 
                     b.ToTable("environmental_incidents", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.ImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("CreatedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("created_rows");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("EntityTypesMask")
+                        .HasColumnType("integer")
+                        .HasColumnName("entity_types_mask");
+
+                    b.Property<string>("ErrorSummary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("error_summary");
+
+                    b.Property<int>("FailedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_rows");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("FileSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("file_sha256");
+
+                    b.Property<int>("InvalidRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("invalid_rows");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsDryRun")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_dry_run");
+
+                    b.Property<Guid?>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<int>("SkippedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("skipped_rows");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_rows");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("UpdatedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("updated_rows");
+
+                    b.Property<int>("ValidRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("valid_rows");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileSha256")
+                        .HasDatabaseName("idx_import_batches_file_sha256");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("idx_import_batches_status_created_at");
+
+                    b.ToTable("import_batches", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.ImportEntityLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("CreatedByBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_batch_id");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("EntityType")
+                        .HasColumnType("integer")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("ExternalRef")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("external_ref");
+
+                    b.Property<string>("ExternalRefRaw")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("external_ref_raw");
+
+                    b.Property<Guid>("InternalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("internal_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByBatchId")
+                        .HasDatabaseName("idx_import_entity_links_batch");
+
+                    b.HasIndex("InternalId")
+                        .HasDatabaseName("idx_import_entity_links_internal_id");
+
+                    b.HasIndex("EntityType", "ExternalRef")
+                        .IsUnique()
+                        .HasDatabaseName("ux_import_entity_links_entity_ref")
+                        .HasFilter("is_deleted = false");
+
+                    b.ToTable("import_entity_links", (string)null);
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.ImportRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("CreatedEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_entity_id");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("EntityType")
+                        .HasColumnType("integer")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("ErrorsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("errors_json");
+
+                    b.Property<string>("ExternalRef")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("external_ref");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("import_batch_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("LinkedAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_account_id");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<string>("RawJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("raw_json");
+
+                    b.Property<int>("RowNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_number");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImportBatchId", "Status")
+                        .HasDatabaseName("idx_import_rows_batch_status");
+
+                    b.HasIndex("ImportBatchId", "EntityType", "ExternalRef")
+                        .HasDatabaseName("idx_import_rows_batch_entity_ref");
+
+                    b.HasIndex("ImportBatchId", "EntityType", "RowNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_import_rows_batch_entity_row");
+
+                    b.ToTable("import_rows", (string)null);
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.IotDevice", b =>
@@ -2281,6 +2546,17 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Navigation("Site");
                 });
 
+            modelBuilder.Entity("BatteryService.Domain.Entities.ImportRow", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.ImportBatch", "Batch")
+                        .WithMany("Rows")
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+                });
+
             modelBuilder.Entity("BatteryService.Domain.Entities.IotDevice", b =>
                 {
                     b.HasOne("BatteryService.Domain.Entities.Site", "Site")
@@ -2426,6 +2702,11 @@ namespace BatteryService.Infrastructure.Migrations
             modelBuilder.Entity("BatteryService.Domain.Entities.EnvironmentalIncident", b =>
                 {
                     b.Navigation("Alerts");
+                });
+
+            modelBuilder.Entity("BatteryService.Domain.Entities.ImportBatch", b =>
+                {
+                    b.Navigation("Rows");
                 });
 
             modelBuilder.Entity("BatteryService.Domain.Entities.IotDevice", b =>

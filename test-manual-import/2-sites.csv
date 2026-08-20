@@ -1,0 +1,4 @@
+external_site_code,external_customer_code,site_name,address,latitude,longitude,install_date,contact_person_name,contact_person_phone
+ST-TAY-001,KH-TAY-001,Nha may Binh Minh,KCN Long An,10.5432,106.4123,2021-03-15,Nguyen Van A,0912345678
+ST-TAY-002,KH-TAY-002,Trang trai Solar Viet,Ninh Thuan,11.5680,108.9880,2020-08-20,Tran Thi B,0912345679
+ST-TAY-003,KH-KHONG-TON-TAI,Site Mo Coi Co Y,Khong co chu,10.5,106.4,2021-01-01,,
