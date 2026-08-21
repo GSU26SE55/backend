@@ -126,6 +126,30 @@ public sealed class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectio
         DateTime detectedAtUtc,
         int minimumSilenceSeconds,
         CancellationToken ct)
+        => await TryMarkOfflineCoreAsync(
+            deviceId,
+            detectedAtUtc,
+            minimumSilenceSeconds,
+            enforceSilenceWindow: true,
+            ct: ct);
+
+    public async Task<IotDeviceOfflineTransitionResult> TryMarkOfflineFromLwtAsync(
+        Guid deviceId,
+        DateTime detectedAtUtc,
+        CancellationToken ct)
+        => await TryMarkOfflineCoreAsync(
+            deviceId,
+            detectedAtUtc,
+            MinimumOfflineSeconds,
+            enforceSilenceWindow: false,
+            ct: ct);
+
+    private async Task<IotDeviceOfflineTransitionResult> TryMarkOfflineCoreAsync(
+        Guid deviceId,
+        DateTime detectedAtUtc,
+        int minimumSilenceSeconds,
+        bool enforceSilenceWindow,
+        CancellationToken ct)
     {
         var detectedAt = EnsureUtc(detectedAtUtc);
         var requiredSilence = Math.Max(MinimumOfflineSeconds, minimumSilenceSeconds);
@@ -144,7 +168,7 @@ public sealed class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectio
         var lastSeen = EnsureUtc(device.LastSeenAt.Value);
         var effectiveSilence = EffectiveSilenceSeconds(requiredSilence, device.HeartbeatIntervalSeconds);
         var offlineDurationSeconds = Math.Max(0, (int)(detectedAt - lastSeen).TotalSeconds);
-        if (offlineDurationSeconds < effectiveSilence)
+        if (enforceSilenceWindow && offlineDurationSeconds < effectiveSilence)
             return default;
 
         await _unitOfWork.BeginTransactionAsync();

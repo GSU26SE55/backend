@@ -318,8 +318,8 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
     }
 
     /// <summary>
-    /// LWT/status handler. Both online and offline pass through the same availability policies as
-    /// HTTP heartbeat, telemetry ingest, and the polling fallback. Payload matching is exact to
+    /// LWT/status handler. A live offline delivery transitions immediately; a retained replay
+    /// keeps the heartbeat freshness guard because it may be stale. Payload matching is exact to
     /// avoid treating arbitrary strings containing "offline" as a state transition.
     /// </summary>
     private async Task DispatchStatusAsync(string deviceCode, string payload, bool isRetained)
@@ -367,11 +367,21 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
         }
 
         var detector = scope.ServiceProvider.GetRequiredService<IIotDeviceOfflineDetectionService>();
-        var transition = await detector.TryMarkOfflineAsync(
-            device.Id,
-            DateTime.UtcNow,
-            Math.Max(15, _options.LwtOfflineGraceSeconds),
-            CancellationToken.None);
+        // MQTT sets Retain=false for a live delivery, even when the Will itself is stored as
+        // retained. That live LWT is direct broker evidence that the socket died, so waiting an
+        // additional heartbeat window made power loss take 5-7 minutes to appear. A retained
+        // replay after the bridge subscribes is different: it can be stale and must keep the
+        // freshness guard.
+        var transition = isRetained
+            ? await detector.TryMarkOfflineAsync(
+                device.Id,
+                DateTime.UtcNow,
+                Math.Max(15, _options.LwtOfflineGraceSeconds),
+                CancellationToken.None)
+            : await detector.TryMarkOfflineFromLwtAsync(
+                device.Id,
+                DateTime.UtcNow,
+                CancellationToken.None);
 
         if (transition.MarkedOffline)
         {

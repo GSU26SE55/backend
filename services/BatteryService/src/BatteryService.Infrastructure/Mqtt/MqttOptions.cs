@@ -26,9 +26,9 @@ public class MqttOptions
     public int ReconnectIntervalSeconds { get; set; } = 5;
 
     /// <summary>
-    /// Minimum period without an accepted heartbeat/telemetry signal before an MQTT LWT
-    /// "offline" message may transition a device to Offline. This filters retained/stale LWT
-    /// packets and short broker reconnects.
+    /// Minimum silence required only when replaying a retained MQTT LWT after the bridge
+    /// subscribes. Live LWT deliveries are direct broker disconnect evidence and transition
+    /// immediately; the grace period prevents stale retained packets from doing so.
     /// </summary>
     public int LwtOfflineGraceSeconds { get; set; } = 90;
 

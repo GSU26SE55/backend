@@ -13,6 +13,16 @@ public interface IIotDeviceOfflineDetectionService
         DateTime detectedAtUtc,
         int minimumSilenceSeconds,
         CancellationToken ct);
+
+    /// <summary>
+    /// Marks a device offline from a live MQTT Last-Will message. The broker has already
+    /// confirmed that the connection died, so this path must not wait for the heartbeat
+    /// silence window used by the periodic polling fallback.
+    /// </summary>
+    Task<IotDeviceOfflineTransitionResult> TryMarkOfflineFromLwtAsync(
+        Guid deviceId,
+        DateTime detectedAtUtc,
+        CancellationToken ct);
 }
 
 public record IotDeviceOfflineDetectionResult(int Scanned, int MarkedOffline);
