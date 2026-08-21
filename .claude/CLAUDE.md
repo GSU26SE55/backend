@@ -33,7 +33,7 @@ Hệ thống agent hỗ trợ dự án Capstone **Solar Lithium-ion Battery Main
 Ngoài ra: `ESCALATED` (từ P1/P2 breach hoặc Staff request) · `CLOSED_REJECTED` (Manager từ chối ngoài scope)
 
 **SLA theo priority (Manager gán, không thay đổi trong vòng đời ticket):**
-- P1 Critical: 14 ngày (140h làm việc) · P2 High: 3 ngày (30h) · P3 Standard: 2 ngày (20h)
+- P1 Critical: 1 ngày (10h làm việc) · P2 High: 3 ngày (30h) · P3 Standard: 7 ngày (70h)
 - Đếm theo giờ làm việc 07:00–17:00, 7 ngày/tuần. Customer chỉ thấy ngày dự kiến hoàn thành.
 
 ---

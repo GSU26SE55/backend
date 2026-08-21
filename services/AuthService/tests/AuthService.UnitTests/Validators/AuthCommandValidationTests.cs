@@ -123,6 +123,27 @@ public class LoginCommandValidationTests
         r.IsSuccess.Should().BeTrue();
     }
 
+    /// <summary>Login áp cùng giới hạn 256 ký tự cho email như Register — vượt ngưỡng thì hỏng.</summary>
+    [Fact]
+    public async Task Email_TooLong_Fails()
+    {
+        var email = new string('a', 251) + "@e.com";   // 257 ký tự
+        var r = await new LoginCommand { Email = email, Password = "abc123" }.ValidateAsync();
+
+        r.IsSuccess.Should().BeFalse();
+        r.ListErrors.Should().Contain(e => e.Field == "Email" && e.Detail.Contains("256"));
+    }
+
+    /// <summary>Đúng 256 ký tự vẫn hợp lệ — luật là "vượt quá", không phải "bằng".</summary>
+    [Fact]
+    public async Task Email_ExactlyMaxLength_Passes()
+    {
+        var email = new string('a', 250) + "@e.com";   // 256 ký tự
+        var r = await new LoginCommand { Email = email, Password = "abc123" }.ValidateAsync();
+
+        r.IsSuccess.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData("", "Email")]
     [InlineData("not-email", "Email")]

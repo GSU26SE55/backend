@@ -78,10 +78,10 @@ public class SlaTimerBackgroundServiceTests
 
         await using var provider = CreateProvider(dbName);
 
-        // Data: P1 budget = 14 ngày làm việc (8400 phút). 80% là 6720 phút.
-        // Còn 1670 phút làm việc -> đã dùng 80.1% -> Phải Warning.
+        // Data: P1 budget = 1 ngày làm việc (600 phút). 80% là 480 phút.
+        // Còn 119 phút làm việc -> đã dùng 80.2% -> Phải Warning.
         var startTime = FixedNow.AddDays(-12);
-        var dueAt = new SlaCalculator().AddWorkingMinutes(FixedNow, 1670);
+        var dueAt = new SlaCalculator().AddWorkingMinutes(FixedNow, 119);
 
         await SetupData(provider, ticketId, slaTimerId, startTime, dueAt);
 
