@@ -51,9 +51,9 @@ public class SlaCalculator : ISlaCalculator
     {
         return priority switch
         {
-            TicketPriorityEnum.P1Critical => 14,
+            TicketPriorityEnum.P1Critical => 1,
             TicketPriorityEnum.P2High => 3,
-            TicketPriorityEnum.P3Normal => 2,
+            TicketPriorityEnum.P3Normal => 7,
             _ => throw new ArgumentOutOfRangeException(nameof(priority),
                 $"Priority value {priority} is not supported for SLA calculation.")
         };
