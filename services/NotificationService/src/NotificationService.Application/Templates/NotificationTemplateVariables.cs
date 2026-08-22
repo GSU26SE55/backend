@@ -140,6 +140,15 @@ public static class NotificationTemplateVariables
                 ["accountId", "creationSource", "role", "screen"],
 
             // ── Blog ──────────────────────────────────────────────────────────────────────────
+            // ── Guide (KB) review ─────────────────────────────────────────────────────────────
+            [NotificationTypeEnum.KbArticleReviewRequested] =
+                ["articleId", "articleTitle", "requestedByUserId", "requestedByName", "changeDescription", "isNewArticle"],
+            [NotificationTypeEnum.KbArticleReviewApproved] =
+                ["articleId", "articleTitle", "decidedByUserId", "decidedByName", "approved"],
+            // rejectReason chỉ có ở nhánh từ chối; nhánh duyệt ghi null.
+            [NotificationTypeEnum.KbArticleReviewRejected] =
+                ["articleId", "articleTitle", "decidedByUserId", "decidedByName", "approved", "rejectReason"],
+
             [NotificationTypeEnum.BlogGenerationCompleted] = ["blogPostId"],
             // errorMessage = message kỹ thuật gốc từ AI/HttpClient. Body hiển thị đã được diễn
             // giải thành câu người dùng hiểu, khoá này giữ lại để tra cứu (và cho template nào

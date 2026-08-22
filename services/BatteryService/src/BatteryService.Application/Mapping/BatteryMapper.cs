@@ -105,10 +105,15 @@ public static class BatteryMapper
         };
     }
 
-    public static AlertDto ToDto(Alert alert)
+    /// <param name="customerName">
+    /// Tên khách sở hữu alert. Truyền vào thay vì tra trong mapper vì Account nằm ở repository
+    /// khác — cùng quy ước với ToDto của BatteryAsset/Site ở trên.
+    /// </param>
+    public static AlertDto ToDto(Alert alert, string customerName = "")
     {
         return new AlertDto
         {
+            CustomerName = customerName,
             Id = alert.Id.ToString(),
             BatteryAssetId = alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
             IotDeviceId = alert.IotDeviceId?.ToString(),

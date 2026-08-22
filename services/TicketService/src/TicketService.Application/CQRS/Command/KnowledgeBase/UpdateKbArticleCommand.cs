@@ -21,6 +21,9 @@ public class UpdateKbArticleCommand : IRequest<CommonResponse<KbArticleDTO>>, IV
     /// </summary>
     [JsonIgnore]
     public string CurrentUserRole { get; set; } = string.Empty;
+    /// <summary>Tên người sửa — đi vào thông báo "chờ duyệt" gửi Manager/Admin.</summary>
+    [JsonIgnore]
+    public string? CurrentUserName { get; set; }
     public TicketCategoryEnum Category { get; set; }
     /// <summary>
     /// Tiêu đề.

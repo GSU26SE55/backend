@@ -53,6 +53,11 @@ public class AlertsController : ControllerBase
     /// - <c>BatteryAssetId</c>: tùy chọn, lọc alert của asset cụ thể.
     /// - <c>Severity</c>: enum <c>AlertSeverityEnum</c> (<c>Info = 1</c>, <c>Warning = 2</c>, <c>Critical = 3</c>).
     /// - <c>Status</c>: enum <c>AlertStatusEnum</c> (<c>Open = 1</c>, <c>Acknowledged = 2</c>, <c>Merged = 3</c>, <c>Resolved = 4</c>).
+    /// - <c>AnomalyType</c>: tùy chọn, lọc theo loại anomaly (<c>AnomalyTypeEnum</c>).
+    /// - <c>ExcludeEnvironmentalIncidents</c>: tùy chọn (mặc định <c>false</c>). Bật để bỏ alert mirror
+    ///   của EnvironmentalIncident — loại alert này đã có màn hình riêng ở
+    ///   <c>GET /api/environmental-incidents</c> nên màn hình "Battery alerts" của FE bật cờ này.
+    ///   Bị bỏ qua khi <c>AnomalyType</c> được truyền.
     /// - <c>From</c>: tùy chọn, lọc <c>DetectedAt &gt;= From</c> (UTC).
     /// - <c>To</c>: tùy chọn, lọc <c>DetectedAt &lt;= To</c> (UTC).
     ///

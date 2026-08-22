@@ -35,8 +35,11 @@ public class PublishKbArticleCommandHandler : IRequestHandler<PublishKbArticleCo
             return await HandleTemplatePublish(article, ct);
         }
 
-        if (article.Status != KbArticleStatusEnum.Draft)
-            return Fail(409, "Only articles in Draft status can be published.");
+        // Draft = xuất bản lần đầu; Archived = bỏ lưu trữ, đưa bài dùng lại (un-archive).
+        // Trước đây chỉ nhận Draft nên archive là đường một chiều: archive nhầm một bài thì
+        // không còn cách nào gỡ qua API, phải sửa thẳng dưới DB.
+        if (article.Status != KbArticleStatusEnum.Draft && article.Status != KbArticleStatusEnum.Archived)
+            return Fail(409, "Only articles in Draft or Archived status can be published.");
 
         article.Status = KbArticleStatusEnum.Published;
         article.ReviewRequired = false;
