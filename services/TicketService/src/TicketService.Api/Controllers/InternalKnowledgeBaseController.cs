@@ -47,6 +47,7 @@ public class InternalKnowledgeBaseController : ControllerBase
     {
         command.CurrentUserId = GetCurrentUserId();
         command.CurrentUserRole = _currentUser.Role ?? string.Empty;
+        command.CurrentUserName = _currentUser.FullName;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -75,6 +76,7 @@ public class InternalKnowledgeBaseController : ControllerBase
         command.ArticleId = id;
         command.CurrentUserId = GetCurrentUserId();
         command.CurrentUserRole = _currentUser.Role ?? string.Empty;
+        command.CurrentUserName = _currentUser.FullName;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);

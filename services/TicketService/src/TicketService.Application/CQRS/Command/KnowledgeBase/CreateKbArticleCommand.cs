@@ -16,6 +16,9 @@ public class CreateKbArticleCommand : IRequest<CommonResponse<KbArticleActionDTO
     public Guid CurrentUserId { get; set; }
     [JsonIgnore]
     public string CurrentUserRole { get; set; } = string.Empty;
+    /// <summary>Tên người tạo — đi vào thông báo "chờ duyệt" gửi Manager/Admin.</summary>
+    [JsonIgnore]
+    public string? CurrentUserName { get; set; }
     [JsonIgnore]
     public bool IsTemplate { get; set; } = false;
     /// <summary>

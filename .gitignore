@@ -67,6 +67,7 @@ deploy/helm/*/charts/
 
 # ---------- Test/coverage output (sinh tự động, không commit) ----------
 CoverageResults/
+CovResults/
 IntegrationResults/
 
 # ---------- GeoIP database (downloaded/generated locally) ----------

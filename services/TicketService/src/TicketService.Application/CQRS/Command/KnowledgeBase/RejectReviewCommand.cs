@@ -15,6 +15,14 @@ public class RejectReviewCommand : IRequest<CommonResponse<KbArticleActionDTO>>,
     public Guid ArticleId { get; set; }
     public string? Reason { get; set; }
 
+    /// <summary>Người bấm từ chối — đi vào thông báo gửi cho người đề xuất.</summary>
+    [JsonIgnore]
+    public Guid CurrentUserId { get; set; }
+
+    /// <summary>Tên người từ chối, để thông báo nói rõ ai quyết định thay vì in ra Guid.</summary>
+    [JsonIgnore]
+    public string? CurrentUserName { get; set; }
+
     public Task<CommonResponse<KbArticleActionDTO>> ValidateAsync()
     {
         var response = new CommonResponse<KbArticleActionDTO>();

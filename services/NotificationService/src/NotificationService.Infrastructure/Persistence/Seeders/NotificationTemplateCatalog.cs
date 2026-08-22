@@ -127,6 +127,20 @@ public static class NotificationTemplateCatalog
             [NotificationTypeEnum.EnvironmentalIncidentResolved] =
                 ("Environmental incident resolved", "The environmental incident at your site has ended."),
 
+            // ── Guide (KB) review ────────────────────────────────────────────────────────────
+            // {{articleTitle}}/{{requestedByName}} đến từ PayloadJson của consumer. Không dùng
+            // {{changeDescription}} trong template: nó do người sửa tự nhập, dài ngắn tuỳ ý và
+            // consumer đã cắt ngắn khi dựng Body builtin — để nguyên ở payload cho ai cần tra.
+            [NotificationTypeEnum.KbArticleReviewRequested] =
+                ("Guide article awaiting approval",
+                 "{{requestedByName}} submitted \"{{articleTitle}}\" for approval."),
+            [NotificationTypeEnum.KbArticleReviewApproved] =
+                ("Guide article change approved",
+                 "{{decidedByName}} approved your change to \"{{articleTitle}}\". It is now live."),
+            [NotificationTypeEnum.KbArticleReviewRejected] =
+                ("Guide article change rejected",
+                 "{{decidedByName}} rejected your change to \"{{articleTitle}}\". Reason: {{rejectReason}}."),
+
             // ChatCreated là luồng realtime: consumer đã dựng preview "sender: body" trong
             // Title/Body builtin. Giữ nguyên hai field này để banner/bubble hiện đúng tin thật.
             [NotificationTypeEnum.ChatCreated] =

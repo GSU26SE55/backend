@@ -25,6 +25,13 @@ public class AlertDto
     /// <summary>Serial của battery liên quan. Rỗng cho alert cấp site.</summary>
     public string BatterySerialNumber { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Khách hàng sở hữu alert này. Lấy từ BatteryAsset.CustomerId (alert cấp pin) hoặc
+    /// Site.CustomerId (alert cấp site) — cùng hai đường mà tenant scope đã dùng để lọc.
+    /// Rỗng khi không tra được tài khoản (đã xoá hoặc chưa đồng bộ).
+    /// </summary>
+    public string CustomerName { get; set; } = string.Empty;
+
     /// <summary>Loại bất thường (xem AnomalyTypeEnum 1..16).</summary>
     public AnomalyTypeEnum AnomalyType { get; set; }
 

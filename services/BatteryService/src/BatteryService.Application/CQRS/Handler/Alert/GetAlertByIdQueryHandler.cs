@@ -38,6 +38,7 @@ public class GetAlertByIdQueryHandler : IRequestHandler<GetAlertByIdQuery, Commo
             .GetAllAsync()
             .AsNoTracking()
             .Include(alert => alert.BatteryAsset)
+            .Include(alert => alert.Site)
             .Where(alert => alert.Id == request.Id && !alert.IsDeleted);
 
         // 404 thay vì 403: không tiết lộ rằng alert của tenant khác có tồn tại.
@@ -60,11 +61,22 @@ public class GetAlertByIdQueryHandler : IRequestHandler<GetAlertByIdQuery, Commo
             };
         }
 
+        // Chủ sở hữu đến từ asset HOẶC site — cùng hai đường mà tenant scope ở trên dùng.
+        var customerId = entity.BatteryAsset?.CustomerId ?? entity.Site?.CustomerId;
+        var customerName = customerId.HasValue
+            ? await _unitOfWork.CustomerAccounts
+                .GetAllAsync()
+                .AsNoTracking()
+                .Where(account => account.Id == customerId.Value && !account.IsDeleted)
+                .Select(account => account.FullName)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         return new CommonResponse<AlertDto>
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = BatteryMapper.ToDto(entity)
+            Data = BatteryMapper.ToDto(entity, customerName ?? string.Empty)
         };
     }
 }

@@ -73,6 +73,12 @@ public static class NotificationCategoryMap
             // GH-83: hai type Blog trước đây thiếu khai báo ⇒ rơi vào nhánh mặc định của Resolve()
             // (cũng là Account) nên hành vi runtime KHÔNG đổi — nhưng test bao vẫn đỏ vì `All` thiếu
             // khoá, và FE không thấy chúng trong GET /categories.
+            // Guide (KB) duyệt bài — xếp nhóm Account (nhóm "khác/hệ thống") vì 6 category hiện
+            // có không có nhóm nào cho nội dung/tri thức, và thêm category mới sẽ đổi hợp đồng
+            // GET /api/notification-preferences/categories mà FE + mobile đang dựng UI theo.
+            [NotificationTypeEnum.KbArticleReviewRequested] = NotificationCategoryEnum.Account,
+            [NotificationTypeEnum.KbArticleReviewApproved] = NotificationCategoryEnum.Account,
+            [NotificationTypeEnum.KbArticleReviewRejected] = NotificationCategoryEnum.Account,
             [NotificationTypeEnum.BlogGenerationCompleted] = NotificationCategoryEnum.Account,
             [NotificationTypeEnum.BlogGenerationFailed] = NotificationCategoryEnum.Account,
         };
