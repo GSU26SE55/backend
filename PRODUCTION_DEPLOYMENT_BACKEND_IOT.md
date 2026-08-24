@@ -1,10 +1,12 @@
 # Production runbook: Backend (K3s) + IoT (Docker) trên cùng VPS
 
-Tài liệu này là nguồn hướng dẫn chính thức cho kiến trúc production hiện tại:
+Tài liệu này là nguồn hướng dẫn chính thức cho kiến trúc production hai VPS:
 
-- VPS Jenkins chỉ chạy CI/CD.
-- VPS Platform chạy toàn bộ backend và hạ tầng backend bằng K3s, đồng thời chạy Mosquitto của IoT bằng Docker Compose.
-- VPS AI chạy `ai-module` độc lập; endpoint đã dùng là `https://ai.solars.io.vn` cho HTTPS và gRPC HTTP/2 trên cổng 443.
+- R3 (`116.118.6.30`) chạy Jenkins, `ai-module` và host Caddy dùng chung.
+- R4 (`139.59.224.185`) chạy toàn bộ backend/observability bằng K3s và
+  Mosquitto IoT bằng Docker Compose.
+- AI dùng `https://ai.solars.io.vn` cho HTTPS và gRPC HTTP/2 trên cổng 443;
+  Jenkins dùng `https://jenkins.solars.io.vn` trên cùng R3.
 - Push hoặc merge vào `main` của từng repository sẽ chạy CI. Chỉ pipeline production trung tâm, được lưu cố định trong Jenkins, mới được phép ký image và SSH sang VPS production.
 
 Không đưa mật khẩu, PAT, private key, kubeconfig hoặc file `.env` thật vào Git.
@@ -13,8 +15,9 @@ Không đưa mật khẩu, PAT, private key, kubeconfig hoặc file `.env` thậ
 
 Trước khi setup VPS, phải có đủ:
 
-1. Reserved/Public IPv4 của VPS Platform mới.
-2. VPC/private IPv4 của chính VPS đó.
+1. Xác nhận public IPv4 R3 `116.118.6.30` và R4 `139.59.224.185` vẫn đúng.
+2. Xác nhận private IPv4 của R4 dùng cho K3s -> Mosquitto cùng host (hiện là
+   `10.104.0.4`; phải kiểm lại nếu rebuild R4).
 3. Email vận hành dùng cho Let's Encrypt ACME.
 4. Public key SSH quản trị và một key SSH riêng cho Jenkins deploy.
 5. Các secret liệt kê tại mục 7.
@@ -26,9 +29,8 @@ Không gửi private key hoặc secret vào chat/log. Nhập chúng trực tiế
 
 | VPS | Vai trò | Runtime | Cấu hình nên dùng |
 |---|---|---|---|
-| Jenkins | Build, test, scan, SBOM, ký image, điều phối deploy | Jenkins + Docker | 4 vCPU, 8 GB RAM, 120-160 GB SSD, 4 GB swap |
-| Platform | 9 backend service, data infra, monitoring và MQTT | K3s + Docker | Khuyến nghị 8 vCPU, 16 GB RAM, 160 GB SSD; 4 vCPU/8 GB chỉ phù hợp demo/tải thấp và phải theo dõi pressure |
-| AI | AI HTTP/gRPC và telemetry agent | Docker Compose | Máy hiện có, domain `ai.solars.io.vn` |
+| R3 | Build/test/scan/SBOM/sign/deploy bằng Jenkins; AI HTTP/gRPC và telemetry | Jenkins + host Caddy + Docker Compose | Tối thiểu 8 vCPU, 16 GB RAM, 120-160 GB SSD, 4 GB swap; Jenkins chỉ một executor |
+| R4 | 9 backend service, data infra, observability và MQTT | K3s + Docker | Khuyến nghị 8 vCPU, 16 GB RAM, 160 GB SSD; 4 vCPU/8 GB chỉ phù hợp demo/tải thấp và phải theo dõi pressure |
 
 Một node K3s không phải HA: hỏng VPS là toàn bộ backend ngừng. Vì vậy backup ngoài node và snapshot Droplet là bắt buộc nếu đây là production thật.
 
@@ -67,7 +69,8 @@ Mỗi image production được build lại từ đúng commit `main`, scan bằ
 - Tempo và OpenTelemetry.
 - Blackbox exporter + Probe cho public endpoints.
 - ServiceMonitor, PrometheusRule, dashboards và Discord alert relay.
-- Loki được port-forward riêng lên địa chỉ WireGuard `10.20.0.1:3100` để Alloy trên VPS AI đẩy log tới; không public Loki ra Internet.
+- Loki được port-forward riêng lên địa chỉ WireGuard `10.20.0.1:3100` để Alloy
+  trên R3 đẩy log tới; không public Loki ra Internet.
 
 ### IoT trong Docker
 
@@ -79,7 +82,7 @@ Mỗi image production được build lại từ đúng commit `main`, scan bằ
 
 ## 4. DNS và port public
 
-Tạo bốn A record cùng trỏ đến Reserved IP của VPS Platform:
+Tạo bốn A record cùng trỏ đến public IP R4 `139.59.224.185`:
 
 | Record | Mục đích |
 |---|---|
@@ -90,18 +93,19 @@ Tạo bốn A record cùng trỏ đến Reserved IP của VPS Platform:
 
 Không tạo domain public cho PostgreSQL, Redis, RabbitMQ, RabbitMQ management, MinIO console, Prometheus, Alertmanager, Loki hoặc Tempo. Khi cần vận hành, dùng SSH + `kubectl port-forward`.
 
-Firewall VPS Platform:
+Firewall R4:
 
-- TCP 22: chỉ IP quản trị và IP Jenkins; ít nhất dùng `ufw limit` và SSH key-only.
+- TCP 22: chỉ IP quản trị và R3 `116.118.6.30/32`; dùng SSH key-only.
 - TCP 80: public, dùng ACME HTTP-01 và redirect HTTPS.
 - TCP 443: public, API/files/Grafana.
 - TCP 8883: public, MQTT TLS.
-- UDP 51820: chỉ IP peer WireGuard của VPS AI.
+- UDP 51820: chỉ R3 `116.118.6.30/32`.
 - Không mở 5432, 6379, 5672, 15672, 9000, 9001, 9090, 3100, 3200 hoặc 4317.
 
-DigitalOcean Cloud Firewall và UFW phải cùng cho phép các port trên; thiếu một trong hai vẫn không truy cập được.
+Provider firewall và UFW phải cùng cho phép các port trên; thiếu một trong hai
+vẫn không truy cập được.
 
-## 5. Chuẩn bị hệ điều hành VPS Platform
+## 5. Chuẩn bị hệ điều hành R4
 
 Thực hiện bằng tài khoản quản trị có `sudo`, không thực hiện qua Jenkins:
 
@@ -351,9 +355,9 @@ Runbook đầy đủ, gồm thứ tự không gây deadlock giữa hai pipeline,
 - Platform: `10.20.0.1/32`.
 - AI: `10.20.0.2/32`.
 - Chỉ route hai địa chỉ `/32`, không mở toàn bộ private network.
-- Nếu hai Droplet cùng DigitalOcean VPC, dùng private VPC IPv4 làm WireGuard
-  endpoint. Chỉ fallback sang primary public IPv4 sau khi xác nhận VPC route không dùng được.
-- DigitalOcean Cloud Firewall và UFW chỉ cho UDP `51820` từ đúng endpoint peer.
+- WireGuard dùng public endpoint R4 `139.59.224.185:51820` và R3
+  `116.118.6.30:51820`; không dùng private VPC endpoint cũ của kiến trúc ba VPS.
+- Provider firewall và UFW chỉ cho UDP `51820` từ đúng public IP peer.
 - Backend gọi cả gRPC primary và HTTPS fallback tới hostname
   `ai.solars.io.vn`; pod resolve hostname này thành `10.20.0.2`, nhờ đó vẫn giữ
   đúng TLS SNI/certificate nhưng traffic không đi qua Internet.
@@ -384,9 +388,9 @@ không được cấp `sudo` chỉ để gọi `wg show`; HTTPS/gRPC qua peer `/
 bridge là bằng chứng chức năng. Cấu hình tunnel trước, deploy AI trước, rồi deploy
 backend. Không đổi Loki hoặc exporter thành public để né bước này.
 
-## 9. Jenkins executor requirements
+## 9. Jenkins executor requirements trên R3
 
-Jenkins VPS phải có và user `jenkins` phải chạy được:
+R3 phải có và user `jenkins` phải chạy được:
 
 - Git, Bash, OpenSSH, SCP.
 - Docker Engine, Compose, Buildx.
@@ -395,7 +399,9 @@ Jenkins VPS phải có và user `jenkins` phải chạy được:
 - ShellCheck, Trivy, Syft, Cosign.
 - Python 3.11 + pip.
 - PlatformIO CLI (`pio`) cho firmware IoT.
-- Ít nhất 4 GB swap và đủ disk cho nhiều image build.
+- Ít nhất 4 GB swap và đủ disk cho nhiều image build. Vì AI production cũng
+  chạy trên R3, giữ đúng một executor và không chạy đồng thời nhiều pipeline
+  nặng.
 
 Plugins tối thiểu: Pipeline, Git, Credentials Binding, SSH Agent, Lockable Resources và workflow dependencies của chúng. Cập nhật plugin/core theo đợt bảo trì có backup; không gỡ plugin đang phục vụ pipeline.
 
@@ -414,11 +420,17 @@ Tạo trong `Manage Jenkins -> Credentials -> System -> Global`:
 | `ai-cosign-private-key` | Secret file | Cùng `cosign.key` đã dùng cho AI |
 | `ai-cosign-public-key` | Secret file | Cùng `cosign.pub` đã cài trên VPS |
 | `ai-cosign-password` | Secret text | Passphrase của private key Cosign |
-| `platform-vps-target` | Secret text | `deploy@PUBLIC_OR_RESERVED_IP` |
+| `platform-vps-target` | Secret text | `deploy@139.59.224.185` |
 | `platform-vps-ssh` | SSH Username with private key | Username `deploy`, private key Jenkins riêng |
-| `platform-vps-known-hosts` | Secret file | known_hosts đã xác minh fingerprint của VPS Platform |
+| `platform-vps-known-hosts` | Secret file | known_hosts đã xác minh fingerprint của R4 |
 
-Không dùng `StrictHostKeyChecking=no`, không tạo known_hosts bằng cách tin mù kết quả `ssh-keyscan`. So sánh fingerprint với `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` trên VPS qua phiên quản trị đã tin cậy.
+Không dùng `StrictHostKeyChecking=no`, không tạo known_hosts bằng cách tin mù
+kết quả `ssh-keyscan`. So sánh fingerprint với
+`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` trên R4 qua phiên quản trị đã
+tin cậy. Tại lần xác minh 2026-08-24, ED25519 fingerprint của
+`139.59.224.185` khớp entry R4 đã pin:
+`SHA256:d1dBg0U0J7bpgTvdjCj7EHFJGCZOlgAFQHzhLwYm0+4`; vẫn phải xác minh lại sau
+mỗi lần rebuild host.
 
 Tạo lockable resource tên `solar-platform-prod`; cả backend và IoT dùng chung lock để không ghi đồng thời lên cùng VPS.
 
@@ -463,15 +475,18 @@ Production job cố ý tách khỏi Multibranch để tránh deadlock executor v
 
 ## 12. Thứ tự deploy lần đầu
 
-1. Xác nhận 4 DNS A record đã cùng trả Reserved IP Platform từ authoritative DNS và resolver công cộng.
+1. Xác nhận 4 DNS A record đã cùng trả R4 `139.59.224.185` từ authoritative DNS
+   và resolver công cộng; `ai`/`jenkins` phải trả R3 `116.118.6.30`.
 2. Hoàn tất OS, Docker, K3s, Helm, cert-manager, Cosign, deploy user, kubeconfig và firewall.
 3. Tạo thư mục, host env, backend env, monitoring env, IoT runtime env, Cosign public key và GHCR login/pull secret.
 4. Cấu hình và chạy lần đầu `solar-geoip-sync.service`; xác nhận file
    `/opt/solar-platform/geoip/GeoLite2-City.mmdb` tồn tại, mode 0644 và service thành công.
-5. Cấu hình Jenkins credentials, labels, lock và bốn jobs.
+5. Trên R3, cấu hình Jenkins credentials, label `docker-linux`, hai lock và sáu
+   jobs (`solar-ai-ci`, `solar-ai-production`, backend CI/production, IoT
+   CI/production).
 6. Cấu hình WireGuard và Loki bridge theo
     `docs/runbooks/ai-wireguard-observability.md`.
-7. Deploy AI để exporter/Alloy bind lên `10.20.0.2`.
+7. Deploy AI trên R3 để exporter/Alloy bind lên `10.20.0.2`.
 8. Merge backend vào `main`.
 9. Chờ backend Multibranch xanh và `solar-backend-production` xanh; lần deploy
    này tạo bốn Prometheus target và ép kết nối gRPC/HTTPS qua tunnel.
@@ -485,7 +500,7 @@ Không deploy IoT trước khi cert MQTT được cấp và đồng bộ; prefli
 
 ## 13. Kiểm tra sau deploy
 
-Trên VPS Platform:
+Trên R4:
 
 ```bash
 sudo -u deploy -H env KUBECONFIG=/home/deploy/.kube/config \

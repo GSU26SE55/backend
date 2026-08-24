@@ -1,15 +1,16 @@
-# Backend <-> AI WireGuard and observability runbook
+# R4 Backend <-> R3 AI WireGuard and observability runbook
 
-Runbook này đóng phần nợ kết nối giữa VPS Backend (`VPS1`) và VPS AI (`VPS2`).
+Runbook này chốt kết nối giữa Backend/observability trên R4 và AI/Jenkins trên
+R3. Hai máy không còn phụ thuộc vào cùng một private VPC.
 Không merge/deploy các gate mới trước khi hoàn tất mục 1-5 vì production
 preflight cố ý fail-closed khi tunnel chưa sẵn sàng.
 
 ## 1. Contract cuối cùng
 
-| Thành phần | Backend VPS | AI VPS |
+| Thành phần | R4 Backend/observability | R3 AI/Jenkins |
 |---|---:|---:|
 | WireGuard address | `10.20.0.1/32` | `10.20.0.2/32` |
-| DigitalOcean VPC address hiện tại | `10.104.0.4` | `10.104.0.3` |
+| Stable public endpoint | `139.59.224.185` | `116.118.6.30` |
 | WireGuard UDP | `51820` | `51820` |
 | Loki bridge | `10.20.0.1:3100` | Alloy push tới bridge |
 | AI application metrics | Prometheus scrape | `10.20.0.2:443/metrics/` với SNI `ai.solars.io.vn` |
@@ -32,20 +33,22 @@ nếu tunnel hợp lệ nhưng trước đó nhàn rỗi.
 
 ## 2. Xác nhận endpoint trước khi cấu hình
 
-Hai VPS hiện ở cùng VPC nên ưu tiên VPC address làm endpoint WireGuard. Chạy:
+R3 và R4 dùng public endpoint đã giới hạn nguồn cho WireGuard. Xác nhận mỗi IP
+được gắn đúng máy trước khi sinh cấu hình:
 
 ```bash
-# Backend VPS
-ip route get 10.104.0.3
+# R4
+ip -4 -brief address
+curl --fail --silent --show-error https://api.ipify.org
 
-# AI VPS
-ip route get 10.104.0.4
+# R3
+ip -4 -brief address
+curl --fail --silent --show-error https://api.ipify.org
 ```
 
-Kết quả phải đi qua private/VPC interface và hai host phải ping được nhau. Nếu
-không đạt, sửa DigitalOcean VPC trước. Chỉ dùng primary public IPv4 làm endpoint
-khi đã xác nhận hai Droplet không thể cùng VPC; Reserved IP dùng cho inbound DNS
-không mặc nhiên là source address outbound.
+R4 phải xác nhận `139.59.224.185`; R3 phải xác nhận `116.118.6.30`. Nếu nhà cung
+cấp dùng NAT/Reserved IP, đối chiếu thêm metadata/provider console thay vì bỏ
+qua kiểm tra. Không dùng private VPC address từ kiến trúc cũ làm endpoint R3.
 
 Trên cả hai VPS:
 
@@ -92,16 +95,16 @@ Lưu hai dòng `Public key (safe to share)` lần lượt thành
 
 ## 4. Firewall
 
-Trong DigitalOcean Cloud Firewall, thêm inbound UDP `51820`:
+Trong firewall của từng nhà cung cấp, thêm inbound UDP `51820`:
 
-- Backend chỉ từ `10.104.0.3/32`.
-- AI chỉ từ `10.104.0.4/32`.
+- R4 chỉ từ R3 `116.118.6.30/32`.
+- R3 chỉ từ R4 `139.59.224.185/32`.
 
 UFW trên Backend:
 
 ```bash
-sudo ufw allow in from 10.104.0.3 to any port 51820 proto udp \
-  comment 'WireGuard from AI VPC peer'
+sudo ufw allow in from 116.118.6.30 to any port 51820 proto udp \
+  comment 'WireGuard from R3 AI peer'
 sudo ufw allow in on wg0 from 10.20.0.2 to 10.20.0.1 port 3100 proto tcp \
   comment 'AI Alloy to Loki bridge'
 ```
@@ -109,8 +112,8 @@ sudo ufw allow in on wg0 from 10.20.0.2 to 10.20.0.1 port 3100 proto tcp \
 UFW trên AI:
 
 ```bash
-sudo ufw allow in from 10.104.0.4 to any port 51820 proto udp \
-  comment 'WireGuard from Backend VPC peer'
+sudo ufw allow in from 139.59.224.185 to any port 51820 proto udp \
+  comment 'WireGuard from R4 Backend peer'
 sudo ufw allow in on wg0 from 10.20.0.1 to 10.20.0.2 port 443 proto tcp \
   comment 'Backend to AI HTTPS and gRPC'
 for port in 9100 8082 12345; do
@@ -130,11 +133,11 @@ Thay đúng public key, không để nguyên dấu `<...>`:
 ```bash
 # Backend VPS
 sudo ./configure-ai-wireguard.sh configure \
-  10.20.0.1 "$AI_WG_PUBLIC_KEY" 10.104.0.3:51820
+  10.20.0.1 "$AI_WG_PUBLIC_KEY" 116.118.6.30:51820
 
 # AI VPS
 sudo ./configure-ai-wireguard.sh configure \
-  10.20.0.2 "$BACKEND_WG_PUBLIC_KEY" 10.104.0.4:51820
+  10.20.0.2 "$BACKEND_WG_PUBLIC_KEY" 139.59.224.185:51820
 ```
 
 Kiểm tra hai chiều:
@@ -259,9 +262,9 @@ AI:
 /opt/solar-ai/current/deploy/scripts/verify-observability.sh
 ```
 
-Helper tạo một marker Caddy duy nhất, đợi Alloy đẩy marker đó và query lại từ
-Loki trên Backend. Thành công chứng minh đường log end-to-end, không chỉ chứng
-minh port Loki đang mở.
+Helper gửi một marker qua host Caddy, đợi Alloy đẩy access log của AI container
+và query lại từ Loki trên Backend. Thành công chứng minh đường log end-to-end,
+không chỉ chứng minh port Loki đang mở.
 
 Từ Internet, `https://ai.solars.io.vn/metrics/` phải trả `403`; `/live` và
 `/ready` vẫn trả `200`.
