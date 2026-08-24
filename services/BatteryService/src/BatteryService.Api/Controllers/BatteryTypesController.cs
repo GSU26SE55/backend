@@ -41,17 +41,20 @@ public class BatteryTypesController : ControllerBase
     /// - <c>PageSize</c>: kích thước trang, mặc định 10, tối đa 100.
     /// - <c>Keyword</c>: tùy chọn, tìm kiếm không phân biệt hoa thường trên <c>Name</c> hoặc <c>Manufacturer</c>.
     /// - <c>IncludeDeleted</c>: <c>true</c> để bao gồm cả record đã soft delete, mặc định <c>false</c>.
+    /// - <c>Chemistry</c>: tùy chọn, lọc theo hóa học pin (<c>LiFePO4 = 1</c>, <c>Nmc = 2</c>, <c>Nca = 3</c>, <c>Lco = 4</c>, <c>Other = 99</c>). Không truyền = không lọc.
     ///
     /// Cách hoạt động:
     /// - Query DB qua repository với <c>AsNoTracking</c> để tối ưu read-only.
     /// - Filter <c>IsDeleted</c> trừ khi <c>IncludeDeleted = true</c>.
     /// - Filter keyword áp dụng đồng thời trên <c>Name</c> và <c>Manufacturer</c> bằng <c>ToLower().Contains(keyword)</c>.
+    /// - Filter <c>Chemistry</c> áp dụng khi có giá trị (so sánh bằng).
     /// - Sắp xếp theo <c>CreatedAt</c> giảm dần (mới nhất lên đầu).
     /// - Trả về <see cref="PaginationResponse{T}"/> với <c>Items</c>, <c>TotalItems</c>, <c>PageNumber</c>, <c>PageSize</c>.
     ///
     /// Use case điển hình:
     /// - Admin/Manager/Staff xem danh sách BatteryType để chọn khi tạo BatteryAsset/Site/Group.
     /// - Admin filter <c>IncludeDeleted=true</c> để tìm BatteryType cũ cần khôi phục.
+    /// - Admin/Manager lọc <c>Chemistry=1</c> để xem riêng các dòng pin LiFePO4.
     /// </remarks>
     /// <param name="query">Query phân trang + filter.</param>
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>

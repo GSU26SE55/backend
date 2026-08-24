@@ -1,4 +1,5 @@
 using BatteryService.Application.DTOs;
+using BatteryService.Domain.Enums;
 using MediatR;
 using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
@@ -12,6 +13,9 @@ public class GetBatteryTypesQuery : PaginationRequest, IRequest<CommonResponse<P
 
     /// <summary>Bao gồm soft-deleted records.</summary>
     public bool IncludeDeleted { get; set; }
+
+    /// <summary>Lọc theo hóa học pin. Null = không lọc.</summary>
+    public BatteryChemistryEnum? Chemistry { get; set; }
 
     /// <summary>
     /// Cột sort. Whitelist: name | manufacturer | chemistry | nominalCapacityAh | nominalVoltage | maxCycleCount.
