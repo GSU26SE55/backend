@@ -138,16 +138,16 @@ pipeline {
                             helm dependency build deploy/helm/solar-battery
                             helm lint deploy/helm/solar-battery \
                               -f deploy/helm/solar-battery/values.yaml \
-                              -f deploy/helm/solar-battery/values-vps-small.yaml \
                               -f deploy/helm/solar-battery/values-production.yaml \
-                              --set-string iot.mqttNodeIp=10.0.0.10
+                              -f deploy/helm/solar-battery/values-vps-small.yaml \
+                              --set-string iot.mqttNodeIp=10.20.0.1
 
                             helm template solar deploy/helm/solar-battery \
                               --namespace solar-prod \
                               -f deploy/helm/solar-battery/values.yaml \
-                              -f deploy/helm/solar-battery/values-vps-small.yaml \
                               -f deploy/helm/solar-battery/values-production.yaml \
-                              --set-string iot.mqttNodeIp=10.0.0.10 \
+                              -f deploy/helm/solar-battery/values-vps-small.yaml \
+                              --set-string iot.mqttNodeIp=10.20.0.1 \
                               > rendered-production.yaml
 
                             if grep -Eq \

@@ -79,6 +79,7 @@ mqtt_auth_dir="$(read_env MQTT_AUTH_DIR "${host_env}")"
 kubeconfig="$(read_env KUBECONFIG "${host_env}")"
 namespace="$(read_env K3S_NAMESPACE "${host_env}")"
 helm_release="$(read_env HELM_RELEASE "${host_env}")"
+deployment_phase="$(read_env PLATFORM_DEPLOYMENT_PHASE "${host_env}")"
 ticket_periodic_maintenance_enabled="$(read_env TICKET_PERIODIC_MAINTENANCE_ENABLED "${host_env}")"
 ticket_periodic_maintenance_time_zone_id="$(read_env TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID "${host_env}")"
 ticket_periodic_maintenance_cycle_months="$(read_env TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS "${host_env}")"
@@ -101,7 +102,8 @@ sla_business_hours_working_days_6="$(read_env SLA_BUSINESS_HOURS_WORKING_DAYS_6 
 [[ -n "${platform_domain}" && -n "${frontend_origin}" && -n "${ai_grpc_address}" \
   && -n "${ai_http_base_url}" && -n "${ai_wireguard_ipv4}" \
   && -n "${platform_wireguard_ipv4}" && -n "${mqtt_node_ip}" && -n "${mqtt_auth_dir}" \
-  && -n "${kubeconfig}" && -n "${namespace}" && -n "${helm_release}" ]] || {
+  && -n "${kubeconfig}" && -n "${namespace}" && -n "${helm_release}" \
+  && -n "${deployment_phase}" ]] || {
   printf 'host.env is incomplete\n' >&2
   exit 1
 }
@@ -228,8 +230,9 @@ run_predeployment_backup() {
 
 helm_value_args=(
   -f "${chart_dir}/values.yaml"
-  -f "${chart_dir}/values-vps-small.yaml"
   -f "${chart_dir}/values-production.yaml"
+  # Capacity/storage overlay is intentionally last so it wins on the 80 GB R4.
+  -f "${chart_dir}/values-vps-small.yaml"
   --set-string "global.domain=${platform_domain}"
   --set-string "global.frontendOrigin=${frontend_origin}"
   --set-string "config.Ai__GrpcAddress=${ai_grpc_address}"
@@ -261,6 +264,15 @@ helm_value_args=(
   --set-string "iot.mqttPasswordSync.hostPath=${mqtt_auth_dir}"
   --set-string "services.auditaggregatorservice.geoIp.hostPath=${geoip_db}"
 )
+
+if [[ "${deployment_phase}" == 'bootstrap' ]]; then
+  # Loki does not exist until this Helm release completes, so R3 Alloy cannot
+  # be enabled yet. All other application, infrastructure and observability
+  # components remain enabled. A second, steady deployment restores this gate.
+  helm_value_args+=(--set 'monitoring.ai.enabled=false')
+else
+  helm_value_args+=(--set 'monitoring.ai.enabled=true')
+fi
 
 helm_value_args+=(--set-string "services.apigateway.digest=$(read_env APIGATEWAY_DIGEST "${image_lock}")")
 helm_value_args+=(--set-string "services.authservice.digest=$(read_env AUTHSERVICE_DIGEST "${image_lock}")")
@@ -345,6 +357,29 @@ while IFS= read -r resource; do
     exit 1
   fi
 done < <(kubectl -n "${namespace}" get deployment,statefulset,daemonset -o name)
+
+wait_for_loki_bridge() {
+  local attempts=0
+
+  while (( attempts < 60 )); do
+    attempts=$((attempts + 1))
+    if systemctl is-active --quiet solar-loki-wireguard.service \
+      && curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+        "http://${platform_wireguard_ipv4}:3100/ready" >/dev/null 2>&1; then
+      printf 'Loki WireGuard bridge is ready on %s:3100.\n' \
+        "${platform_wireguard_ipv4}"
+      return 0
+    fi
+    sleep 5
+  done
+
+  systemctl status solar-loki-wireguard.service --no-pager >&2 || true
+  kubectl -n "${namespace}" get service loki -o wide >&2 || true
+  printf 'Loki WireGuard bridge did not become ready after Helm deployment\n' >&2
+  return 1
+}
+
+wait_for_loki_bridge || exit 1
 
 verify_geoip_runtime() {
   local configured_path
@@ -507,7 +542,12 @@ verify_ai_observability_targets() {
   [[ "${verified}" == true ]]
 }
 
-verify_ai_observability_targets || exit 1
+if [[ "${deployment_phase}" == 'steady' ]]; then
+  verify_ai_observability_targets || exit 1
+else
+  printf '%s\n' \
+    'Bootstrap phase: AI target verification is deferred until R3 is connected and steady deployment runs.'
+fi
 
 if ! helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m; then
   helm status "${helm_release}" --namespace "${namespace}" >&2 || true

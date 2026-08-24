@@ -10,7 +10,7 @@ preflight cố ý fail-closed khi tunnel chưa sẵn sàng.
 | Thành phần | R4 Backend/observability | R3 AI/Jenkins |
 |---|---:|---:|
 | WireGuard address | `10.20.0.1/32` | `10.20.0.2/32` |
-| Stable public endpoint | `139.59.224.185` | `116.118.6.30` |
+| Stable public endpoint | `116.118.6.33` | `116.118.6.30` |
 | WireGuard UDP | `51820` | `51820` |
 | Loki bridge | `10.20.0.1:3100` | Alloy push tới bridge |
 | AI application metrics | Prometheus scrape | `10.20.0.2:443/metrics/` với SNI `ai.solars.io.vn` |
@@ -46,7 +46,7 @@ ip -4 -brief address
 curl --fail --silent --show-error https://api.ipify.org
 ```
 
-R4 phải xác nhận `139.59.224.185`; R3 phải xác nhận `116.118.6.30`. Nếu nhà cung
+R4 phải xác nhận `116.118.6.33`; R3 phải xác nhận `116.118.6.30`. Nếu nhà cung
 cấp dùng NAT/Reserved IP, đối chiếu thêm metadata/provider console thay vì bỏ
 qua kiểm tra. Không dùng private VPC address từ kiến trúc cũ làm endpoint R3.
 
@@ -98,7 +98,7 @@ Lưu hai dòng `Public key (safe to share)` lần lượt thành
 Trong firewall của từng nhà cung cấp, thêm inbound UDP `51820`:
 
 - R4 chỉ từ R3 `116.118.6.30/32`.
-- R3 chỉ từ R4 `139.59.224.185/32`.
+- R3 chỉ từ R4 `116.118.6.33/32`.
 
 UFW trên Backend:
 
@@ -112,7 +112,7 @@ sudo ufw allow in on wg0 from 10.20.0.2 to 10.20.0.1 port 3100 proto tcp \
 UFW trên AI:
 
 ```bash
-sudo ufw allow in from 139.59.224.185 to any port 51820 proto udp \
+sudo ufw allow in from 116.118.6.33 to any port 51820 proto udp \
   comment 'WireGuard from R4 Backend peer'
 sudo ufw allow in on wg0 from 10.20.0.1 to 10.20.0.2 port 443 proto tcp \
   comment 'Backend to AI HTTPS and gRPC'
@@ -137,7 +137,7 @@ sudo ./configure-ai-wireguard.sh configure \
 
 # AI VPS
 sudo ./configure-ai-wireguard.sh configure \
-  10.20.0.2 "$BACKEND_WG_PUBLIC_KEY" 139.59.224.185:51820
+  10.20.0.2 "$BACKEND_WG_PUBLIC_KEY" 116.118.6.33:51820
 ```
 
 Kiểm tra hai chiều:
@@ -167,12 +167,17 @@ sudo install -o root -g root -m 0644 \
   deploy/systemd/solar-loki-wireguard.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now solar-loki-wireguard.service
-curl --fail --silent --show-error http://10.20.0.1:3100/ready
-sudo ss -lntp | grep '10.20.0.1:3100'
 ```
 
 Service chỉ bind vào WireGuard address và forward đến Loki ClusterIP qua
-`kubectl port-forward`. Không đổi thành `0.0.0.0:3100`.
+`kubectl port-forward`. Không đổi thành `0.0.0.0:3100`. Trên cluster sạch,
+Service `loki` chưa tồn tại nên systemd unit sẽ retry mỗi 5 giây. Chỉ chạy hai
+lệnh sau khi backend bootstrap đã hoàn tất:
+
+```bash
+curl --fail --silent --show-error http://10.20.0.1:3100/ready
+sudo ss -lntp | grep '10.20.0.1:3100'
+```
 
 ## 7. Cập nhật env và deploy đúng thứ tự
 
@@ -191,16 +196,23 @@ AI_GRPC_ADDRESS=https://ai.solars.io.vn
 AI_HTTP_BASE_URL=https://ai.solars.io.vn
 PLATFORM_WIREGUARD_IPV4=10.20.0.1
 AI_WIREGUARD_IPV4=10.20.0.2
+PLATFORM_DEPLOYMENT_PHASE=bootstrap
 ```
 
-Thứ tự bắt buộc:
+Thứ tự bắt buộc cho cluster sạch:
 
-1. Tunnel hai chiều và Loki bridge xanh.
-2. Deploy AI. Bản này bind node-exporter, cAdvisor và Alloy vào `10.20.0.2`, đồng
-   thời chặn `/metrics` từ Internet.
-3. Chạy `/opt/solar-ai/current/deploy/scripts/verify-observability.sh` trên AI.
-4. Deploy backend. Helm tạo bốn `ScrapeConfig`; deploy gate đợi đủ `4/4` target UP.
-5. Chạy các acceptance checks dưới đây.
+1. Tunnel hai chiều xanh; cài/enable Loki bridge và để unit retry.
+2. Deploy backend với `PLATFORM_DEPLOYMENT_PHASE=bootstrap`. Toàn bộ backend,
+   data infrastructure và observability được tạo; chỉ cấu hình scrape R3 AI
+   tạm hoãn. Deploy gate bắt buộc Loki bridge phải xanh sau Helm.
+3. Deploy AI. Bản này bind node-exporter, cAdvisor và Alloy vào `10.20.0.2`, đồng
+   thời chặn `/metrics` từ Internet và push log về Loki.
+4. Chạy `/opt/solar-ai/current/deploy/scripts/verify-observability.sh` trên AI.
+5. Đổi R4 thành `PLATFORM_DEPLOYMENT_PHASE=steady` và deploy lại backend với
+   cùng SHA. Helm tạo bốn `ScrapeConfig`; gate đợi đủ `4/4` target UP.
+6. Giữ `steady` vĩnh viễn cho mọi upgrade sau. `bootstrap` sẽ bị từ chối nếu
+   Helm release đã tồn tại.
+7. Chạy các acceptance checks dưới đây.
 
 ## 8. Acceptance checks
 

@@ -1,9 +1,9 @@
 # =====================================================================
 # values-vps-small.yaml
-# Resource overlay for a single-node k3s VPS. Jenkins runs on a separate VPS.
-# Production should use at least 8 vCPU / 16 GiB; the limits remain conservative
-# so a 4 vCPU / 8 GiB temporary environment can start with reduced headroom.
-# Keep every service enabled, but avoid temporary double memory use during deploy.
+# Capacity overlay for the 6-vCPU / 12-GB / 80-GB single-node R4. Jenkins runs
+# on R3. Keep every service and observability component enabled, while bounding
+# memory, persistent storage and retention so local-path volumes cannot reserve
+# more disk than the node has. This file must be passed after production values.
 # =====================================================================
 
 global:
@@ -21,6 +21,8 @@ services:
 
   authservice:
     replicas: 1
+    dataProtectionKeys:
+      storage: 256Mi
     resources:
       requests: { cpu: 150m, memory: 256Mi }
       limits:   { cpu: 600m, memory: 512Mi }
@@ -47,6 +49,8 @@ services:
 
   batteryservice:
     replicas: 1
+    firmwareStorage:
+      size: 2Gi
     resources:
       requests: { cpu: 150m, memory: 256Mi }
       limits:   { cpu: 600m, memory: 512Mi }
@@ -80,6 +84,9 @@ services:
       limits:   { cpu: 400m, memory: 384Mi }
 
 postgres:
+  storage: 8Gi
+  backup:
+    retentionDays: 7
   maxConnections: 100
   sharedBuffers: 64MB
   connectionPool:
@@ -96,17 +103,20 @@ postgres:
     limits:   { cpu: 500m, memory: 768Mi }
 
 redis:
+  storage: 1Gi
   resources:
     requests: { cpu: 30m, memory: 64Mi }
     limits:   { cpu: 150m, memory: 128Mi }
 
 rabbitmq:
+  storage: 2Gi
   returnPerObjectMetrics: true
   resources:
     requests: { cpu: 150m, memory: 384Mi }
     limits:   { cpu: 700m, memory: 768Mi }
 
 minio:
+  storage: 12Gi
   resources:
     requests: { cpu: 80m, memory: 256Mi }
     limits:   { cpu: 500m, memory: 512Mi }
@@ -116,6 +126,33 @@ minio:
     resources:
       requests: { cpu: 20m, memory: 64Mi }
       limits:   { cpu: 100m, memory: 128Mi }
+
+tempo:
+  storage: 2Gi
+  retention: 24h
+
+kube-prometheus-stack:
+  prometheus:
+    prometheusSpec:
+      retention: 3d
+      retentionSize: 3GB
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            resources:
+              requests: { storage: 4Gi }
+  grafana:
+    persistence:
+      size: 1Gi
+
+loki-stack:
+  loki:
+    persistence:
+      size: 4Gi
+    config:
+      table_manager:
+        retention_deletes_enabled: true
+        retention_period: 72h
 
 config:
   DOTNET_gcServer: "0"
