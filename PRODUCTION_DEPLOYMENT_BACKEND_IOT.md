@@ -275,15 +275,17 @@ container là `/app/geoip/GeoLite2-City.mmdb` và mount read-only file host
 `/opt/solar-platform/geoip/GeoLite2-City.mmdb`. File MMDB có license và vòng đời
 cập nhật riêng, vì vậy không commit vào Git hay đóng vào image.
 
-Tạo MaxMind account/license key rồi cài `geoipupdate` từ package chính thức cho
-Ubuntu. Cấu hình thật chỉ được lưu trên VPS:
+Tạo MaxMind account/license key rồi cài `geoipupdate` từ Ubuntu 24.04
+`multiverse`. Không cần thêm PPA ngoài hệ điều hành. Cấu hình thật chỉ được lưu
+trên VPS:
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y software-properties-common
-sudo add-apt-repository -y ppa:maxmind/ppa
+sudo add-apt-repository -y multiverse
 sudo apt-get update
 sudo apt-get install -y geoipupdate
+geoipupdate -V
 
 sudo install -o root -g root -m 0600 \
   deploy/production/GeoIP.conf.example \
