@@ -22,6 +22,11 @@ data:
               endpoint: 0.0.0.0:4317
             http:
               endpoint: 0.0.0.0:4318
+    compactor:
+      compaction:
+        # Tempo 2.x defaults to 14 days. Bind the capacity-overlay value so
+        # traces cannot silently fill the small R4 local-path volume.
+        block_retention: {{ .Values.tempo.retention | quote }}
     storage:
       trace:
         backend: local

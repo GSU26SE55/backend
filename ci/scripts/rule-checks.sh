@@ -522,4 +522,69 @@ else
   FAILED=1
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 13: A clean R4 needs one explicit bootstrap release to create Loki
+# before R3 Alloy can push to it. Bootstrap must be impossible once the Helm
+# release exists, and the capacity overlay must win over production defaults.
+# ---------------------------------------------------------------------------
+BOOTSTRAP_CONTRACT_FAILED=0
+
+if ! grep -Fxq 'PLATFORM_DEPLOYMENT_PHASE=bootstrap' "${HOST_ENV_EXAMPLE}"; then
+  echo "FAIL: ${HOST_ENV_EXAMPLE} must declare the one-time bootstrap phase"
+  BOOTSTRAP_CONTRACT_FAILED=1
+fi
+for required_contract in \
+  'PLATFORM_DEPLOYMENT_PHASE must be bootstrap or steady' \
+  'bootstrap phase is forbidden because Helm release already exists' \
+  'steady phase requires an existing Helm release'
+do
+  if ! grep -Fq "${required_contract}" "${PRODUCTION_PREFLIGHT}"; then
+    echo "FAIL: ${PRODUCTION_PREFLIGHT} is missing bootstrap guard: ${required_contract}"
+    BOOTSTRAP_CONTRACT_FAILED=1
+  fi
+done
+for required_contract in \
+  'monitoring.ai.enabled=false' \
+  'monitoring.ai.enabled=true' \
+  'wait_for_loki_bridge || exit 1' \
+  'verify_ai_observability_targets || exit 1'
+do
+  if ! grep -Fq "${required_contract}" "${PRODUCTION_DEPLOY}"; then
+    echo "FAIL: ${PRODUCTION_DEPLOY} is missing phase behavior: ${required_contract}"
+    BOOTSTRAP_CONTRACT_FAILED=1
+  fi
+done
+
+if ! grep -Fq 'block_retention: {{ .Values.tempo.retention | quote }}' \
+  deploy/helm/solar-battery/templates/monitoring/tempo.yaml; then
+  echo 'FAIL: Tempo retention value is not wired into the rendered compactor configuration'
+  BOOTSTRAP_CONTRACT_FAILED=1
+fi
+
+for helm_contract_file in \
+  Jenkinsfile \
+  deploy/jenkins/production.Jenkinsfile.example \
+  "${PRODUCTION_DEPLOY}"
+do
+  production_values_line="$(
+    grep -n -m1 'values-production[.]yaml' "${helm_contract_file}" |
+      cut -d: -f1
+  )"
+  small_values_line="$(
+    grep -n -m1 'values-vps-small[.]yaml' "${helm_contract_file}" |
+      cut -d: -f1
+  )"
+  if [ -z "${production_values_line}" ] || [ -z "${small_values_line}" ] ||
+    [ "${production_values_line}" -ge "${small_values_line}" ]; then
+    echo "FAIL: ${helm_contract_file} must apply values-vps-small.yaml after values-production.yaml"
+    BOOTSTRAP_CONTRACT_FAILED=1
+  fi
+done
+
+if [ "${BOOTSTRAP_CONTRACT_FAILED}" -eq 0 ]; then
+  echo "PASS: clean-R4 bootstrap is one-time, steady is fail-closed and the capacity overlay wins"
+else
+  FAILED=1
+fi
+
 exit "$FAILED"

@@ -280,16 +280,16 @@ pipeline {
                     helm dependency build deploy/helm/solar-battery
                     helm lint deploy/helm/solar-battery \
                       -f deploy/helm/solar-battery/values.yaml \
-                      -f deploy/helm/solar-battery/values-vps-small.yaml \
                       -f deploy/helm/solar-battery/values-production.yaml \
-                      --set-string iot.mqttNodeIp=10.0.0.10
+                      -f deploy/helm/solar-battery/values-vps-small.yaml \
+                      --set-string iot.mqttNodeIp=10.20.0.1
 
                     helm template solar deploy/helm/solar-battery \
                       --namespace solar-prod \
                       -f deploy/helm/solar-battery/values.yaml \
-                      -f deploy/helm/solar-battery/values-vps-small.yaml \
                       -f deploy/helm/solar-battery/values-production.yaml \
-                      --set-string iot.mqttNodeIp=10.0.0.10 \
+                      -f deploy/helm/solar-battery/values-vps-small.yaml \
+                      --set-string iot.mqttNodeIp=10.20.0.1 \
                       > rendered-production.yaml
 
                     if grep -Eq \
@@ -342,6 +342,22 @@ pipeline {
 
                     tar -czf "backend-deployment-${RELEASE_SHA}.tar.gz" deploy
                 '''
+            }
+        }
+
+        stage('Approve R4 DNS cutover') {
+            options {
+                timeout(time: 45, unit: 'MINUTES')
+            }
+
+            steps {
+                input(
+                    message: '''Before continuing, update the authoritative A records for
+api.solars.io.vn, files.solars.io.vn, mqtt.solars.io.vn and
+grafana.solars.io.vn to 116.118.6.33, then verify all four records resolve to
+116.118.6.33 with TTL 300. Continue only when the R4 cutover is confirmed.''',
+                    ok: 'DNS points to R4; deploy now'
+                )
             }
         }
 
