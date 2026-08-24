@@ -128,6 +128,8 @@ pipeline {
                               BASE_REF=origin/dev ./ci/scripts/rule-checks.sh
                             fi
 
+                            ./ci/scripts/verify-deploy-registry-auth.sh
+
                             helm repo add prometheus-community \
                               https://prometheus-community.github.io/helm-charts \
                               --force-update
