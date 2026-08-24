@@ -30,6 +30,14 @@ read_env() {
   sed -n "s/^${key}=//p" "${file}" | tail -n 1 | tr -d '\r'
 }
 
+kubeconfig="$(read_env KUBECONFIG "${host_env}")"
+namespace="$(read_env K3S_NAMESPACE "${host_env}")"
+[[ -n "${kubeconfig}" && -n "${namespace}" ]] || {
+  printf 'KUBECONFIG and K3S_NAMESPACE are required before registry verification\n' >&2
+  exit 1
+}
+export KUBECONFIG="${kubeconfig}"
+
 required_digest_keys=(
   APIGATEWAY_DIGEST
   AUTHSERVICE_DIGEST
@@ -50,6 +58,40 @@ for key in "${required_digest_keys[@]}"; do
   }
 done
 
+# Cosign runs on the R4 host, outside Kubernetes, so imagePullSecrets are not
+# discovered automatically. Reuse the cluster's read-only pull credential in
+# an ephemeral Docker config and remove it before any Helm mutation occurs.
+umask 077
+registry_config="$(mktemp -d /tmp/solar-registry-auth.XXXXXX)"
+registry_config_file="${registry_config}/config.json"
+cleanup_registry_config() {
+  rm -f "${registry_config_file}" || true
+  rmdir "${registry_config}" 2>/dev/null || true
+}
+trap cleanup_registry_config EXIT
+
+registry_secret_type="$(
+  kubectl -n "${namespace}" get secret ghcr-pull \
+    -o jsonpath='{.type}'
+)"
+[[ "${registry_secret_type}" == 'kubernetes.io/dockerconfigjson' ]] || {
+  printf 'required registry pull Secret has an unexpected type: %s/ghcr-pull (%s)\n' \
+    "${namespace}" "${registry_secret_type}" >&2
+  exit 1
+}
+
+kubectl -n "${namespace}" get secret ghcr-pull \
+  -o jsonpath='{.data.\.dockerconfigjson}' |
+  base64 --decode > "${registry_config_file}"
+chmod 0600 "${registry_config_file}"
+
+jq -e '.auths["ghcr.io"] | type == "object"' \
+  "${registry_config_file}" >/dev/null || {
+  printf 'required registry pull Secret has no ghcr.io credential: %s/ghcr-pull\n' \
+    "${namespace}" >&2
+  exit 1
+}
+
 image_namespace="ghcr.io/gsu26se55"
 for specification in \
   "apigateway|APIGATEWAY_DIGEST" \
@@ -65,8 +107,12 @@ do
   service="${specification%%|*}"
   key="${specification#*|}"
   image_ref="${image_namespace}/${service}@$(read_env "${key}" "${image_lock}")"
-  cosign verify --key "${root}/config/cosign.pub" "${image_ref}" >/dev/null
+  DOCKER_CONFIG="${registry_config}" \
+    cosign verify --key "${root}/config/cosign.pub" "${image_ref}" >/dev/null
 done
+
+cleanup_registry_config
+trap - EXIT
 
 platform_domain="$(read_env PLATFORM_PUBLIC_DOMAIN "${host_env}")"
 frontend_origin="$(read_env FRONTEND_PUBLIC_ORIGIN "${host_env}")"
@@ -76,8 +122,6 @@ ai_wireguard_ipv4="$(read_env AI_WIREGUARD_IPV4 "${host_env}")"
 platform_wireguard_ipv4="$(read_env PLATFORM_WIREGUARD_IPV4 "${host_env}")"
 mqtt_node_ip="$(read_env MQTT_NODE_IP "${host_env}")"
 mqtt_auth_dir="$(read_env MQTT_AUTH_DIR "${host_env}")"
-kubeconfig="$(read_env KUBECONFIG "${host_env}")"
-namespace="$(read_env K3S_NAMESPACE "${host_env}")"
 helm_release="$(read_env HELM_RELEASE "${host_env}")"
 deployment_phase="$(read_env PLATFORM_DEPLOYMENT_PHASE "${host_env}")"
 ticket_periodic_maintenance_enabled="$(read_env TICKET_PERIODIC_MAINTENANCE_ENABLED "${host_env}")"
@@ -107,7 +151,6 @@ sla_business_hours_working_days_6="$(read_env SLA_BUSINESS_HOURS_WORKING_DAYS_6 
   printf 'host.env is incomplete\n' >&2
   exit 1
 }
-export KUBECONFIG="${kubeconfig}"
 
 umask 027
 release_dir="${root}/releases/${release_sha}"
