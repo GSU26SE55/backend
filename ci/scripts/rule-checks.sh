@@ -587,4 +587,37 @@ else
   FAILED=1
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 14: application images are private. Host-side Cosign verification must
+# authenticate with the existing Kubernetes pull Secret without persisting the
+# PAT in the deploy user's home directory.
+# ---------------------------------------------------------------------------
+REGISTRY_VERIFY_FAILED=0
+
+# These are intentionally literal shell fragments from the deploy source.
+# shellcheck disable=SC2016
+for required_contract in \
+  'registry_config="$(mktemp -d /tmp/solar-registry-auth.XXXXXX)"' \
+  "-o jsonpath='{.data.\\.dockerconfigjson}'" \
+  '.auths["ghcr.io"] | type == "object"' \
+  'DOCKER_CONFIG="${registry_config}"' \
+  'cleanup_registry_config'
+do
+  if ! grep -Fq -- "${required_contract}" "${PRODUCTION_DEPLOY}"; then
+    echo "FAIL: ${PRODUCTION_DEPLOY} is missing ephemeral GHCR verification contract: ${required_contract}"
+    REGISTRY_VERIFY_FAILED=1
+  fi
+done
+
+if grep -Fq '/home/deploy/.docker/config.json' "${PRODUCTION_DEPLOY}"; then
+  echo "FAIL: ${PRODUCTION_DEPLOY} must not persist the GHCR credential in deploy's home directory"
+  REGISTRY_VERIFY_FAILED=1
+fi
+
+if [ "${REGISTRY_VERIFY_FAILED}" -eq 0 ]; then
+  echo "PASS: R4 Cosign verification uses the ephemeral Kubernetes GHCR pull credential"
+else
+  FAILED=1
+fi
+
 exit "$FAILED"
