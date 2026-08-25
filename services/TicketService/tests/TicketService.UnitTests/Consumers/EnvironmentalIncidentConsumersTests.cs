@@ -81,7 +81,7 @@ public class EnvironmentalIncidentConsumersTests
         timer.Should().NotBeNull();
         new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
             .GetWorkingMinutesBetween(timer!.StartedAt, timer.DueAt)
-            .Should().Be(8400, "P1 = 14 ngày làm việc");
+            .Should().Be(600, "P1 = 1 ngày làm việc");
         _outboxWriter.Verify(p => p.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 

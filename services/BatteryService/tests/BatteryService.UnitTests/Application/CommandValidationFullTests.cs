@@ -61,6 +61,13 @@ public class CommandValidationFullTests
     }
 
     // ===== BatteryAsset =====
+
+    /// <summary>
+    /// Mỗi luật phải sinh lỗi trên ĐÚNG field của nó.
+    ///
+    /// <para>Trước đây test này chỉ assert <c>ListErrors.Count &gt; 5</c>, nghĩa là xoá hai ba luật khỏi
+    /// command vẫn cho test xanh. Assert theo từng field để mỗi luật mất đi đều làm đỏ một dòng cụ thể.</para>
+    /// </summary>
     [Fact]
     public async Task CreateBatteryAsset_AllValidations()
     {
@@ -76,8 +83,103 @@ public class CommandValidationFullTests
             Notes = new string('n', 1001)
         };
         var r = await cmd.ValidateAsync();
+
         r.IsSuccess.Should().BeFalse();
-        r.ListErrors.Should().HaveCountGreaterThan(5);
+        r.StatusCode.Should().Be(400);
+        r.ListErrors.Should().Contain(e => e.Field == "SerialNumber");
+        r.ListErrors.Should().Contain(e => e.Field == "BatteryTypeId");
+        r.ListErrors.Should().Contain(e => e.Field == "CustomerId");
+        r.ListErrors.Should().Contain(e => e.Field == "InstallDate");
+        r.ListErrors.Should().Contain(e => e.Field == "Location");
+        r.ListErrors.Should().Contain(e => e.Field == "Latitude");
+        r.ListErrors.Should().Contain(e => e.Field == "Longitude");
+        r.ListErrors.Should().Contain(e => e.Field == "Notes");
+    }
+
+    /// <summary>Serial vượt 64 ký tự — biên trên chưa từng được kiểm.</summary>
+    [Fact]
+    public async Task CreateBatteryAsset_SerialTooLong_Error()
+    {
+        var r = await ValidAssetCommand(cmd => cmd.SerialNumber = new string('A', 65)).ValidateAsync();
+
+        r.IsSuccess.Should().BeFalse();
+        r.ListErrors.Should().Contain(e => e.Field == "SerialNumber");
+    }
+
+    /// <summary>Đúng 5 và đúng 64 ký tự đều hợp lệ — hai đầu của khoảng cho phép.</summary>
+    [Theory]
+    [InlineData(5)]
+    [InlineData(64)]
+    public async Task CreateBatteryAsset_SerialAtBoundary_Succeeds(int length)
+    {
+        var r = await ValidAssetCommand(cmd => cmd.SerialNumber = new string('A', length)).ValidateAsync();
+
+        r.ListErrors.Should().NotContain(e => e.Field == "SerialNumber");
+    }
+
+    /// <summary>SiteId là tuỳ chọn: null thì bỏ qua, nhưng Guid rỗng là lỗi.</summary>
+    [Fact]
+    public async Task CreateBatteryAsset_EmptySiteId_Error()
+    {
+        var r = await ValidAssetCommand(cmd => cmd.SiteId = Guid.Empty).ValidateAsync();
+
+        r.IsSuccess.Should().BeFalse();
+        r.ListErrors.Should().Contain(e => e.Field == "SiteId");
+    }
+
+    [Fact]
+    public async Task CreateBatteryAsset_NullSiteId_Succeeds()
+    {
+        var r = await ValidAssetCommand(cmd => cmd.SiteId = null).ValidateAsync();
+
+        r.ListErrors.Should().NotContain(e => e.Field == "SiteId");
+    }
+
+    /// <summary>
+    /// Lỗi liên trường (warranty trước ngày lắp) trả 422 chứ không phải 400 — phân biệt
+    /// "sai định dạng một trường" với "các trường mâu thuẫn nhau".
+    /// </summary>
+    [Fact]
+    public async Task CreateBatteryAsset_WarrantyBeforeInstall_Returns422()
+    {
+        var install = DateTime.UtcNow.AddDays(-30);
+        var r = await ValidAssetCommand(cmd =>
+        {
+            cmd.InstallDate = install;
+            cmd.WarrantyEndDate = install.AddDays(-1);
+        }).ValidateAsync();
+
+        r.IsSuccess.Should().BeFalse();
+        r.StatusCode.Should().Be(422);
+        r.ListErrors.Should().Contain(e => e.Field == "WarrantyEndDate");
+    }
+
+    /// <summary>Kinh/vĩ độ ngay tại biên vẫn hợp lệ.</summary>
+    [Theory]
+    [InlineData(-90, -180)]
+    [InlineData(90, 180)]
+    public async Task CreateBatteryAsset_CoordinatesAtBoundary_Succeeds(int lat, int lng)
+    {
+        var r = await ValidAssetCommand(cmd =>
+        {
+            cmd.Latitude = lat;
+            cmd.Longitude = lng;
+        }).ValidateAsync();
+
+        r.ListErrors.Should().NotContain(e => e.Field == "Latitude" || e.Field == "Longitude");
+    }
+
+    private static CreateBatteryAssetCommand ValidAssetCommand(Action<CreateBatteryAssetCommand>? mutate = null)
+    {
+        var cmd = new CreateBatteryAssetCommand
+        {
+            SerialNumber = "BAT-00001",
+            BatteryTypeId = Guid.NewGuid(),
+            CustomerId = Guid.NewGuid(),
+            InstallDate = DateTime.UtcNow.AddDays(-1)
+        };
+        mutate?.Invoke(cmd);
+        return cmd;
     }
 
     [Fact]

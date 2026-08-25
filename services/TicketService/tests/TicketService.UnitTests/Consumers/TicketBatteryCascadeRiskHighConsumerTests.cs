@@ -132,7 +132,7 @@ public class BatteryCascadeRiskHighConsumerTests
         timer!.Status.Should().Be(SlaTimerStatusEnum.Running);
         new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
             .GetWorkingMinutesBetween(timer.StartedAt, timer.DueAt)
-            .Should().Be(8400, "P1 = 14 ngày làm việc");
+            .Should().Be(600, "P1 = 1 ngày làm việc");
         _outboxWriter.Verify(p => p.WriteAsync(It.IsAny<SharedContracts.Events.TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }

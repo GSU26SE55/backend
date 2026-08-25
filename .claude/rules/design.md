@@ -44,9 +44,9 @@ Chi tiết rules → [tech/fe.md](tech/fe.md)
 
 | Priority | SLA | Giờ làm việc | Trigger | Breach action |
 |----------|-----|--------------|---------|---------------|
-| P1 Critical | 14 ngày | 140h | Pin mất điện / nguy cơ an toàn / scope Site hoặc MultiSite | Reassign Senior (Tier 3) + notify Admin |
+| P1 Critical | 1 ngày | 10h | Pin mất điện / nguy cơ an toàn / scope Site hoặc MultiSite | Reassign Senior (Tier 3) + notify Admin |
 | P2 High | 3 ngày | 30h | Degradation đáng kể / SingleAsset urgency cao hoặc Site urgency thấp–TB | Manager reassign Tier 2/3 |
-| P3 Standard | 2 ngày | 20h | Bất thường nhẹ / bảo trì định kỳ / scope SingleAsset | Manager review |
+| P3 Standard | 7 ngày | 70h | Bất thường nhẹ / bảo trì định kỳ / scope SingleAsset | Manager review |
 
 > **Đơn vị (GH-1242):** SLA khai bằng **ngày làm việc**; số giờ suy ra từ cửa sổ 07:00–17:00
 > (10h/ngày, 7 ngày/tuần). Vì working days là cả 7 ngày nên N ngày làm việc = đúng N ngày lịch.

@@ -69,6 +69,7 @@ deploy/helm/*/charts/
 CoverageResults/
 CovResults/
 IntegrationResults/
+CovResults/
 
 # ---------- GeoIP database (downloaded/generated locally) ----------
 *.mmdb
