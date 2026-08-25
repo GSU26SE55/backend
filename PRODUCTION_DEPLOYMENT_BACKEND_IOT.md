@@ -5,7 +5,7 @@ Tài liệu này là nguồn hướng dẫn chính thức cho kiến trúc produ
 - R3 (`116.118.6.30`) chạy Jenkins, `ai-module` và host Caddy dùng chung.
 - R4 (`116.118.6.33`) chạy toàn bộ backend/observability bằng K3s và
   Mosquitto IoT bằng Docker Compose.
-- AI dùng `https://ai.solars.io.vn` cho HTTPS và gRPC HTTP/2 trên cổng 443;
+- AI dùng `https://ai.solaris.io.vn` cho HTTPS và gRPC HTTP/2 trên cổng 443;
   Jenkins dùng `https://jenkins.solars.io.vn` trên cùng R3.
 - Push hoặc merge vào `main` của từng repository sẽ chạy CI. Chỉ pipeline production trung tâm, được lưu cố định trong Jenkins, mới được phép ký image và SSH sang VPS production.
 
@@ -208,12 +208,12 @@ Ba URL bắt buộc trong `/opt/solar-platform/config/host.env`:
 
 ```text
 FRONTEND_PUBLIC_ORIGIN=https://solars.io.vn
-AI_GRPC_ADDRESS=https://ai.solars.io.vn
-AI_HTTP_BASE_URL=https://ai.solars.io.vn
+AI_GRPC_ADDRESS=https://ai.solaris.io.vn
+AI_HTTP_BASE_URL=https://ai.solaris.io.vn
 ```
 
 Các giá trị trên là **origin**, không có dấu `/` cuối và không có path. Tuyệt đối không đặt
-`AI_HTTP_BASE_URL=https://ai.solars.io.vn/docs`: `/docs` chỉ là Swagger UI. Backend gọi REST
+`AI_HTTP_BASE_URL=https://ai.solaris.io.vn/docs`: `/docs` chỉ là Swagger UI. Backend gọi REST
 fallback qua các path ứng dụng như `/ready`, `/predict/` và gọi gRPC HTTP/2 trên cùng origin 443.
 
 IoT templates:
@@ -361,7 +361,7 @@ Runbook đầy đủ, gồm thứ tự không gây deadlock giữa hai pipeline,
   `116.118.6.30:51820`; không dùng private VPC endpoint cũ của kiến trúc ba VPS.
 - Provider firewall và UFW chỉ cho UDP `51820` từ đúng public IP peer.
 - Backend gọi cả gRPC primary và HTTPS fallback tới hostname
-  `ai.solars.io.vn`; pod resolve hostname này thành `10.20.0.2`, nhờ đó vẫn giữ
+  `ai.solaris.io.vn`; pod resolve hostname này thành `10.20.0.2`, nhờ đó vẫn giữ
   đúng TLS SNI/certificate nhưng traffic không đi qua Internet.
 - Prometheus scrape application, node-exporter, cAdvisor và Alloy qua tunnel.
 - Alloy đẩy log sang Loki bridge `10.20.0.1:3100`; Loki không được public.
@@ -568,7 +568,7 @@ openssl s_client \
   -verify_return_error </dev/null
 ```
 
-Kiểm tra backend -> AI bằng log/metric và gọi gRPC health từ máy có proto. Endpoint phải là `ai.solars.io.vn:443` với TLS, không dùng IP hay cổng 50051 public.
+Kiểm tra backend -> AI bằng log/metric và gọi gRPC health từ máy có proto. Endpoint phải là `ai.solaris.io.vn:443` với TLS, không dùng IP hay cổng 50051 public.
 
 Kiểm tra port không bị lộ:
 

@@ -331,6 +331,11 @@ done
 
 ai_host="${AI_HTTP_BASE_URL#https://}"
 ai_host="${ai_host%:443}"
+[[ "${ai_host}" == "ai.${PLATFORM_PUBLIC_DOMAIN}" ]] || {
+  printf 'AI hostname must match the platform AI subdomain: got %s, expected ai.%s\n' \
+    "${ai_host}" "${PLATFORM_PUBLIC_DOMAIN}" >&2
+  exit 1
+}
 getent ahostsv4 "${ai_host}" >/dev/null || {
   printf 'AI hostname does not resolve from the platform VPS: %s\n' "${ai_host}" >&2
   exit 1
