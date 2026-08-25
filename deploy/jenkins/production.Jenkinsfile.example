@@ -353,8 +353,8 @@ pipeline {
             steps {
                 input(
                     message: '''Before continuing, update the authoritative A records for
-api.solars.io.vn, files.solars.io.vn, mqtt.solars.io.vn and
-grafana.solars.io.vn to 116.118.6.33, then verify all four records resolve to
+api.solaris.io.vn, files.solaris.io.vn, mqtt.solaris.io.vn and
+grafana.solaris.io.vn to 116.118.6.33, then verify all four records resolve to
 116.118.6.33 with TTL 300. Continue only when the R4 cutover is confirmed.''',
                     ok: 'DNS points to R4; deploy now'
                 )

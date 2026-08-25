@@ -8,7 +8,7 @@
 
 global:
   namespace: solar-prod
-  domain: solars.io.vn
+  domain: solaris.io.vn
   frontendOrigin: https://solars.io.vn
   aspnetEnvironment: Production
   tlsIssuer: letsencrypt-prod
@@ -155,9 +155,9 @@ config:
   # Mosquitto runs under Docker on the same VPS. The deploy job supplies R4's
   # local WireGuard address as iot.mqttNodeIp while TLS validates this DNS name.
   Mqtt__Enabled: "true"
-  Mqtt__Host: mqtt.solars.io.vn
+  Mqtt__Host: mqtt.solaris.io.vn
   Mqtt__Port: "8883"
-  Mqtt__PublicHost: mqtt.solars.io.vn
+  Mqtt__PublicHost: mqtt.solaris.io.vn
   Mqtt__PublicPort: "8883"
   Mqtt__UseTls: "true"
   Mqtt__AllowUntrustedCertificates: "false"
@@ -174,7 +174,7 @@ iot:
   mqttTlsCertificate:
     enabled: true
     secretName: mqtt-public-tls
-    dnsName: mqtt.solars.io.vn
+    dnsName: mqtt.solaris.io.vn
 
 secrets:
   externalSecretName: solar-secrets
@@ -220,11 +220,11 @@ monitoring:
     enabled: true
     image: prom/blackbox-exporter:v0.25.0
     httpTargets:
-    - https://api.solars.io.vn/health
-    - https://files.solars.io.vn/minio/health/live
+    - https://api.solaris.io.vn/health
+    - https://files.solaris.io.vn/minio/health/live
     - https://ai.solars.io.vn/ready
-    mqttTarget: mqtt.solars.io.vn:8883
-    mqttServerName: mqtt.solars.io.vn
+    mqttTarget: mqtt.solaris.io.vn:8883
+    mqttServerName: mqtt.solaris.io.vn
 
 kube-prometheus-stack:
   enabled: true
@@ -316,12 +316,12 @@ kube-prometheus-stack:
         cert-manager.io/cluster-issuer: letsencrypt-prod
         traefik.ingress.kubernetes.io/router.entrypoints: websecure
         traefik.ingress.kubernetes.io/router.tls: "true"
-      hosts: [grafana.solars.io.vn]
+      hosts: [grafana.solaris.io.vn]
       path: /
       pathType: Prefix
       tls:
       - secretName: grafana-tls
-        hosts: [grafana.solars.io.vn]
+        hosts: [grafana.solaris.io.vn]
 
 loki-stack:
   enabled: true
