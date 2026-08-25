@@ -161,7 +161,9 @@ config:
 resourceQuota:
   enabled: true
   requestsCpu: "2"
-  requestsMemory: "4Gi"
+  # Prometheus plus the complete backend/observability stack needs more than
+  # 4 GiB of requested memory. Keep this aligned with the recovered R4 quota.
+  requestsMemory: "6Gi"
   limitsCpu: "10"
   limitsMemory: "12Gi"
   pvcs: "15"
