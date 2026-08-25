@@ -281,6 +281,11 @@ ai_monitoring_domain="${ai_monitoring_domain%:443}"
     "${ai_http_base_url}" >&2
   exit 1
 }
+[[ "${ai_monitoring_domain}" == "ai.${platform_domain}" ]] || {
+  printf 'AI hostname must match the platform AI subdomain: got %s, expected ai.%s\n' \
+    "${ai_monitoring_domain}" "${platform_domain}" >&2
+  exit 1
+}
 
 helm_value_args=(
   -f "${chart_dir}/values.yaml"

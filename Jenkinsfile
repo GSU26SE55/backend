@@ -165,9 +165,9 @@ pipeline {
                               'Frontend__WebBaseUrl: "https://solars.io.vn"' \
                               'GoogleOAuth__RedirectUri: "https://solars.io.vn/auth/google/callback"' \
                               'GoogleOAuth__AllowedRedirectUris__0: "https://solars.io.vn/auth/google/callback"' \
-                              'Ai__GrpcAddress: "https://ai.solars.io.vn"' \
-                              'Ai__HttpBaseUrl: "https://ai.solars.io.vn"' \
-                              'TicketAi__AiGrpcAddress: "https://ai.solars.io.vn"' \
+                              'Ai__GrpcAddress: "https://ai.solaris.io.vn"' \
+                              'Ai__HttpBaseUrl: "https://ai.solaris.io.vn"' \
+                              'TicketAi__AiGrpcAddress: "https://ai.solaris.io.vn"' \
                               'Ticket__PeriodicMaintenance__Enabled: "true"' \
                               'Ticket__PeriodicMaintenance__TimeZoneId: "Asia/Ho_Chi_Minh"' \
                               'Ticket__PeriodicMaintenance__CycleMonths: "6"' \
