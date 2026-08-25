@@ -250,9 +250,9 @@ ip -4 route get "${AI_WIREGUARD_IPV4}" | grep -Eq '(^|[[:space:]])dev wg0([[:spa
 # also initiates a fresh WireGuard handshake when an otherwise healthy tunnel
 # has been idle.
 
-[[ "${FRONTEND_PUBLIC_ORIGIN}" == "https://${PLATFORM_PUBLIC_DOMAIN}" ]] || {
-  printf 'FRONTEND_PUBLIC_ORIGIN must equal https://%s (no path or trailing slash)\n' \
-    "${PLATFORM_PUBLIC_DOMAIN}" >&2
+[[ "${FRONTEND_PUBLIC_ORIGIN}" =~ ^https://[^/:[:space:]]+(:[0-9]+)?$ ]] || {
+  printf 'FRONTEND_PUBLIC_ORIGIN must be an HTTPS origin (no path or trailing slash): %s\n' \
+    "${FRONTEND_PUBLIC_ORIGIN}" >&2
   exit 1
 }
 for ai_url in "${AI_GRPC_ADDRESS}" "${AI_HTTP_BASE_URL}"; do

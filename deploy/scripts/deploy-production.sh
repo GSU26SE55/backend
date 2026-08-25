@@ -271,6 +271,17 @@ run_predeployment_backup() {
   fi
 }
 
+# R4 public services and the R3 AI service intentionally use different public
+# domains. Preserve the AI hostname for TLS SNI while routing Prometheus over
+# the WireGuard host alias.
+ai_monitoring_domain="${ai_http_base_url#https://}"
+ai_monitoring_domain="${ai_monitoring_domain%:443}"
+[[ -n "${ai_monitoring_domain}" && "${ai_monitoring_domain}" != */* ]] || {
+  printf 'AI_HTTP_BASE_URL must be an HTTPS origin only: %s\n' \
+    "${ai_http_base_url}" >&2
+  exit 1
+}
+
 helm_value_args=(
   -f "${chart_dir}/values.yaml"
   -f "${chart_dir}/values-production.yaml"
@@ -281,6 +292,8 @@ helm_value_args=(
   --set-string "config.Ai__GrpcAddress=${ai_grpc_address}"
   --set-string "config.Ai__HttpBaseUrl=${ai_http_base_url}"
   --set-string "config.TicketAi__AiGrpcAddress=${ai_grpc_address}"
+  --set-string "config.Mqtt__Host=mqtt.${platform_domain}"
+  --set-string "config.Mqtt__PublicHost=mqtt.${platform_domain}"
   --set-string "config.Ticket__PeriodicMaintenance__Enabled=${ticket_periodic_maintenance_enabled}"
   --set-string "config.Ticket__PeriodicMaintenance__TimeZoneId=${ticket_periodic_maintenance_time_zone_id}"
   --set-string "config.Ticket__PeriodicMaintenance__CycleMonths=${ticket_periodic_maintenance_cycle_months}"
@@ -301,9 +314,18 @@ helm_value_args=(
   --set-string "config.SlaBusinessHours__WorkingDays__6=${sla_business_hours_working_days_6}"
   --set-string "wireguard.aiIpv4=${ai_wireguard_ipv4}"
   --set-string "wireguard.platformIpv4=${platform_wireguard_ipv4}"
+  --set-string "monitoring.ai.domain=${ai_monitoring_domain}"
+  --set-string "monitoring.blackbox.httpTargets[0]=https://api.${platform_domain}/health"
+  --set-string "monitoring.blackbox.httpTargets[1]=https://files.${platform_domain}/minio/health/live"
+  --set-string "monitoring.blackbox.httpTargets[2]=${ai_http_base_url}/ready"
+  --set-string "monitoring.blackbox.mqttTarget=mqtt.${platform_domain}:8883"
+  --set-string "monitoring.blackbox.mqttServerName=mqtt.${platform_domain}"
   --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].ip=${ai_wireguard_ipv4}"
-  --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].hostnames[0]=ai.${platform_domain}"
+  --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].hostnames[0]=${ai_monitoring_domain}"
+  --set-string "kube-prometheus-stack.grafana.ingress.hosts[0]=grafana.${platform_domain}"
+  --set-string "kube-prometheus-stack.grafana.ingress.tls[0].hosts[0]=grafana.${platform_domain}"
   --set-string "iot.mqttNodeIp=${mqtt_node_ip}"
+  --set-string "iot.mqttTlsCertificate.dnsName=mqtt.${platform_domain}"
   --set-string "iot.mqttPasswordSync.hostPath=${mqtt_auth_dir}"
   --set-string "services.auditaggregatorservice.geoIp.hostPath=${geoip_db}"
 )
