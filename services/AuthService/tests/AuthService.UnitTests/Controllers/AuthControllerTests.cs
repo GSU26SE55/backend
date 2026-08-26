@@ -210,12 +210,40 @@ public class AuthControllerTests
         result.Should().NotBeNull();
         result!.Url.Should().StartWith("https://accounts.google.com/oauth?state=");
         // State cookie phải được append
-        ctx.Response.Headers.SetCookie.ToString().Should().Contain("g_oauth_state=");
-        ctx.Response.Headers.SetCookie.ToString().Should().Contain("path=/api/auth");
-        ctx.Response.Headers.SetCookie.ToString().Should().Contain("secure");
+        var setCookie = ctx.Response.Headers.SetCookie.ToString().ToLowerInvariant();
+        setCookie.Should().Contain("g_oauth_state=");
+        setCookie.Should().Contain("path=/api/auth");
+        setCookie.Should().Contain("secure");
+        setCookie.Should().Contain("httponly");
+        setCookie.Should().Contain("samesite=none");
         _google.Verify(g => g.BuildAuthorizationUrl(
             It.IsAny<string>(),
             "https://web.test/auth/google/callback"), Times.Once);
+    }
+
+    [Fact]
+    public void GoogleLogin_DevelopmentHttp_UsesLaxCookieWithoutSecure()
+    {
+        var developmentConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["GoogleOAuth:RedirectUri"] = "http://localhost:5173/auth/google/callback",
+                ["ASPNETCORE_ENVIRONMENT"] = "Development"
+            })
+            .Build();
+        var ctx = new DefaultHttpContext();
+        var ctrl = new AuthController(_mediator.Object, _google.Object, developmentConfig)
+        {
+            ControllerContext = new ControllerContext { HttpContext = ctx }
+        };
+        _google.Setup(g => g.BuildAuthorizationUrl(It.IsAny<string>(), It.IsAny<string>()))
+            .Returns("https://accounts.google.com/oauth");
+
+        ctrl.GoogleLogin();
+
+        var setCookie = ctx.Response.Headers.SetCookie.ToString().ToLowerInvariant();
+        setCookie.Should().Contain("samesite=lax");
+        setCookie.Should().NotContain("; secure");
     }
 
     [Fact]
@@ -277,6 +305,12 @@ public class AuthControllerTests
         var result = await ctrl.GoogleCallback("code-y", "match-state", null, CancellationToken.None) as ObjectResult;
 
         result!.StatusCode.Should().Be(200);
+        var deleteCookie = ctx.Response.Headers.SetCookie.ToString().ToLowerInvariant();
+        deleteCookie.Should().Contain("g_oauth_state=");
+        deleteCookie.Should().Contain("path=/api/auth");
+        deleteCookie.Should().Contain("secure");
+        deleteCookie.Should().Contain("httponly");
+        deleteCookie.Should().Contain("samesite=none");
         _mediator.Verify(m => m.Send(
             It.Is<GoogleCallbackCommand>(c =>
                 c.Code == "code-y"
