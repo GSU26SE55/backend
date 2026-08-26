@@ -1,6 +1,6 @@
+using SharedContracts.Events;
 using TicketService.Domain.Entities;
 using TicketService.Infrastructure.BackgroundJobs;
-using SharedContracts.Events;
 
 namespace TicketService.UnitTests.Handlers.PeriodicMaintenance;
 

@@ -1,7 +1,7 @@
 using BatteryService.Application.CQRS.Command.BatteryType;
-using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.CQRS.Command.Import;
 using BatteryService.Application.CQRS.Command.IotDevice;
+using BatteryService.Application.CQRS.Query.IotDevice;
 using BatteryService.Application.CQRS.Query.SensorReading;
 using BatteryService.Domain.Enums;
 

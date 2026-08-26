@@ -1,7 +1,7 @@
-using NotificationService.Application.CQRS.Query.NotificationTemplate;
 using NotificationService.Application.CQRS.Command.NotificationGroup;
 using NotificationService.Application.CQRS.Command.NotificationTemplate;
 using NotificationService.Application.CQRS.Command.Preference;
+using NotificationService.Application.CQRS.Query.NotificationTemplate;
 using NotificationService.Domain.Enums;
 
 namespace NotificationService.UnitTests.Handlers;

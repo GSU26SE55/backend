@@ -150,7 +150,8 @@ public class ChatAttachmentBatchAddCommandValidationTests
     public async Task ItemWithEmptyFileId_Fails()
     {
         var c = Valid();
-        var bad = Item(); bad.FileId = Guid.Empty;
+        var bad = Item();
+        bad.FileId = Guid.Empty;
         c.Files = [bad];
 
         (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field.Contains("FileId"));
@@ -160,7 +161,8 @@ public class ChatAttachmentBatchAddCommandValidationTests
     public async Task ItemWithMissingFileName_Fails()
     {
         var c = Valid();
-        var bad = Item(); bad.FileName = "  ";
+        var bad = Item();
+        bad.FileName = "  ";
         c.Files = [bad];
 
         (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field.Contains("FileName"));
@@ -170,7 +172,8 @@ public class ChatAttachmentBatchAddCommandValidationTests
     public async Task ItemWithMissingContentType_Fails()
     {
         var c = Valid();
-        var bad = Item(); bad.ContentType = "";
+        var bad = Item();
+        bad.ContentType = "";
         c.Files = [bad];
 
         (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field.Contains("ContentType"));
@@ -183,7 +186,8 @@ public class ChatAttachmentBatchAddCommandValidationTests
     public async Task ItemWithNonPositiveSize_Fails(long size)
     {
         var c = Valid();
-        var bad = Item(); bad.SizeBytes = size;
+        var bad = Item();
+        bad.SizeBytes = size;
         c.Files = [bad];
 
         (await c.ValidateAsync()).ListErrors.Should().Contain(e => e.Field.Contains("SizeBytes"));
@@ -194,8 +198,10 @@ public class ChatAttachmentBatchAddCommandValidationTests
     public async Task MultipleInvalidItems_ReportErrorPerIndex()
     {
         var c = Valid();
-        var bad0 = Item(); bad0.FileId = Guid.Empty;
-        var bad1 = Item(); bad1.SizeBytes = 0;
+        var bad0 = Item();
+        bad0.FileId = Guid.Empty;
+        var bad1 = Item();
+        bad1.SizeBytes = 0;
         c.Files = [bad0, bad1];
 
         var r = await c.ValidateAsync();

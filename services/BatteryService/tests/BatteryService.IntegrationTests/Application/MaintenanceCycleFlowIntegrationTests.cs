@@ -136,13 +136,21 @@ public class MaintenanceCycleFlowIntegrationTests
         dbContext.MaintenanceCycles.AddRange(
             new MaintenanceCycle
             {
-                Id = Guid.NewGuid(), BatteryAssetId = assetId, CycleNo = 1,
-                DueAtUtc = DueAt, RecordedAtUtc = NowUtc, CreatedAt = NowUtc
+                Id = Guid.NewGuid(),
+                BatteryAssetId = assetId,
+                CycleNo = 1,
+                DueAtUtc = DueAt,
+                RecordedAtUtc = NowUtc,
+                CreatedAt = NowUtc
             },
             new MaintenanceCycle
             {
-                Id = Guid.NewGuid(), BatteryAssetId = assetId, CycleNo = 2,
-                DueAtUtc = DueAt.AddMonths(6), RecordedAtUtc = NowUtc, CreatedAt = NowUtc,
+                Id = Guid.NewGuid(),
+                BatteryAssetId = assetId,
+                CycleNo = 2,
+                DueAtUtc = DueAt.AddMonths(6),
+                RecordedAtUtc = NowUtc,
+                CreatedAt = NowUtc,
                 IsDeleted = true
             });
         await dbContext.SaveChangesAsync();
@@ -234,19 +242,25 @@ public class MaintenanceCycleFlowIntegrationTests
         dbContext.Alerts.AddRange(
             new Alert
             {
-                Id = Guid.NewGuid(), BatteryAssetId = assetId,
-                DetectedAt = PeriodStart.AddDays(2), Severity = AlertSeverityEnum.Warning
+                Id = Guid.NewGuid(),
+                BatteryAssetId = assetId,
+                DetectedAt = PeriodStart.AddDays(2),
+                Severity = AlertSeverityEnum.Warning
             },
             new Alert
             {
-                Id = Guid.NewGuid(), BatteryAssetId = assetId,
-                DetectedAt = PeriodStart.AddDays(3), Severity = AlertSeverityEnum.Critical
+                Id = Guid.NewGuid(),
+                BatteryAssetId = assetId,
+                DetectedAt = PeriodStart.AddDays(3),
+                Severity = AlertSeverityEnum.Critical
             },
             // Ngoài khoảng kỳ — phải bị loại.
             new Alert
             {
-                Id = Guid.NewGuid(), BatteryAssetId = assetId,
-                DetectedAt = DueAt.AddDays(10), Severity = AlertSeverityEnum.Critical
+                Id = Guid.NewGuid(),
+                BatteryAssetId = assetId,
+                DetectedAt = DueAt.AddDays(10),
+                Severity = AlertSeverityEnum.Critical
             });
         await dbContext.SaveChangesAsync();
     }

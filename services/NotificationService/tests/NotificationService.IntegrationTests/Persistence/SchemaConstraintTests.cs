@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
 using NotificationService.IntegrationTests.Fixtures;
+using Npgsql;
 
 namespace NotificationService.IntegrationTests.Persistence;
 
