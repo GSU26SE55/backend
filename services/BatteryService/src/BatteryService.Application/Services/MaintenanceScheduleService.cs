@@ -59,14 +59,25 @@ public class MaintenanceScheduleService : IMaintenanceScheduleService
     public async Task<int> RecordDueCyclesAsync(DateTime nowUtc, CancellationToken ct)
     {
         var options = _options.Value;
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(options.TimeZoneId);
+        var nowLocalDate = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTimeFromUtc(EnsureUtc(nowUtc), timeZone));
+        var nextIneligibleLocalDate = nowLocalDate.AddDays(options.LeadDays + 1);
+        var nextIneligibleLocalMidnight = nextIneligibleLocalDate.ToDateTime(TimeOnly.MinValue);
+        var creationCutoffUtc = TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(nextIneligibleLocalMidnight, DateTimeKind.Unspecified),
+            timeZone);
 
+        // Mở ticket theo ngày lịch ở múi giờ cấu hình, sớm LeadDays ngày.
+        // Dùng cận trên exclusive của ngày kế tiếp để mọi thời điểm trong
+        // ngày đến hạn đều được xử lý, kể cả khi có thay đổi DST.
         // Chỉ pin đang hoạt động: pin Inactive/Decommissioned không cần theo dõi định kỳ.
         var due = await _unitOfWork.BatteryAssets.GetAllAsync()
             .Include(asset => asset.BatteryType)
             .Where(asset =>
                 !asset.IsDeleted &&
                 asset.Status == Domain.Enums.BatteryStatusEnum.Active &&
-                asset.NextMaintenanceDueAtUtc <= nowUtc)
+                asset.NextMaintenanceDueAtUtc < creationCutoffUtc)
             .OrderBy(asset => asset.NextMaintenanceDueAtUtc)
             .Take(options.BatchSize)
             .ToListAsync(ct);
@@ -83,6 +94,14 @@ public class MaintenanceScheduleService : IMaintenanceScheduleService
 
         return recorded;
     }
+
+    private static DateTime EnsureUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 
     private async Task<bool> RecordOneAsync(BatteryAsset asset, DateTime nowUtc, CancellationToken ct)
     {

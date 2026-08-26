@@ -444,10 +444,11 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Rule 12: GH-1244 TicketService scheduling configuration must be wired from
-# the host contract through preflight/deployment into the rendered Helm
-# ConfigMap. Defaults in values-production.yaml alone are insufficient because
-# operators edit /opt/solar-platform/config/host.env between releases.
+# Rule 12: Periodic-maintenance configuration must be wired from the host
+# contract through preflight/deployment into both owning services. BatteryService
+# owns cycle creation; TicketService owns customer scheduling and reminders.
+# Defaults in values-production.yaml alone are insufficient because operators
+# edit /opt/solar-platform/config/host.env between releases.
 # ---------------------------------------------------------------------------
 HOST_ENV_EXAMPLE="deploy/production/host.env.example"
 PRODUCTION_PREFLIGHT="deploy/scripts/preflight-production.sh"
@@ -473,10 +474,14 @@ SLA_BUSINESS_HOURS_WORKING_DAYS_5
 SLA_BUSINESS_HOURS_WORKING_DAYS_6
 "
 PERIODIC_CONFIG_KEYS="
+Battery__MaintenanceSchedule__Enabled
+Battery__MaintenanceSchedule__TimeZoneId
+Battery__MaintenanceSchedule__DefaultCycleMonths
+Battery__MaintenanceSchedule__LeadDays
+Battery__MaintenanceSchedule__PollIntervalSeconds
+Battery__MaintenanceSchedule__BatchSize
 Ticket__PeriodicMaintenance__Enabled
 Ticket__PeriodicMaintenance__TimeZoneId
-Ticket__PeriodicMaintenance__CycleMonths
-Ticket__PeriodicMaintenance__LeadDays
 Ticket__PeriodicMaintenance__OverdueScheduleWindowDays
 Ticket__PeriodicMaintenance__ReminderTime
 Ticket__PeriodicMaintenance__PollIntervalSeconds

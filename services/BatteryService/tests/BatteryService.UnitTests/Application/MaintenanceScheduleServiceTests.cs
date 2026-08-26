@@ -21,12 +21,15 @@ public class MaintenanceScheduleServiceTests
     private static readonly DateTime NowUtc = new(2027, 3, 1, 8, 0, 0, DateTimeKind.Utc);
     private static readonly Guid AssetId = Guid.Parse("aaaa0001-0000-4000-8000-000000000024");
 
-    private static MaintenanceScheduleOptions Options(int defaultCycleMonths = 6) => new()
-    {
-        Enabled = true,
-        DefaultCycleMonths = defaultCycleMonths,
-        BatchSize = 100
-    };
+    private static MaintenanceScheduleOptions Options(
+        int defaultCycleMonths = 6,
+        int leadDays = 7) => new()
+        {
+            Enabled = true,
+            DefaultCycleMonths = defaultCycleMonths,
+            LeadDays = leadDays,
+            BatchSize = 100
+        };
 
     private static BatteryAsset Asset(
         DateTime nextDue,
@@ -97,6 +100,38 @@ public class MaintenanceScheduleServiceTests
         count.Should().Be(0);
         written.Should().BeEmpty();
         asset.MaintenanceCycleNo.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RecordDueCycles_WhenInsideLeadWindow_WritesCycleAndPublishesEvent()
+    {
+        var dueAt = NowUtc.AddDays(7).AddHours(1);
+        var asset = Asset(nextDue: dueAt);
+        var (service, _, written, published) = Build(
+            [asset],
+            options: Options(leadDays: 7));
+
+        var count = await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
+
+        count.Should().Be(1);
+        written.Should().ContainSingle().Which.DueAtUtc.Should().Be(dueAt);
+        published.OfType<MaintenanceCycleDueEvent>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task RecordDueCycles_WhenNextLocalDayIsOutsideLeadWindow_WritesNothing()
+    {
+        // NowUtc = 15:00 Asia/Ho_Chi_Minh. +7d10h falls at 01:00 on the eighth local day.
+        var asset = Asset(nextDue: NowUtc.AddDays(7).AddHours(10));
+        var (service, _, written, published) = Build(
+            [asset],
+            options: Options(leadDays: 7));
+
+        var count = await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
+
+        count.Should().Be(0);
+        written.Should().BeEmpty();
+        published.Should().BeEmpty();
     }
 
     [Fact]

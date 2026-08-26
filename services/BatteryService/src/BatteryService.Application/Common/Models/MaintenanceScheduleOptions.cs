@@ -21,9 +21,6 @@ public class MaintenanceScheduleOptions
     /// <summary>Số ngày mở ticket trước hạn.</summary>
     public int LeadDays { get; set; } = 7;
 
-    /// <summary>Cửa sổ cho Customer chọn lịch khi kỳ đã quá hạn lúc mở ticket.</summary>
-    public int OverdueScheduleWindowDays { get; set; } = 7;
-
     public int PollIntervalSeconds { get; set; } = 60;
 
     public int BatchSize { get; set; } = 100;

@@ -168,10 +168,14 @@ pipeline {
                               'Ai__GrpcAddress: "https://ai.solaris.io.vn"' \
                               'Ai__HttpBaseUrl: "https://ai.solaris.io.vn"' \
                               'TicketAi__AiGrpcAddress: "https://ai.solaris.io.vn"' \
+                              'Battery__MaintenanceSchedule__Enabled: "true"' \
+                              'Battery__MaintenanceSchedule__TimeZoneId: "Asia/Ho_Chi_Minh"' \
+                              'Battery__MaintenanceSchedule__DefaultCycleMonths: "6"' \
+                              'Battery__MaintenanceSchedule__LeadDays: "7"' \
+                              'Battery__MaintenanceSchedule__PollIntervalSeconds: "60"' \
+                              'Battery__MaintenanceSchedule__BatchSize: "100"' \
                               'Ticket__PeriodicMaintenance__Enabled: "true"' \
                               'Ticket__PeriodicMaintenance__TimeZoneId: "Asia/Ho_Chi_Minh"' \
-                              'Ticket__PeriodicMaintenance__CycleMonths: "6"' \
-                              'Ticket__PeriodicMaintenance__LeadDays: "7"' \
                               'Ticket__PeriodicMaintenance__OverdueScheduleWindowDays: "7"' \
                               'Ticket__PeriodicMaintenance__ReminderTime: "08:00:00"' \
                               'Ticket__PeriodicMaintenance__PollIntervalSeconds: "60"' \

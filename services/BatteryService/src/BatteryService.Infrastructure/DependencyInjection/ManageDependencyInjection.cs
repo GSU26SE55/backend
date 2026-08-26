@@ -33,8 +33,19 @@ public static class ManageDependencyInjection
 
         // Anomaly engine config (Sprint 3) — service/AnomalyRules dùng options này
         services.Configure<AnomalyEngineOptions>(configuration.GetSection(AnomalyEngineOptions.SectionName));
-        services.Configure<MaintenanceScheduleOptions>(
-            configuration.GetSection(MaintenanceScheduleOptions.SectionName));
+        services.AddOptions<MaintenanceScheduleOptions>()
+            .Bind(configuration.GetSection(MaintenanceScheduleOptions.SectionName))
+            .Validate(options => options.DefaultCycleMonths > 0,
+                "Battery:MaintenanceSchedule:DefaultCycleMonths must be greater than zero.")
+            .Validate(options => options.LeadDays >= 0,
+                "Battery:MaintenanceSchedule:LeadDays must not be negative.")
+            .Validate(options => options.PollIntervalSeconds > 0,
+                "Battery:MaintenanceSchedule:PollIntervalSeconds must be greater than zero.")
+            .Validate(options => options.BatchSize > 0,
+                "Battery:MaintenanceSchedule:BatchSize must be greater than zero.")
+            .Validate(options => IsValidTimeZone(options.TimeZoneId),
+                "Battery:MaintenanceSchedule:TimeZoneId is invalid.")
+            .ValidateOnStart();
 
         // Background-only services — CQRS không cần thiết vì không expose qua REST.
         // Background worker chỉ làm cron trigger, logic ở service này.
@@ -239,6 +250,23 @@ public static class ManageDependencyInjection
         services.AddScoped<IBatteryCurrentUserService, BatteryService.Infrastructure.Implements.Services.BatteryCurrentUserService>();
 
         return services;
+    }
+
+    private static bool IsValidTimeZone(string timeZoneId)
+    {
+        try
+        {
+            _ = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            return true;
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return false;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return false;
+        }
     }
 
     private static void AddDatabase(this IServiceCollection services, IConfiguration configuration)
