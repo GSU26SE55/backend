@@ -47,6 +47,7 @@ public class InternalKnowledgeBaseController : ControllerBase
     {
         command.CurrentUserId = GetCurrentUserId();
         command.CurrentUserRole = _currentUser.Role ?? string.Empty;
+        command.CurrentUserName = _currentUser.FullName;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
@@ -57,8 +58,11 @@ public class InternalKnowledgeBaseController : ControllerBase
     /// </summary>
     /// <remarks>
     /// - Trước khi cập nhật, hệ thống tự động lưu lại phiên bản hiện tại vào lịch sử.
-    /// - Nếu Staff thực hiện thay đổi bài viết không phải do mình tạo, bài viết sẽ được chuyển sang trạng thái "Chờ phê duyệt" (PendingReview).
-    /// - Manager/Admin hoặc chủ sở hữu bài viết có quyền cập nhật trực tiếp mà không cần phê duyệt lại.
+    /// - Chỉ Manager/Admin được ghi thẳng nội dung mới vào bài viết, không qua phê duyệt lại.
+    /// - Staff sửa bài sẽ tạo một phiên bản chờ duyệt và đưa bài về trạng thái "Chờ phê duyệt"
+    ///   (PendingReview) — kể cả khi bài viết đó do chính người đó tạo ra. Mọi thay đổi nội dung
+    ///   KB đều cần một người có quyền duyệt xác nhận, nếu không tác giả có thể tự đẩy nội dung
+    ///   sai lên một bài đã Published mà không ai rà lại.
     /// </remarks>
     /// <param name="id">ID bài viết cần cập nhật.</param>
     /// <param name="command">Nội dung cập nhật và lý do thay đổi.</param>
@@ -75,6 +79,7 @@ public class InternalKnowledgeBaseController : ControllerBase
         command.ArticleId = id;
         command.CurrentUserId = GetCurrentUserId();
         command.CurrentUserRole = _currentUser.Role ?? string.Empty;
+        command.CurrentUserName = _currentUser.FullName;
 
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);

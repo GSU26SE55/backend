@@ -182,6 +182,50 @@ public class BmsSwitchCommandHandlerTests
         result.StatusCode.Should().Be(409);
     }
 
+    [Fact]
+    public async Task AutomaticDischargeCut_SupersedesPendingEnableCommand()
+    {
+        var customerId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var asset = Asset(customerId, siteId);
+        var device = Device(siteId);
+        var pendingEnable = new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            BatteryAssetId = asset.Id,
+            CmdId = "pending-enable",
+            Type = "set_bms_switch",
+            ParamsJson = "{\"serial\":\"BAT-001\",\"target\":\"discharge\",\"enable\":true}",
+            Status = IotDeviceCommandStatusEnum.Pending
+        };
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(asset)
+            .WithIotDevices(device)
+            .WithIotDeviceCommands(pendingEnable);
+        var publisher = new Mock<IMqttBridgePublisher>();
+
+        var result = await Handler(builder, new TestBatteryCurrentUserService(null), publisher.Object)
+            .Handle(new SetBmsSwitchCommand
+            {
+                BatteryAssetId = asset.Id,
+                Target = "discharge",
+                Enable = false,
+                IssuedByAccountId = Guid.Empty
+            }, CancellationToken.None);
+
+        result.StatusCode.Should().Be(202);
+        builder.IotDeviceCommands.Verify(repository => repository.AddAsync(
+            It.Is<IotDeviceCommand>(command =>
+                command.BatteryAssetId == asset.Id
+                && command.ParamsJson.Contains("\"target\":\"discharge\"")
+                && command.ParamsJson.Contains("\"enable\":false"))), Times.Once);
+        publisher.Verify(x => x.PublishCommandAsync(
+            device.DeviceCode,
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static SetBmsSwitchCommandHandler Handler(
         MockUnitOfWorkBuilder builder,
         TestBatteryCurrentUserService currentUser,

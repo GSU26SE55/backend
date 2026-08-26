@@ -49,10 +49,19 @@ public class TicketDTO
 
     public DateTime? ScheduledStartAtUtc { get; set; }
     public int ScheduleVersion { get; set; }
-    public string? PeriodicMaintenanceSourceTicketId { get; set; }
     public DateTime? PeriodicMaintenanceDueAtUtc { get; set; }
     public DateTime? PeriodicMaintenanceScheduleDeadlineAtUtc { get; set; }
-    public bool IsPeriodicMaintenance => PeriodicMaintenanceSourceTicketId is not null;
+
+    /// <summary>
+    /// Ticket này thuộc một kỳ bảo trì định kỳ của pin.
+    /// </summary>
+    /// <remarks>
+    /// Nhận diện bằng hạn kỳ, không bằng ticket nguồn. Từ khi lịch bảo trì chuyển sang tầng
+    /// tài sản, ticket sinh ra từ một kỳ của pin chứ không neo vào ticket đã đóng, nên
+    /// <c>PeriodicMaintenanceSourceTicketId</c> luôn trống — dùng nó thì cờ này vĩnh viễn
+    /// false và huy hiệu "bảo trì định kỳ" trên web không bao giờ hiện.
+    /// </remarks>
+    public bool IsPeriodicMaintenance => PeriodicMaintenanceDueAtUtc is not null;
     public bool IsPeriodicMaintenanceOverdue =>
         PeriodicMaintenanceDueAtUtc.HasValue && PeriodicMaintenanceDueAtUtc.Value < DateTime.UtcNow;
     public PendingContextEnum? PendingContext { get; set; }

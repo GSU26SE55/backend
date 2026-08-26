@@ -45,7 +45,7 @@ public class SlaTimerBackgroundService : BackgroundService
                 _logger.LogError(exception, "SLA timer tick failed.");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
         }
     }
 

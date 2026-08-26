@@ -55,6 +55,18 @@ public class BatteryAssetDto
     /// <summary>Timestamp reading gần nhất cho asset.</summary>
     public DateTime? LastSensorReadingAt { get; set; }
 
+    /// <summary>Lần bảo trì định kỳ gần nhất đã hoàn tất. Null = chưa lần nào.</summary>
+    public DateTime? LastMaintenanceAtUtc { get; set; }
+
+    /// <summary>Kỳ bảo trì kế tiếp. Luôn có giá trị — pin chưa bảo trì thì tính từ InstallDate.</summary>
+    public DateTime NextMaintenanceDueAtUtc { get; set; }
+
+    /// <summary>Số thứ tự kỳ kế tiếp — 1 là kỳ đầu kể từ khi lắp đặt.</summary>
+    public int MaintenanceCycleNo { get; set; }
+
+    /// <summary>Chu kỳ (tháng) đang áp dụng — theo loại pin, thiếu thì lấy mặc định hệ thống.</summary>
+    public int MaintenanceIntervalMonths { get; set; }
+
     /// <summary>Timestamp tạo (UTC).</summary>
     public DateTime CreatedAt { get; set; }
 }

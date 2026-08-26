@@ -177,6 +177,56 @@ public sealed class IotOfflineDetectionTests : IDisposable
     }
 
     [Fact]
+    public async Task LiveLwt_MarksFreshActiveDeviceOffline_WithoutWaitingHeartbeatWindow()
+    {
+        await using var db = CreateDb();
+        var now = DateTime.UtcNow;
+        var site = new Site
+        {
+            Id = Guid.NewGuid(),
+            Name = "Live LWT Site",
+            CustomerId = Guid.NewGuid(),
+            InstallDate = now
+        };
+        var device = new IotDevice
+        {
+            Id = Guid.NewGuid(),
+            DeviceCode = "ESP-LIVE-LWT",
+            DisplayName = "live lwt test",
+            SiteId = site.Id,
+            Status = IotDeviceStatusEnum.Active,
+            ApiKeyHash = "h",
+            ApiKeyLastFour = "abcd",
+            LastSeenAt = now.AddSeconds(-1),
+            HeartbeatIntervalSeconds = 60
+        };
+        db.Sites.Add(site);
+        db.IotDevices.Add(device);
+        await db.SaveChangesAsync();
+
+        var outbox = new CapturingOutbox();
+        var service = new IotDeviceOfflineDetectionService(
+            new UnitOfWork(db),
+            outbox,
+            new Helpers.NoopIotMetricsRecorder(),
+            NullLogger<IotDeviceOfflineDetectionService>.Instance);
+
+        var pollingResult = await service.TryMarkOfflineAsync(
+            device.Id, now, minimumSilenceSeconds: 90, default);
+        pollingResult.MarkedOffline.Should().BeFalse(
+            "the polling fallback must still reject a fresh device");
+
+        var lwtResult = await service.TryMarkOfflineFromLwtAsync(device.Id, now, default);
+
+        lwtResult.MarkedOffline.Should().BeTrue(
+            "a live broker LWT is explicit disconnect evidence");
+        db.ChangeTracker.Clear();
+        (await db.IotDevices.SingleAsync()).Status.Should().Be(IotDeviceStatusEnum.Offline);
+        (await db.Alerts.SingleAsync()).AnomalyType.Should().Be(AnomalyTypeEnum.DeviceOffline);
+        outbox.Events.Should().ContainSingle(e => e is IotDeviceWentOfflineEvent);
+    }
+
+    [Fact]
     public async Task Detect_MarksPendingCommandsOlderThanSixtySecondsTimedOut()
     {
         var command = new IotDeviceCommand

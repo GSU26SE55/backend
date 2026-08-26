@@ -79,7 +79,7 @@ public class TicketDeclareIncidentCommandHandler : IRequestHandler<TicketDeclare
                     request.UserDisplayName, ActivityActionEnum.IncidentDeclared, reason: request.IncidentDescription!.Trim());
                 await _outboxWriter.WriteAsync(new IncidentDeclaredEvent(ticket.Id, ticket.Code, request.UserId), transactionCt);
                 await _outboxWriter.WriteAsync(new BatteryIsolationRequestedEvent(
-                    ticket.ActiveIncidentEpisodeId.Value, ticket.Id, assets, DateTime.UtcNow)
+                    ticket.ActiveIncidentEpisodeId.Value, ticket.Id, assets, DateTime.UtcNow, request.UserId)
                 { Id = DeterministicEventId.From(ticket.ActiveIncidentEpisodeId.Value, "battery-isolation-requested") }, transactionCt);
                 await _uow.SaveChangesAsync(transactionCt);
             }, ct);

@@ -20,6 +20,17 @@ public class GetAlertsQuery : PaginationRequest, IRequest<CommonResponse<Paginat
     /// <summary>Loại trừ alert có status = Merged. Mặc định true — FE chỉ thấy alert gốc.</summary>
     public bool ExcludeMerged { get; set; } = true;
 
+    /// <summary>Filter theo loại anomaly.</summary>
+    public AnomalyTypeEnum? AnomalyType { get; set; }
+
+    /// <summary>
+    /// Loại trừ alert mirror của EnvironmentalIncident (<c>AnomalyType = EnvironmentalIncident</c>).
+    /// Mỗi incident sinh kèm 1 alert cấp site chỉ để dedup/notification; nó đã có màn hình riêng
+    /// (/api/environmental-incidents) nên màn hình "Battery alerts" bật cờ này để không hiện trùng.
+    /// Mặc định false — giữ nguyên payload cũ cho các consumer hiện tại.
+    /// </summary>
+    public bool ExcludeEnvironmentalIncidents { get; set; }
+
     /// <summary>Filter timestamp bắt đầu (UTC inclusive).</summary>
     public DateTime? From { get; set; }
 

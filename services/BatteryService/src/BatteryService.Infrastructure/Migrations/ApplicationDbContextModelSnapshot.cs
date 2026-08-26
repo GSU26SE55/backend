@@ -417,6 +417,10 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<DateTime?>("LastMaintenanceAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_maintenance_at_utc");
+
                     b.Property<DateTime?>("LastSensorReadingAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_sensor_reading_at");
@@ -435,6 +439,16 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasPrecision(9, 6)
                         .HasColumnType("numeric(9,6)")
                         .HasColumnName("longitude");
+
+                    b.Property<int>("MaintenanceCycleNo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("maintenance_cycle_no");
+
+                    b.Property<DateTime>("NextMaintenanceDueAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_maintenance_due_at_utc");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
@@ -478,6 +492,10 @@ namespace BatteryService.Infrastructure.Migrations
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("LastSensorReadingAt");
+
+                    b.HasIndex("NextMaintenanceDueAtUtc")
+                        .HasDatabaseName("ix_battery_assets_next_maintenance_due")
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex("SerialNumber")
                         .IsUnique()
@@ -745,6 +763,10 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
+
+                    b.Property<int?>("MaintenanceIntervalMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("maintenance_interval_months");
 
                     b.Property<string>("Manufacturer")
                         .HasMaxLength(100)
@@ -1826,6 +1848,104 @@ namespace BatteryService.Infrastructure.Migrations
                     b.ToTable("iot_firmware_update_logs", (string)null);
                 });
 
+            modelBuilder.Entity("BatteryService.Domain.Entities.MaintenanceCycle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("AlertCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("alert_count");
+
+                    b.Property<decimal?>("AvgTemperatureCelsius")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("avg_temperature_celsius");
+
+                    b.Property<Guid>("BatteryAssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("battery_asset_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<int?>("CriticalAlertCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("critical_alert_count");
+
+                    b.Property<int?>("CycleCountDelta")
+                        .HasColumnType("integer")
+                        .HasColumnName("cycle_count_delta");
+
+                    b.Property<int>("CycleNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("cycle_no");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTime>("DueAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at_utc");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<decimal?>("MaxTemperatureCelsius")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("max_temperature_celsius");
+
+                    b.Property<decimal?>("MaxVoltage")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("max_voltage");
+
+                    b.Property<decimal?>("MinVoltage")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("min_voltage");
+
+                    b.Property<int?>("ReadingCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("reading_count");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at_utc");
+
+                    b.Property<decimal?>("SohPercentAtCycle")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("soh_percent_at_cycle");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatteryAssetId", "CycleNo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_maintenance_cycles_asset_cycle_no")
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex("BatteryAssetId", "DueAtUtc")
+                        .HasDatabaseName("ix_maintenance_cycles_asset_due");
+
+                    b.ToTable("maintenance_cycles", (string)null);
+                });
+
             modelBuilder.Entity("BatteryService.Domain.Entities.NoiseBreachEvent", b =>
                 {
                     b.Property<DateTime>("Time")
@@ -2634,6 +2754,17 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Navigation("IotFirmwareRelease");
                 });
 
+            modelBuilder.Entity("BatteryService.Domain.Entities.MaintenanceCycle", b =>
+                {
+                    b.HasOne("BatteryService.Domain.Entities.BatteryAsset", "BatteryAsset")
+                        .WithMany("MaintenanceCycles")
+                        .HasForeignKey("BatteryAssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BatteryAsset");
+                });
+
             modelBuilder.Entity("BatteryService.Domain.Entities.NoiseBreachEvent", b =>
                 {
                     b.HasOne("BatteryService.Domain.Entities.BatteryAsset", "BatteryAsset")
@@ -2688,6 +2819,8 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Navigation("Alerts");
 
                     b.Navigation("IotDeviceCommands");
+
+                    b.Navigation("MaintenanceCycles");
 
                     b.Navigation("SensorReadings");
                 });

@@ -1,5 +1,6 @@
 using BatteryService.Application.CQRS.Command.BatteryAsset;
 using BatteryService.Application.CQRS.Query.BatteryAsset;
+using BatteryService.Application.CQRS.Query.Maintenance;
 using BatteryService.Application.DTOs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -180,6 +181,24 @@ public class BatteryAssetsController : ControllerBase
     public async Task<IActionResult> GetRealtime(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetBatteryAssetRealtimeQuery { Id = id }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>Periodic maintenance history for one battery, newest cycle first.</summary>
+    /// <remarks>
+    /// Lịch sử ở tầng TÀI SẢN — mỗi dòng là một kỳ bảo trì định kỳ (đến hạn khi nào, làm
+    /// xong lúc nào, đúng hạn hay trễ, SoH tại thời điểm đó). Khác với maintenance log bên
+    /// TicketService: log là báo cáo công việc Staff ghi trong lúc xử lý một ticket.
+    /// </remarks>
+    [HttpGet("{id:guid}/maintenance-cycles")]
+    [Authorize(Roles = "Admin,Manager,Staff,Customer")]
+    [ProducesResponseType(typeof(CommonResponse<List<MaintenanceCycleDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMaintenanceCycles(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new GetMaintenanceCyclesQuery { BatteryAssetId = id }, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 

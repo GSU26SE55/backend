@@ -39,11 +39,27 @@ public class GetEnvironmentalIncidentsQueryHandler
             .ThenBy(i => i.Id) // tie-breaker cố định — pagination ổn định
             .ToPagedEntityListAsync(pageNumber, pageSize, cancellationToken);
 
+        // Tên khách tra theo lô sau khi đã phân trang: chỉ cần các site có mặt trên trang này,
+        // nên không kéo cả bảng account về.
+        var siteIds = page.Items.Select(i => i.SiteId).Distinct().ToList();
+        var customerNameBySite = await _uow.Sites
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(site => siteIds.Contains(site.Id) && !site.IsDeleted)
+            .Join(
+                _uow.CustomerAccounts.GetAllAsync().AsNoTracking().Where(a => !a.IsDeleted),
+                site => site.CustomerId,
+                account => account.Id,
+                (site, account) => new { site.Id, account.FullName })
+            .ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
+
         return new EnvironmentalIncidentListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
-            Data = page.Map(ReportEnvironmentalIncidentCommandHandler.Map)
+            Data = page.Map(i => ReportEnvironmentalIncidentCommandHandler.Map(
+                i,
+                customerNameBySite.GetValueOrDefault(i.SiteId) ?? string.Empty))
         };
     }
 }
@@ -60,7 +76,18 @@ public class GetEnvironmentalIncidentByIdQueryHandler
         if (i is null || i.IsDeleted)
             return new EnvironmentalIncidentResponse { IsSuccess = false, StatusCode = 404, Message = "Incident not found." };
 
-        return new EnvironmentalIncidentResponse { IsSuccess = true, StatusCode = 200, Data = ReportEnvironmentalIncidentCommandHandler.Map(i) };
+        var customerName = await _uow.Sites
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(site => site.Id == i.SiteId && !site.IsDeleted)
+            .Join(
+                _uow.CustomerAccounts.GetAllAsync().AsNoTracking().Where(a => !a.IsDeleted),
+                site => site.CustomerId,
+                account => account.Id,
+                (site, account) => account.FullName)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new EnvironmentalIncidentResponse { IsSuccess = true, StatusCode = 200, Data = ReportEnvironmentalIncidentCommandHandler.Map(i, customerName ?? string.Empty) };
     }
 }
 
@@ -80,13 +107,25 @@ public class ActiveEnvironmentalIncidentsBySiteQueryHandler
             .OrderByDescending(i => i.DetectedAt)
             .ToListAsync(cancellationToken);
 
+        // Mọi incident ở đây cùng một site → tra tên khách đúng một lần.
+        var customerName = await _uow.Sites
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(site => site.Id == request.SiteId && !site.IsDeleted)
+            .Join(
+                _uow.CustomerAccounts.GetAllAsync().AsNoTracking().Where(a => !a.IsDeleted),
+                site => site.CustomerId,
+                account => account.Id,
+                (site, account) => account.FullName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
         return new EnvironmentalIncidentListResponse
         {
             IsSuccess = true,
             StatusCode = 200,
             Data = new PaginationResponse<EnvironmentalIncidentDto>
             {
-                Items = items.Select(ReportEnvironmentalIncidentCommandHandler.Map).ToList(),
+                Items = items.Select(i => ReportEnvironmentalIncidentCommandHandler.Map(i, customerName)).ToList(),
                 TotalItems = items.Count,
                 PageNumber = 1,
                 PageSize = items.Count

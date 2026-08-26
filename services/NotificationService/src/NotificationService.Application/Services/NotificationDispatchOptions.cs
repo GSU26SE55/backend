@@ -133,6 +133,13 @@ public class NotificationDispatchOptions
             [NotificationTypeEnum.BlogGenerationCompleted] = [NotificationChannelEnum.InApp],
             [NotificationTypeEnum.BlogGenerationFailed] = [NotificationChannelEnum.InApp],
 
+            // Guide (KB) review — InApp là đủ: đây là việc trong giờ làm trên web, không phải
+            // cảnh báo phải đánh thức ai. Khai ở đây để seeder dựng template cho chúng; thiếu
+            // dòng này thì thông báo gửi đi rơi về chuỗi hardcode (xem ghi chú 03/08/2026 trên).
+            [NotificationTypeEnum.KbArticleReviewRequested] = [NotificationChannelEnum.InApp],
+            [NotificationTypeEnum.KbArticleReviewApproved] = [NotificationChannelEnum.InApp],
+            [NotificationTypeEnum.KbArticleReviewRejected] = [NotificationChannelEnum.InApp],
+
             [NotificationTypeEnum.System] = [NotificationChannelEnum.InApp],
         };
 

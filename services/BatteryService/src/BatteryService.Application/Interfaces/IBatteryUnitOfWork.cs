@@ -9,6 +9,9 @@ public interface IBatteryUnitOfWork : IUnitOfWork
 
     IGenericRepository<BatteryAsset> BatteryAssets { get; }
 
+    /// <summary>Lịch sử bảo trì định kỳ theo kỳ của mỗi pin.</summary>
+    IGenericRepository<MaintenanceCycle> MaintenanceCycles { get; }
+
     IGenericRepository<Site> Sites { get; }
 
     IGenericRepository<CustomerAccount> CustomerAccounts { get; }

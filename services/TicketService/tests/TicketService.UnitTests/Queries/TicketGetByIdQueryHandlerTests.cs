@@ -251,8 +251,8 @@ public class TicketGetByIdQueryHandlerTests
         }, default);
 
         result.Data!.SlaTimer.Should().NotBeNull();
-        result.Data.SlaTimer!.SlaWorkingDays.Should().Be(2, "P3 = 2 ngày làm việc");
-        result.Data.SlaTimer.SlaWorkingHours.Should().Be(20, "2 ngày × 10h/ngày");
+        result.Data.SlaTimer!.SlaWorkingDays.Should().Be(7, "P3 = 7 ngày làm việc");
+        result.Data.SlaTimer.SlaWorkingHours.Should().Be(70, "7 ngày × 10h/ngày");
         result.Data.SlaTimer.RemainingWorkingMinutes.Should().BePositive();
         result.Data.ExpectedCompletionAtUtc.Should().Be(dueAt);
     }

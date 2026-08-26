@@ -59,7 +59,6 @@ public static class TicketQueryHelper
                 : null,
             ScheduledStartAtUtc = t.ScheduledStartAtUtc,
             ScheduleVersion = t.ScheduleVersion,
-            PeriodicMaintenanceSourceTicketId = t.PeriodicMaintenanceSourceTicketId?.ToString(),
             PeriodicMaintenanceDueAtUtc = t.PeriodicMaintenanceDueAtUtc,
             PeriodicMaintenanceScheduleDeadlineAtUtc = t.PeriodicMaintenanceScheduleDeadlineAtUtc,
             PendingContext = t.PendingContext,
@@ -193,6 +192,36 @@ public static class TicketQueryHelper
     /// <summary>GH-1242 — chỉ nội bộ mới thấy SLA timer; Customer chỉ thấy ngày dự kiến hoàn thành.</summary>
     public static bool CanViewSlaTimer(IReadOnlyCollection<string> actorRoles)
         => HasAnyRole(actorRoles, "Admin", "Manager", "Staff");
+
+    /// <summary>
+    /// Lọc danh sách ticket theo tình trạng SLA. Trả về IQueryable nên điều kiện dịch được
+    /// sang SQL — không kéo cả bảng về rồi lọc trong bộ nhớ.
+    ///
+    /// Đặt ở đây (không viết lặp trong từng handler) để Admin/Manager và mọi danh sách sau này
+    /// hiểu "Warning" y hệt nhau. Ticket chưa có SlaTimer luôn bị loại ở cả ba nhánh: chưa
+    /// chạy đồng hồ thì không thể pause/warning/breach.
+    /// </summary>
+    public static IQueryable<Ticket> FilterBySla(IQueryable<Ticket> query, SlaFilterEnum? sla) => sla switch
+    {
+        SlaFilterEnum.Paused => query.Where(t =>
+            t.SlaTimer != null && t.SlaTimer.Status == SlaTimerStatusEnum.Paused),
+
+        // Còn Running: cảnh báo đã bắn nhưng DueAt CHƯA về 0. Không chỉ xét WarningSentAt —
+        // trường đó vẫn còn nguyên sau khi timer chuyển Breached, nên bỏ điều kiện Running thì
+        // ticket đã quá hạn sẽ lọt vào cả hai bộ lọc.
+        SlaFilterEnum.Warning => query.Where(t =>
+            t.SlaTimer != null
+            && t.SlaTimer.Status == SlaTimerStatusEnum.Running
+            && t.SlaTimer.WarningSentAt != null),
+
+        // "Về 0": SlaTimerBackgroundService đóng dấu Breached đúng lúc DueAt <= now.
+        // Lọc theo Status chứ không so DueAt với thời điểm hiện tại — timer Paused có thể
+        // vượt DueAt mà vẫn chưa vi phạm (DueAt chỉ được cộng bù lúc Resume).
+        SlaFilterEnum.Breached => query.Where(t =>
+            t.SlaTimer != null && t.SlaTimer.Status == SlaTimerStatusEnum.Breached),
+
+        _ => query
+    };
 
     private static bool HasAnyRole(IReadOnlyCollection<string> roles, params string[] check)
         => check.Any(r => HasRole(roles, r));

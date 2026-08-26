@@ -484,6 +484,14 @@ services:
       AnomalyEngine__EscalationIntervalSeconds: ${BATTERY_ANOMALY_ESCALATION_INTERVAL_SECONDS:-60}
       AnomalyEngine__OutboxRelayIntervalSeconds: ${BATTERY_ANOMALY_OUTBOX_RELAY_INTERVAL_SECONDS:-5}
       AnomalyEngine__OutboxRelayBatchSize: ${BATTERY_ANOMALY_OUTBOX_RELAY_BATCH_SIZE:-100}
+      # Asset-owned maintenance scheduler. Keep the established host variable names so
+      # existing development and production configuration remains backward-compatible.
+      Battery__MaintenanceSchedule__Enabled: ${TICKET_PERIODIC_MAINTENANCE_ENABLED:-true}
+      Battery__MaintenanceSchedule__TimeZoneId: ${TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID:-Asia/Ho_Chi_Minh}
+      Battery__MaintenanceSchedule__DefaultCycleMonths: ${TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS:-6}
+      Battery__MaintenanceSchedule__LeadDays: ${TICKET_PERIODIC_MAINTENANCE_LEAD_DAYS:-7}
+      Battery__MaintenanceSchedule__PollIntervalSeconds: ${TICKET_PERIODIC_MAINTENANCE_POLL_INTERVAL_SECONDS:-60}
+      Battery__MaintenanceSchedule__BatchSize: ${TICKET_PERIODIC_MAINTENANCE_BATCH_SIZE:-100}
       # Sprint 5B #91/#102 — Environmental ingest API key (smoke/fire/water IoT)
       ApiKeys__EnvironmentalIngest: ${BATTERY_ENVIRONMENTAL_INGEST_API_KEY:-dev-battery-environmental-key}
       # Sprint 5B #90/#92 — OpenMeteo + WeatherSyncBackgroundService
@@ -628,8 +636,6 @@ services:
       # GH-1244 — Định kỳ bảo trì pin 6 tháng (Periodic Maintenance)
       Ticket__PeriodicMaintenance__Enabled: ${TICKET_PERIODIC_MAINTENANCE_ENABLED:-true}
       Ticket__PeriodicMaintenance__TimeZoneId: ${TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID:-Asia/Ho_Chi_Minh}
-      Ticket__PeriodicMaintenance__CycleMonths: ${TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS:-6}
-      Ticket__PeriodicMaintenance__LeadDays: ${TICKET_PERIODIC_MAINTENANCE_LEAD_DAYS:-7}
       Ticket__PeriodicMaintenance__OverdueScheduleWindowDays: ${TICKET_PERIODIC_MAINTENANCE_OVERDUE_WINDOW_DAYS:-7}
       Ticket__PeriodicMaintenance__ReminderTime: ${TICKET_PERIODIC_MAINTENANCE_REMINDER_TIME:-08:00:00}
       Ticket__PeriodicMaintenance__PollIntervalSeconds: ${TICKET_PERIODIC_MAINTENANCE_POLL_INTERVAL_SECONDS:-60}

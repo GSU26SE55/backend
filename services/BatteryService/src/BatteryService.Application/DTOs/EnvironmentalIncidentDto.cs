@@ -9,6 +9,11 @@ public class EnvironmentalIncidentDto
     public string Id { get; set; } = string.Empty;
     /// <summary>ID Site (Guid).</summary>
     public string SiteId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Khách hàng sở hữu site xảy ra sự cố (Site.CustomerId). Rỗng khi không tra được tài khoản.
+    /// </summary>
+    public string CustomerName { get; set; } = string.Empty;
     /// <summary>Loại incident (SmokeDetected | WaterLeak | ...).</summary>
     public EnvironmentalIncidentTypeEnum IncidentType { get; set; }
     /// <summary>Filter theo status enum.</summary>

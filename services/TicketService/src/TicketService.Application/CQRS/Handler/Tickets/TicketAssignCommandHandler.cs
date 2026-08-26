@@ -61,8 +61,12 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
             return Fail(404, "Ticket not found.");
 
         var previousSchedule = ticket.ScheduledStartAtUtc;
+        // Dấu hiệu "đây là ticket bảo trì định kỳ" là hạn kỳ, không phải ticket nguồn: từ khi
+        // lịch chuyển sang tài sản, ticket được mở từ một kỳ bảo trì của pin chứ không còn
+        // neo vào một ticket đã đóng, nên PeriodicMaintenanceSourceTicketId luôn trống và
+        // dùng nó làm dấu hiệu sẽ khiến cả khối này không bao giờ chạy.
         var hasCustomerPeriodicSchedule =
-            ticket.PeriodicMaintenanceSourceTicketId.HasValue &&
+            ticket.PeriodicMaintenanceDueAtUtc.HasValue &&
             ticket.PeriodicMaintenanceCustomerScheduledAtUtc.HasValue &&
             previousSchedule.HasValue;
         var customerScheduleExpired =

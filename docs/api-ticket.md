@@ -297,9 +297,9 @@ ClosedPendingRate → Closed (Customer rate / System auto-close / Admin) | → O
 
 | Giá trị | Int | SLA | Giờ làm việc | Ý nghĩa |
 |---|---|---|---|---|
-| `P1Critical` | 1 | 14 ngày | 140h | Nghiêm trọng — mất điện/nguy cơ an toàn/diện rộng |
+| `P1Critical` | 1 | 1 ngày | 10h | Nghiêm trọng — mất điện/nguy cơ an toàn/diện rộng |
 | `P2High` | 2 | 3 ngày | 30h | Cao — degradation đáng kể |
-| `P3Normal` | 3 | 2 ngày | 20h | Bình thường — bất thường nhẹ/bảo trì định kỳ |
+| `P3Normal` | 3 | 7 ngày | 70h | Bình thường — bất thường nhẹ/bảo trì định kỳ |
 | `Urgent` | 4 | — | — | Incident — không tiêu thụ SLA timer |
 
 **Lưu ý:** Priority được tính tự động từ `ImpactScope × UrgencyLevel` matrix tại bước triage. **Không thay đổi** trong toàn bộ vòng đời ticket. Override thủ công chỉ khi có lý do an toàn (`priorityOverrideReason`).
@@ -645,8 +645,8 @@ Bao gồm tất cả field của `TicketDTO`, cộng thêm:
 | `breachAt` | `string?` | Null nếu chưa breach | Thời điểm SLA bị vi phạm |
 | `status` | `SlaTimerStatusEnum` | Không | Trạng thái SLA timer |
 | `remainingPercent` | `number` | Không | Phần trăm thời gian còn lại (0–100) |
-| `slaWorkingDays` | `int` | Không | **GH-1242** — budget SLA theo số ngày làm việc của priority (P1=14 · P2=3 · P3=2) |
-| `slaWorkingHours` | `int` | Không | **GH-1242** — budget SLA quy ra giờ làm việc (P1=140 · P2=30 · P3=20). FE không tự nhân số ngày với độ dài cửa sổ làm việc |
+| `slaWorkingDays` | `int` | Không | **GH-1242** — budget SLA theo số ngày làm việc của priority (P1=1 · P2=3 · P3=7) |
+| `slaWorkingHours` | `int` | Không | **GH-1242** — budget SLA quy ra giờ làm việc (P1=10 · P2=30 · P3=70). FE không tự nhân số ngày với độ dài cửa sổ làm việc |
 | `remainingWorkingMinutes` | `int` | Không | **GH-1242** — số phút làm việc còn lại tới `dueAt`; `0` khi timer không ở trạng thái `Running`/`Paused`. Đóng băng tại `currentPauseStartedAt` khi đang Paused, cùng quy ước với `remainingPercent` |
 
 ### `TicketActivityDTO`

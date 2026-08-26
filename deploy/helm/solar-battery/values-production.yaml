@@ -128,12 +128,19 @@ config:
   TicketAi__TimeoutSeconds: "5"
   TicketAi__MaxDuplicateCandidates: "10"
 
-  # GH-1244 — TicketService periodic maintenance. The deploy script requires
-  # the same values in host.env and overrides these defaults explicitly.
+  # Asset-owned maintenance scheduler. The deploy script maps the established
+  # TICKET_PERIODIC_MAINTENANCE_* host variables here for a zero-touch R4 upgrade.
+  Battery__MaintenanceSchedule__Enabled: "true"
+  Battery__MaintenanceSchedule__TimeZoneId: Asia/Ho_Chi_Minh
+  Battery__MaintenanceSchedule__DefaultCycleMonths: "6"
+  Battery__MaintenanceSchedule__LeadDays: "7"
+  Battery__MaintenanceSchedule__PollIntervalSeconds: "60"
+  Battery__MaintenanceSchedule__BatchSize: "100"
+
+  # TicketService owns the customer scheduling/reminder half after a maintenance
+  # ticket has been raised by the BatteryService event.
   Ticket__PeriodicMaintenance__Enabled: "true"
   Ticket__PeriodicMaintenance__TimeZoneId: Asia/Ho_Chi_Minh
-  Ticket__PeriodicMaintenance__CycleMonths: "6"
-  Ticket__PeriodicMaintenance__LeadDays: "7"
   Ticket__PeriodicMaintenance__OverdueScheduleWindowDays: "7"
   Ticket__PeriodicMaintenance__ReminderTime: "08:00:00"
   Ticket__PeriodicMaintenance__PollIntervalSeconds: "60"

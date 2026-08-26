@@ -21,6 +21,12 @@ public class TicketGetListQuery : PaginationRequest, IRequest<CommonResponse<Pag
     public Guid? BatteryAssetId { get; set; }
 
     /// <summary>
+    /// Lọc theo tình trạng SLA: Paused | Warning | Breached.
+    /// Độc lập với <see cref="Status"/> — cả ba đều là ticket đang xử lý, chỉ khác đồng hồ SLA.
+    /// </summary>
+    public SlaFilterEnum? Sla { get; set; }
+
+    /// <summary>
     /// Đảo chiều theo CreatedAt (legacy — giữ tương thích ngược).
     /// Nếu <see cref="SortDir"/> được set thì SortDir thắng.
     /// </summary>

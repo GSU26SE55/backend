@@ -45,9 +45,9 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
         Priority = TicketPriorityEnum.P3Normal,
         Status = SlaTimerStatusEnum.Running,
         StartedAt = DateTime.UtcNow.AddMinutes(-10),
-        // P3 budget = 1200 phút làm việc → còn 1000 phút ≈ 83%.
+        // P3 budget = 4200 phút làm việc → còn 3500 phút ≈ 83%.
         DueAt = new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
-            .AddWorkingMinutes(DateTime.UtcNow, 1000)
+            .AddWorkingMinutes(DateTime.UtcNow, 3500)
     };
 
     /// <summary>Timer Running còn ~9% thời gian — sắp breach (≤25%).</summary>
@@ -57,9 +57,9 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
         Priority = TicketPriorityEnum.P3Normal,
         Status = SlaTimerStatusEnum.Running,
         StartedAt = DateTime.UtcNow.AddMinutes(-100),
-        // P3 budget = 1200 phút làm việc → còn 100 phút ≈ 8%.
+        // P3 budget = 4200 phút làm việc → còn 350 phút ≈ 8%.
         DueAt = new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
-            .AddWorkingMinutes(DateTime.UtcNow, 100)
+            .AddWorkingMinutes(DateTime.UtcNow, 350)
     };
 
     private static SlaTimer Timer(SlaTimerStatusEnum status) => new()
