@@ -6,6 +6,9 @@ using BatteryService.UnitTests.Helpers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MockQueryable.Moq;
+using SharedContracts.Events;
+using SharedContracts.Events.Root;
+using SharedContracts.Interfaces;
 
 namespace BatteryService.UnitTests.Application;
 
@@ -46,7 +49,7 @@ public class MaintenanceScheduleServiceTests
         };
 
     private static (MaintenanceScheduleService service, MockUnitOfWorkBuilder mocks,
-        List<MaintenanceCycle> written) Build(
+        List<MaintenanceCycle> written, List<IntegrationEvent> published) Build(
         BatteryAsset[] assets,
         SensorReading[]? readings = null,
         Alert[]? alerts = null,
@@ -66,19 +69,28 @@ public class MaintenanceScheduleServiceTests
             .Callback<MaintenanceCycle>(written.Add)
             .Returns(Task.CompletedTask);
 
+        // Ghi lại event phát ra: TicketService dựa vào nó để mở ticket bảo trì, nên nó là
+        // một phần hành vi của service này chứ không phải chi tiết hạ tầng.
+        var published = new List<IntegrationEvent>();
+        var outbox = new Mock<IIntegrationEventOutboxWriter>();
+        outbox.Setup(w => w.WriteAsync(It.IsAny<MaintenanceCycleDueEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<MaintenanceCycleDueEvent, CancellationToken>((e, _) => published.Add(e))
+            .Returns(Task.CompletedTask);
+
         var service = new MaintenanceScheduleService(
             mocks.UnitOfWork.Object,
             Microsoft.Extensions.Options.Options.Create(options ?? Options()),
+            outbox.Object,
             Mock.Of<ILogger<MaintenanceScheduleService>>());
 
-        return (service, mocks, written);
+        return (service, mocks, written, published);
     }
 
     [Fact]
     public async Task RecordDueCycles_WhenNotYetDue_WritesNothing()
     {
         var asset = Asset(nextDue: NowUtc.AddDays(30));
-        var (service, _, written) = Build([asset]);
+        var (service, _, written, _) = Build([asset]);
 
         var count = await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
 
@@ -92,7 +104,7 @@ public class MaintenanceScheduleServiceTests
     {
         var dueAt = NowUtc.AddHours(-2);
         var asset = Asset(nextDue: dueAt, cycleNo: 3);
-        var (service, mocks, written) = Build([asset]);
+        var (service, mocks, written, _) = Build([asset]);
 
         var count = await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
 
@@ -116,7 +128,7 @@ public class MaintenanceScheduleServiceTests
         var dueAt = NowUtc.AddHours(-1);
         // Loại pin khai 12 tháng — chu kỳ phải theo loại pin, không dùng mặc định 6 tháng.
         var asset = Asset(nextDue: dueAt, intervalMonths: 12);
-        var (service, _, _) = Build([asset], options: Options(defaultCycleMonths: 6));
+        var (service, _, _, _) = Build([asset], options: Options(defaultCycleMonths: 6));
 
         await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
 
@@ -128,7 +140,7 @@ public class MaintenanceScheduleServiceTests
     {
         // Pin đã ngừng vận hành thì không cần theo dõi định kỳ nữa.
         var asset = Asset(nextDue: NowUtc.AddDays(-10), status: BatteryStatusEnum.Decommissioned);
-        var (service, _, written) = Build([asset]);
+        var (service, _, written, _) = Build([asset]);
 
         var count = await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
 
@@ -174,7 +186,7 @@ public class MaintenanceScheduleServiceTests
             new Alert { BatteryAssetId = AssetId, DetectedAt = dueAt.AddDays(10), Severity = AlertSeverityEnum.Critical }
         };
 
-        var (service, _, written) = Build([asset], readings, alerts);
+        var (service, _, written, _) = Build([asset], readings, alerts);
 
         await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
 
@@ -196,7 +208,7 @@ public class MaintenanceScheduleServiceTests
         // Pin mất kết nối cả kỳ vẫn phải ghi được mốc — thiếu dữ liệu không được chặn
         // nhật ký, nếu không lịch sử sẽ thủng một kỳ.
         var asset = Asset(nextDue: NowUtc.AddHours(-1));
-        var (service, _, written) = Build([asset]);
+        var (service, _, written, _) = Build([asset]);
 
         await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
 
@@ -204,5 +216,60 @@ public class MaintenanceScheduleServiceTests
         cycle.ReadingCount.Should().Be(0);
         cycle.SohPercentAtCycle.Should().BeNull();
         cycle.AvgTemperatureCelsius.Should().BeNull();
+    }
+
+
+    // ---------- phát sự kiện cho TicketService ----------
+
+    /// <summary>
+    /// Ghi nhật ký thôi thì không ai được cử đi. Sự kiện này là thứ khiến TicketService mở
+    /// ticket bảo trì, nhờ đó công việc quay lại hàng chờ của Manager cùng SLA và phân công.
+    /// Thiếu nó, hệ thống biết pin tới kỳ, ghi lại sức khoẻ, rồi im lặng.
+    /// </summary>
+    [Fact]
+    public async Task RecordDueCycles_WhenDue_PublishesTheEventTicketServiceNeeds()
+    {
+        var dueAt = NowUtc.AddDays(-1);
+        var asset = Asset(nextDue: dueAt, cycleNo: 4, intervalMonths: 9);
+        var (service, _, written, published) = Build([asset]);
+
+        await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
+
+        var evt = published.OfType<MaintenanceCycleDueEvent>().Should().ContainSingle().Subject;
+        evt.BatteryAssetId.Should().Be(AssetId);
+        evt.SerialNumber.Should().Be("BAT-TEST-001");
+        evt.CycleNo.Should().Be(4, "phải là số kỳ vừa ghi, không phải kỳ kế tiếp");
+        evt.DueAtUtc.Should().Be(dueAt);
+        evt.IntervalMonths.Should().Be(9);
+
+        // Sự kiện phải trỏ đúng dòng nhật ký vừa ghi để truy ngược được từ ticket.
+        evt.MaintenanceCycleId.Should().Be(written.Should().ContainSingle().Subject.Id);
+    }
+
+    /// <summary>
+    /// Id tất định theo (pin, hạn kỳ): worker chạy lại hoặc hai replica cùng chạy thì
+    /// TicketService vẫn nhận ra là một lần, nên không mở hai ticket cho cùng một kỳ.
+    /// </summary>
+    [Fact]
+    public async Task TheEventId_IsDerivedFromTheBatteryAndDueDate()
+    {
+        var dueAt = NowUtc.AddDays(-1);
+        var (service, _, _, published) = Build([Asset(nextDue: dueAt)]);
+
+        await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
+
+        var evt = published.OfType<MaintenanceCycleDueEvent>().Single();
+        evt.Id.Should().Be(DeterministicEventId.From(AssetId, $"maintenance-cycle-due:{dueAt:O}"));
+    }
+
+    /// <summary>Pin chưa tới kỳ thì không ghi gì và cũng không báo ai.</summary>
+    [Fact]
+    public async Task RecordDueCycles_WhenNotYetDue_PublishesNothing()
+    {
+        var (service, _, _, published) = Build([Asset(nextDue: NowUtc.AddDays(30))]);
+
+        await service.RecordDueCyclesAsync(NowUtc, CancellationToken.None);
+
+        published.Should().BeEmpty();
     }
 }

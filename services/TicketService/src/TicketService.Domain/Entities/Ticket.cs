@@ -49,7 +49,6 @@ public class Ticket : AuditableEntity
     public bool IsIncident { get; set; }
     public DateTime? ScheduledStartAtUtc { get; set; }
     public int ScheduleVersion { get; set; }
-    public Guid? PeriodicMaintenanceSourceTicketId { get; set; }
     public DateTime? PeriodicMaintenanceDueAtUtc { get; set; }
     public DateTime? PeriodicMaintenanceScheduleDeadlineAtUtc { get; set; }
     public DateTime? PeriodicMaintenanceReminder1SentAtUtc { get; set; }

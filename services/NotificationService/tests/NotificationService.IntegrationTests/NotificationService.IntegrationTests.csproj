@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+        <PackageReference Include="xunit" Version="2.7.0" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="FluentAssertions" Version="6.12.0" />
+        <PackageReference Include="Moq" Version="4.20.70" />
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+        <PackageReference Include="coverlet.collector" Version="6.0.2">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <!--
+          Microsoft.Extensions.* 8.0.0 kéo System.Text.Json 8.0.0 — GHSA-hh2w-p6rv-4g7w (High),
+          vá từ 8.0.4. Ghim 8.0.6 tại đây thay vì đặt sàn toàn repo, cùng lý do đã ghi ở
+          SmsService.IntegrationTests.
+        -->
+        <PackageReference Include="System.Text.Json" Version="8.0.6" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\NotificationService.Application\NotificationService.Application.csproj" />
+        <ProjectReference Include="..\..\src\NotificationService.Domain\NotificationService.Domain.csproj" />
+        <ProjectReference Include="..\..\src\NotificationService.Infrastructure\NotificationService.Infrastructure.csproj" />
+        <ProjectReference Include="..\..\..\..\shared\src\SharedContracts\SharedContracts.csproj" />
+        <ProjectReference Include="..\..\..\..\shared\src\SharedInfrastructure\SharedInfrastructure.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit" />
+        <Using Include="FluentAssertions" />
+    </ItemGroup>
+
+</Project>

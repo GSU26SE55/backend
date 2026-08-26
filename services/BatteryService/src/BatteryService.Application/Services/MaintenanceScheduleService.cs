@@ -4,6 +4,9 @@ using BatteryService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SharedContracts.Events;
+using SharedContracts.Events.Root;
+using SharedContracts.Interfaces;
 
 namespace BatteryService.Application.Services;
 
@@ -27,7 +30,9 @@ public interface IMaintenanceScheduleService
 /// bảng ticket.
 /// </para>
 /// <para>
-/// Service này KHÔNG tạo ticket và không phát sự kiện. Nó chỉ ghi nhật ký: mỗi kỳ một
+/// Service này không tạo ticket — nó phát <see cref="MaintenanceCycleDueEvent"/> và
+/// TicketService mở ticket bảo trì khi nhận được, để công việc quay lại hàng chờ của
+/// Manager cùng SLA và phân công sẵn có. Ngoài ra nó ghi nhật ký: mỗi kỳ một
 /// dòng <see cref="MaintenanceCycle"/> kèm <c>SohPercentAtCompletion</c> — đặt các kỳ
 /// cạnh nhau sẽ thấy đường suy giảm sức khoẻ pin qua từng chu kỳ.
 /// </para>
@@ -36,15 +41,18 @@ public class MaintenanceScheduleService : IMaintenanceScheduleService
 {
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IOptions<MaintenanceScheduleOptions> _options;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly ILogger<MaintenanceScheduleService> _logger;
 
     public MaintenanceScheduleService(
         IBatteryUnitOfWork unitOfWork,
         IOptions<MaintenanceScheduleOptions> options,
+        IIntegrationEventOutboxWriter outboxWriter,
         ILogger<MaintenanceScheduleService> logger)
     {
         _unitOfWork = unitOfWork;
         _options = options;
+        _outboxWriter = outboxWriter;
         _logger = logger;
     }
 
@@ -88,14 +96,17 @@ public class MaintenanceScheduleService : IMaintenanceScheduleService
         var periodStart = asset.LastMaintenanceAtUtc ?? dueAtUtc.AddMonths(-interval);
         var snapshot = await BuildSnapshotAsync(asset.Id, periodStart, dueAtUtc, ct);
 
+        var cycleId = Guid.NewGuid();
+        var cycleNo = asset.MaintenanceCycleNo;
+
         await _unitOfWork.BeginTransactionAsync();
         try
         {
             await _unitOfWork.MaintenanceCycles.AddAsync(new MaintenanceCycle
             {
-                Id = Guid.NewGuid(),
+                Id = cycleId,
                 BatteryAssetId = asset.Id,
-                CycleNo = asset.MaintenanceCycleNo,
+                CycleNo = cycleNo,
                 DueAtUtc = dueAtUtc,
                 RecordedAtUtc = nowUtc,
                 SohPercentAtCycle = snapshot.SohPercent,
@@ -116,6 +127,26 @@ public class MaintenanceScheduleService : IMaintenanceScheduleService
             asset.NextMaintenanceDueAtUtc = dueAtUtc.AddMonths(interval);
             asset.MaintenanceCycleNo++;
             _unitOfWork.BatteryAssets.UpdateAsync(asset);
+
+            // Ghi outbox TRƯỚC khi commit để sự kiện nằm cùng transaction với dòng nhật ký:
+            // không bao giờ báo "pin tới kỳ" cho một kỳ chưa lưu được, và ngược lại không
+            // bao giờ ghi được kỳ mà quên báo.
+            //
+            // Id tất định theo (pin, hạn kỳ): worker chạy lại hay hai replica cùng chạy thì
+            // TicketService vẫn nhận ra là một, nên không mở hai ticket cho cùng một kỳ.
+            await _outboxWriter.WriteAsync(
+                new MaintenanceCycleDueEvent(
+                    asset.Id,
+                    asset.CustomerId,
+                    asset.SerialNumber,
+                    cycleId,
+                    cycleNo,
+                    dueAtUtc,
+                    interval)
+                {
+                    Id = DeterministicEventId.From(asset.Id, $"maintenance-cycle-due:{dueAtUtc:O}")
+                },
+                ct);
 
             await _unitOfWork.CommitTransactionAsync();
             return true;

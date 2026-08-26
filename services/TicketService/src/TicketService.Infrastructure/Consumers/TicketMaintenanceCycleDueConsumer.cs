@@ -1,0 +1,127 @@
+using MassTransit;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using SharedContracts.Events;
+using SharedInfrastructure.Idempotency;
+using TicketService.Application.Common.Models;
+using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Utils;
+using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
+
+namespace TicketService.Infrastructure.Consumers;
+
+/// <summary>
+/// Mở ticket bảo trì khi BatteryService báo một cục pin đã tới kỳ.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Lịch bảo trì thuộc về tài sản, nên BatteryService giữ lịch và ghi nhật ký kỳ. Nhưng ghi
+/// nhật ký thì không ai được cử đi — ticket mới là thứ đưa công việc vào hàng chờ của
+/// Manager và mang theo SLA, phân công, chat, nhật ký hoạt động đã có sẵn. Đó là việc của
+/// consumer này.
+/// </para>
+/// <para>
+/// Ticket mở ở trạng thái <c>Open</c> và <b>chưa gán priority</b>: priority tính từ ma trận
+/// Impact × Urgency lúc Manager triage, không nhập thẳng.
+/// </para>
+/// <para>
+/// <b>Chống trùng hai lớp.</b> Inbox chặn theo Id sự kiện — mà Id là tất định theo (pin, hạn
+/// kỳ) nên message giao lại hay hai replica cùng phát đều quy về một. Lớp thứ hai là truy vấn
+/// theo (pin, hạn kỳ) ngay trước khi ghi, phòng trường hợp sự kiện tới lại sau khi bản ghi
+/// inbox đã hết hạn.
+/// </para>
+/// </remarks>
+public class TicketMaintenanceCycleDueConsumer : IConsumer<MaintenanceCycleDueEvent>
+{
+    private readonly ITicketUnitOfWork _uow;
+    private readonly ITicketCodeGenerator _codeGenerator;
+    private readonly IOptions<PeriodicMaintenanceOptions> _options;
+    private readonly IInboxStore _inboxStore;
+    private readonly ILogger<TicketMaintenanceCycleDueConsumer> _logger;
+
+    public TicketMaintenanceCycleDueConsumer(
+        ITicketUnitOfWork uow,
+        ITicketCodeGenerator codeGenerator,
+        IOptions<PeriodicMaintenanceOptions> options,
+        IInboxStore inboxStore,
+        ILogger<TicketMaintenanceCycleDueConsumer> logger)
+    {
+        _uow = uow;
+        _codeGenerator = codeGenerator;
+        _options = options;
+        _inboxStore = inboxStore;
+        _logger = logger;
+    }
+
+    public async Task Consume(ConsumeContext<MaintenanceCycleDueEvent> context)
+    {
+        await context.ProcessOnceAsync(_inboxStore, nameof(TicketMaintenanceCycleDueConsumer), async () =>
+        {
+            var evt = context.Message;
+            var ct = context.CancellationToken;
+            var nowUtc = DateTime.UtcNow;
+
+            var alreadyRaised = await _uow.Tickets.GetAllAsync()
+                .AnyAsync(t =>
+                    !t.IsDeleted &&
+                    t.BatteryAssetId == evt.BatteryAssetId &&
+                    t.PeriodicMaintenanceDueAtUtc == evt.DueAtUtc, ct);
+
+            if (alreadyRaised)
+            {
+                _logger.LogInformation(
+                    "Periodic maintenance ticket already exists for battery {BatteryAssetId} due {DueAtUtc}.",
+                    evt.BatteryAssetId, evt.DueAtUtc);
+                return;
+            }
+
+            var ticketId = Guid.NewGuid();
+            var code = await _codeGenerator.GenerateAsync();
+
+            // Kỳ đã quá hạn lúc mở ticket thì khách vẫn cần một khoảng để chọn giờ — đếm từ
+            // bây giờ. Kỳ chưa tới hạn thì hạn chót chính là hạn kỳ.
+            var isOverdue = evt.DueAtUtc < nowUtc;
+            var deadlineAtUtc = isOverdue
+                ? nowUtc.AddDays(_options.Value.OverdueScheduleWindowDays)
+                : evt.DueAtUtc;
+
+            await _uow.Tickets.AddAsync(new Ticket
+            {
+                Id = ticketId,
+                Code = code,
+                BatteryAssetId = evt.BatteryAssetId,
+                CustomerId = evt.CustomerId,
+                Title = "Periodic battery maintenance",
+                Description =
+                    $"Scheduled {evt.IntervalMonths}-month maintenance cycle #{evt.CycleNo} "
+                    + $"for battery {evt.SerialNumber ?? evt.BatteryAssetId.ToString()}.",
+                Category = TicketCategoryEnum.Repair,
+                Priority = null,
+                Status = TicketStatusEnum.Open,
+                Origin = TicketOriginEnum.System,
+                ReopenCount = 0,
+                IsIncident = false,
+                BatterySerialNumber = evt.SerialNumber,
+                PeriodicMaintenanceDueAtUtc = evt.DueAtUtc,
+                PeriodicMaintenanceScheduleDeadlineAtUtc = deadlineAtUtc,
+                CreatedAt = nowUtc
+            });
+
+            await _uow.TicketBatteryAssets.AddAsync(new TicketBatteryAsset
+            {
+                Id = Guid.NewGuid(),
+                TicketId = ticketId,
+                BatteryAssetId = evt.BatteryAssetId,
+                CreatedAt = nowUtc
+            });
+
+            await _uow.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "Raised periodic maintenance ticket {Code} for battery {BatteryAssetId}, cycle #{CycleNo} due {DueAtUtc}.",
+                code, evt.BatteryAssetId, evt.CycleNo, evt.DueAtUtc);
+        });
+    }
+}

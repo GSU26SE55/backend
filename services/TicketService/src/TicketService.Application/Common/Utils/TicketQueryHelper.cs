@@ -59,7 +59,6 @@ public static class TicketQueryHelper
                 : null,
             ScheduledStartAtUtc = t.ScheduledStartAtUtc,
             ScheduleVersion = t.ScheduleVersion,
-            PeriodicMaintenanceSourceTicketId = t.PeriodicMaintenanceSourceTicketId?.ToString(),
             PeriodicMaintenanceDueAtUtc = t.PeriodicMaintenanceDueAtUtc,
             PeriodicMaintenanceScheduleDeadlineAtUtc = t.PeriodicMaintenanceScheduleDeadlineAtUtc,
             PendingContext = t.PendingContext,

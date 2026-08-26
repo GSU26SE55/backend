@@ -48,6 +48,7 @@
     <Project Path="services/NotificationService/src/NotificationService.Application/NotificationService.Application.csproj" />
     <Project Path="services/NotificationService/src/NotificationService.Domain/NotificationService.Domain.csproj" />
     <Project Path="services/NotificationService/src/NotificationService.Infrastructure/NotificationService.Infrastructure.csproj" />
+    <Project Path="services/NotificationService/tests/NotificationService.IntegrationTests/NotificationService.IntegrationTests.csproj" />
     <Project Path="services/NotificationService/tests/NotificationService.UnitTests/NotificationService.UnitTests.csproj" />
   </Folder>
   <Folder Name="/Services/TicketService/">

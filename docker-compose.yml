@@ -628,8 +628,6 @@ services:
       # GH-1244 — Định kỳ bảo trì pin 6 tháng (Periodic Maintenance)
       Ticket__PeriodicMaintenance__Enabled: ${TICKET_PERIODIC_MAINTENANCE_ENABLED:-true}
       Ticket__PeriodicMaintenance__TimeZoneId: ${TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID:-Asia/Ho_Chi_Minh}
-      Ticket__PeriodicMaintenance__CycleMonths: ${TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS:-6}
-      Ticket__PeriodicMaintenance__LeadDays: ${TICKET_PERIODIC_MAINTENANCE_LEAD_DAYS:-7}
       Ticket__PeriodicMaintenance__OverdueScheduleWindowDays: ${TICKET_PERIODIC_MAINTENANCE_OVERDUE_WINDOW_DAYS:-7}
       Ticket__PeriodicMaintenance__ReminderTime: ${TICKET_PERIODIC_MAINTENANCE_REMINDER_TIME:-08:00:00}
       Ticket__PeriodicMaintenance__PollIntervalSeconds: ${TICKET_PERIODIC_MAINTENANCE_POLL_INTERVAL_SECONDS:-60}

@@ -127,4 +127,36 @@ public class CustomerTicketsController : ControllerBase
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
+
+    /// <summary>
+    /// Khách chọn giờ cho chuyến bảo trì định kỳ của mình.
+    /// </summary>
+    /// <remarks>
+    /// - Chỉ chủ sở hữu ticket được chọn, và chỉ khi ticket còn Open, chưa giao ai.
+    /// - Giờ chọn không được ở quá khứ và không được vượt hạn chót ghi trên ticket.
+    /// - Hết cửa sổ chọn thì Manager tự sắp thay — worker nhắc lịch đã bàn việc cho Manager
+    ///   sau ba mốc khách không trả lời.
+    /// </remarks>
+    /// <response code="200">Đã lưu giờ khách chọn.</response>
+    /// <response code="400">Giờ nằm ở quá khứ hoặc vượt hạn chót.</response>
+    /// <response code="403">Không phải chủ sở hữu ticket.</response>
+    /// <response code="409">Không phải ticket bảo trì định kỳ, đã giao, hoặc cửa sổ đã đóng.</response>
+    [HttpPost("{id:guid}/periodic-maintenance/schedule")]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SchedulePeriodicMaintenance(
+        Guid id,
+        [FromBody] CustomerSchedulePeriodicMaintenanceCommand command,
+        CancellationToken ct)
+    {
+        command.TicketId = id;
+        command.CustomerId = string.IsNullOrEmpty(_currentUser.UserId)
+            ? Guid.Empty
+            : Guid.Parse(_currentUser.UserId);
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
 }

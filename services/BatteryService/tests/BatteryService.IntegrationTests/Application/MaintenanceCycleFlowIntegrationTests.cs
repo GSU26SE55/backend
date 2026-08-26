@@ -157,15 +157,25 @@ public class MaintenanceCycleFlowIntegrationTests
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static MaintenanceScheduleService CreateService(ApplicationDbContext dbContext) =>
-        new(new UnitOfWork(dbContext),
+    /// <summary>
+    /// Dùng <see cref="IntegrationEventOutboxWriter"/> thật, không mock: mục đích của bộ test
+    /// này là thấy sự kiện thực sự nằm trong bảng <c>outbox_messages</c> cùng transaction với
+    /// dòng nhật ký kỳ — mock chỉ chứng minh hàm được gọi, không chứng minh dữ liệu được lưu.
+    /// </summary>
+    private static MaintenanceScheduleService CreateService(ApplicationDbContext dbContext)
+    {
+        var unitOfWork = new UnitOfWork(dbContext);
+        return new MaintenanceScheduleService(
+            unitOfWork,
             Microsoft.Extensions.Options.Options.Create(new MaintenanceScheduleOptions
             {
                 Enabled = true,
                 DefaultCycleMonths = 6,
                 BatchSize = 100
             }),
+            new IntegrationEventOutboxWriter(unitOfWork),
             Mock.Of<ILogger<MaintenanceScheduleService>>());
+    }
 
     private static async Task<Guid> SeedAssetAsync(ApplicationDbContext dbContext)
     {

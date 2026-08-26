@@ -8,7 +8,8 @@ for p in \
   services/SmsService/tests/SmsService.UnitTests/SmsService.UnitTests.csproj \
   services/EmailService/tests/EmailService.UnitTests/EmailService.UnitTests.csproj \
   services/FileStorageService/tests/FileStorageService.UnitTests/FileStorageService.UnitTests.csproj \
-  services/ApiGateway/tests/ApiGateway.UnitTests/ApiGateway.UnitTests.csproj
+  services/ApiGateway/tests/ApiGateway.UnitTests/ApiGateway.UnitTests.csproj \
+  shared/tests/SharedInfrastructure.UnitTests/SharedInfrastructure.UnitTests.csproj
 do
   name=$(basename "$p" .csproj)
   echo "########## $name ##########"
