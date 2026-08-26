@@ -13,15 +13,15 @@ preflight cố ý fail-closed khi tunnel chưa sẵn sàng.
 | Stable public endpoint | `116.118.6.33` | `116.118.6.30` |
 | WireGuard UDP | `51820` | `51820` |
 | Loki bridge | `10.20.0.1:3100` | Alloy push tới bridge |
-| AI application metrics | Prometheus scrape | `10.20.0.2:443/metrics/` với SNI `ai.solars.io.vn` |
+| AI application metrics | Prometheus scrape | `10.20.0.2:443/metrics/` với SNI `ai.solaris.io.vn` |
 | Host/container/agent metrics | Prometheus scrape | `10.20.0.2:{9100,8082,12345}` |
 
-Luồng ứng dụng dùng cùng một origin `https://ai.solars.io.vn`:
+Luồng ứng dụng dùng cùng một origin `https://ai.solaris.io.vn`:
 
 1. BatteryService/TicketService ưu tiên gRPC HTTP/2 trên port `443`.
 2. Khi lỗi gRPC thuộc nhóm cho phép fallback, client gọi HTTPS REST trên cùng origin.
-3. Helm thêm host alias `ai.solars.io.vn -> 10.20.0.2` vào đúng hai deployment.
-4. TLS vẫn kiểm certificate cho `ai.solars.io.vn`; không gọi HTTPS bằng IP.
+3. Helm thêm host alias `ai.solaris.io.vn -> 10.20.0.2` vào đúng hai deployment.
+4. TLS vẫn kiểm certificate cho `ai.solaris.io.vn`; không gọi HTTPS bằng IP.
 
 Không public `3100`, `9100`, `8082`, `12345`, `8000` hoặc `50051`.
 
@@ -192,8 +192,8 @@ LOKI_PUSH_URL=http://10.20.0.1:3100/loki/api/v1/push
 Backend `/opt/solar-platform/config/host.env` phải có:
 
 ```dotenv
-AI_GRPC_ADDRESS=https://ai.solars.io.vn
-AI_HTTP_BASE_URL=https://ai.solars.io.vn
+AI_GRPC_ADDRESS=https://ai.solaris.io.vn
+AI_HTTP_BASE_URL=https://ai.solaris.io.vn
 PLATFORM_WIREGUARD_IPV4=10.20.0.1
 AI_WIREGUARD_IPV4=10.20.0.2
 PLATFORM_DEPLOYMENT_PHASE=bootstrap
@@ -222,16 +222,16 @@ Trên Backend, ép socket tới peer nhưng giữ hostname TLS:
 
 ```bash
 curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
-  --resolve ai.solars.io.vn:443:10.20.0.2 \
-  https://ai.solars.io.vn/ready | jq -e '.ready == true'
+  --resolve ai.solaris.io.vn:443:10.20.0.2 \
+  https://ai.solaris.io.vn/ready | jq -e '.ready == true'
 
-grpcurl -authority ai.solars.io.vn \
+grpcurl -authority ai.solaris.io.vn \
   -import-path /opt/solar-platform/current/deploy/contracts \
   -proto grpc_health_v1.proto \
   -d '{"service":"aimodule.v1.AiService"}' \
   10.20.0.2:443 grpc.health.v1.Health/Check
 
-grpcurl -authority ai.solars.io.vn \
+grpcurl -authority ai.solaris.io.vn \
   -import-path /opt/solar-platform/current/deploy/contracts \
   -proto ai_health_v1.proto -d '{}' \
   10.20.0.2:443 aimodule.v1.AiService/Health
@@ -247,7 +247,7 @@ sudo -u deploy -H env KUBECONFIG="$KUBECONFIG" \
   -o jsonpath='{range .items[*]}{.metadata.name}{" => "}{.spec.template.spec.hostAliases}{"\n"}{end}'
 ```
 
-Cả hai phải có `10.20.0.2` và `ai.solars.io.vn`.
+Cả hai phải có `10.20.0.2` và `ai.solaris.io.vn`.
 
 ### Metrics và logs tập trung
 
@@ -264,8 +264,8 @@ for port in 9100 8082 12345; do
 done
 
 curl --fail --silent --show-error \
-  --resolve ai.solars.io.vn:443:10.20.0.2 \
-  https://ai.solars.io.vn/metrics/ >/dev/null
+  --resolve ai.solaris.io.vn:443:10.20.0.2 \
+  https://ai.solaris.io.vn/metrics/ >/dev/null
 ```
 
 AI:
@@ -278,7 +278,7 @@ Helper gửi một marker qua host Caddy, đợi Alloy đẩy access log của A
 và query lại từ Loki trên Backend. Thành công chứng minh đường log end-to-end,
 không chỉ chứng minh port Loki đang mở.
 
-Từ Internet, `https://ai.solars.io.vn/metrics/` phải trả `403`; `/live` và
+Từ Internet, `https://ai.solaris.io.vn/metrics/` phải trả `403`; `/live` và
 `/ready` vẫn trả `200`.
 
 ## 9. Observability còn lại sau milestone này
