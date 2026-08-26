@@ -20,6 +20,7 @@ public class UnitOfWork : IBatteryUnitOfWork
     public IGenericRepository<BatteryType> BatteryTypes => new GenericRepository<BatteryType>(_context);
 
     public IGenericRepository<BatteryAsset> BatteryAssets => new GenericRepository<BatteryAsset>(_context);
+    public IGenericRepository<MaintenanceCycle> MaintenanceCycles => new GenericRepository<MaintenanceCycle>(_context);
 
     public IGenericRepository<Site> Sites => new GenericRepository<Site>(_context);
 

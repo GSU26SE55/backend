@@ -155,7 +155,7 @@ public static class ManageDependencyInjection
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
         services.AddHostedService<TicketScheduleActivationBackgroundService>();
-        services.AddHostedService<PeriodicMaintenanceBackgroundService>();
+
 
         // Read receipt — channel-based bulk writer (#541/#542)
         services.AddSingleton<IChatReadReceiptQueue, ChatReadReceiptQueue>();

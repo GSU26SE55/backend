@@ -127,22 +127,4 @@ public class CustomerTicketsController : ControllerBase
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
-
-    [HttpPost("{id:guid}/periodic-maintenance/schedule")]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> SchedulePeriodicMaintenance(
-        Guid id,
-        [FromBody] CustomerSchedulePeriodicMaintenanceCommand command,
-        CancellationToken ct)
-    {
-        command.TicketId = id;
-        command.CustomerId = string.IsNullOrEmpty(_currentUser.UserId)
-            ? Guid.Empty
-            : Guid.Parse(_currentUser.UserId);
-        var result = await _mediator.Send(command, ct);
-        return StatusCode(result.StatusCode, result);
-    }
 }

@@ -43,6 +43,12 @@ public static class BatteryMapper
             Status = asset.Status,
             Notes = asset.Notes,
             LastSensorReadingAt = asset.LastSensorReadingAt,
+            LastMaintenanceAtUtc = asset.LastMaintenanceAtUtc,
+            NextMaintenanceDueAtUtc = asset.NextMaintenanceDueAtUtc,
+            MaintenanceCycleNo = asset.MaintenanceCycleNo,
+            // BatteryType có thể chưa Include → rơi về mặc định hệ thống (6 tháng), khớp
+            // với fallback bên MaintenanceScheduleService.
+            MaintenanceIntervalMonths = asset.BatteryType?.MaintenanceIntervalMonths ?? 6,
             CreatedAt = asset.CreatedAt
         };
     }

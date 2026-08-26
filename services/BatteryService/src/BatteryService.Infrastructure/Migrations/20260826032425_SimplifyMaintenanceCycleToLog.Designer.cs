@@ -3,6 +3,7 @@ using System;
 using BatteryService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BatteryService.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260826032425_SimplifyMaintenanceCycleToLog")]
+    partial class SimplifyMaintenanceCycleToLog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1854,15 +1857,6 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<int?>("AlertCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("alert_count");
-
-                    b.Property<decimal?>("AvgTemperatureCelsius")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("avg_temperature_celsius");
-
                     b.Property<Guid>("BatteryAssetId")
                         .HasColumnType("uuid")
                         .HasColumnName("battery_asset_id");
@@ -1874,14 +1868,6 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
-
-                    b.Property<int?>("CriticalAlertCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("critical_alert_count");
-
-                    b.Property<int?>("CycleCountDelta")
-                        .HasColumnType("integer")
-                        .HasColumnName("cycle_count_delta");
 
                     b.Property<int>("CycleNo")
                         .HasColumnType("integer")
@@ -1900,25 +1886,6 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
-
-                    b.Property<decimal?>("MaxTemperatureCelsius")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("max_temperature_celsius");
-
-                    b.Property<decimal?>("MaxVoltage")
-                        .HasPrecision(6, 2)
-                        .HasColumnType("numeric(6,2)")
-                        .HasColumnName("max_voltage");
-
-                    b.Property<decimal?>("MinVoltage")
-                        .HasPrecision(6, 2)
-                        .HasColumnType("numeric(6,2)")
-                        .HasColumnName("min_voltage");
-
-                    b.Property<int?>("ReadingCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("reading_count");
 
                     b.Property<DateTime>("RecordedAtUtc")
                         .HasColumnType("timestamp with time zone")

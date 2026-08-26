@@ -47,6 +47,9 @@ public class BatteryTypeConfiguration : IEntityTypeConfiguration<BatteryType>
             .HasDefaultValue(2000)
             .IsRequired();
 
+        builder.Property(type => type.MaintenanceIntervalMonths)
+            .HasColumnName("maintenance_interval_months");
+
         builder.Property(type => type.Description)
             .HasColumnName("description")
             .HasMaxLength(500);

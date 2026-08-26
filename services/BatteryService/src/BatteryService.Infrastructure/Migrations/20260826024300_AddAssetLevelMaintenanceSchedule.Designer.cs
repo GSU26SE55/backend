@@ -3,6 +3,7 @@ using System;
 using BatteryService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BatteryService.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260826024300_AddAssetLevelMaintenanceSchedule")]
+    partial class AddAssetLevelMaintenanceSchedule
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1854,18 +1857,13 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<int?>("AlertCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("alert_count");
-
-                    b.Property<decimal?>("AvgTemperatureCelsius")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("avg_temperature_celsius");
-
                     b.Property<Guid>("BatteryAssetId")
                         .HasColumnType("uuid")
                         .HasColumnName("battery_asset_id");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1874,14 +1872,6 @@ namespace BatteryService.Infrastructure.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
-
-                    b.Property<int?>("CriticalAlertCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("critical_alert_count");
-
-                    b.Property<int?>("CycleCountDelta")
-                        .HasColumnType("integer")
-                        .HasColumnName("cycle_count_delta");
 
                     b.Property<int>("CycleNo")
                         .HasColumnType("integer")
@@ -1901,33 +1891,23 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<decimal?>("MaxTemperatureCelsius")
+                    b.Property<string>("OutcomeSummary")
+                        .HasColumnType("text")
+                        .HasColumnName("outcome_summary");
+
+                    b.Property<decimal?>("SohPercentAtCompletion")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
-                        .HasColumnName("max_temperature_celsius");
+                        .HasColumnName("soh_percent_at_completion");
 
-                    b.Property<decimal?>("MaxVoltage")
-                        .HasPrecision(6, 2)
-                        .HasColumnType("numeric(6,2)")
-                        .HasColumnName("max_voltage");
+                    b.Property<string>("TicketCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("ticket_code");
 
-                    b.Property<decimal?>("MinVoltage")
-                        .HasPrecision(6, 2)
-                        .HasColumnType("numeric(6,2)")
-                        .HasColumnName("min_voltage");
-
-                    b.Property<int?>("ReadingCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("reading_count");
-
-                    b.Property<DateTime>("RecordedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("recorded_at_utc");
-
-                    b.Property<decimal?>("SohPercentAtCycle")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("soh_percent_at_cycle");
+                    b.Property<Guid?>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

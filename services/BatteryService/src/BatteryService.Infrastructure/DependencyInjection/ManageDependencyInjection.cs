@@ -33,6 +33,8 @@ public static class ManageDependencyInjection
 
         // Anomaly engine config (Sprint 3) — service/AnomalyRules dùng options này
         services.Configure<AnomalyEngineOptions>(configuration.GetSection(AnomalyEngineOptions.SectionName));
+        services.Configure<MaintenanceScheduleOptions>(
+            configuration.GetSection(MaintenanceScheduleOptions.SectionName));
 
         // Background-only services — CQRS không cần thiết vì không expose qua REST.
         // Background worker chỉ làm cron trigger, logic ở service này.
@@ -45,6 +47,7 @@ public static class ManageDependencyInjection
         // Sprint 7 B4 (§31.7) — cascade risk assessment (rule-based).
         services.AddScoped<BatteryService.Application.Services.ICascadeRiskCalculator, BatteryService.Application.Services.CascadeRiskCalculator>();
         services.AddScoped<BatteryService.Application.Services.ICascadeRiskService, BatteryService.Application.Services.CascadeRiskService>();
+        services.AddScoped<BatteryService.Application.Services.IMaintenanceScheduleService, BatteryService.Application.Services.MaintenanceScheduleService>();
 
         // Sprint IoT-1 (#243) — per-device API key.
         services.AddScoped<IIotApiKeyService, IotApiKeyService>();
@@ -124,6 +127,7 @@ public static class ManageDependencyInjection
 
         // Sprint 7 B4 (§31.7) — recompute cascade risk mỗi 5 phút.
         services.AddHostedService<CascadeRiskBackgroundService>();
+        services.AddHostedService<MaintenanceScheduleBackgroundService>();
 
         // Sprint 7 #117 — refresh battery health gauge mỗi 60s.
         services.AddHostedService<BatteryHealthGaugeBackgroundService>();
