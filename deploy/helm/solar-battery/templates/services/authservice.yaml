@@ -79,16 +79,19 @@ spec:
         envFrom:
         - configMapRef: { name: solar-config }
         - secretRef:    { name: solar-secrets }
-        # EF Core migration chạy lúc startup → cần startupProbe rộng tay
+        # EF Core migration chạy lúc startup → cần startupProbe rộng tay.
+        # /ready bao gồm Postgres, Redis và RabbitMQ; chỉ Pod ready khi toàn bộ
+        # dependency đã hồi phục. /live chỉ kiểm tra process để dependency lỗi
+        # tạm thời không làm kubelet restart AuthService.
         startupProbe:
-          httpGet: { path: /metrics, port: http }
+          httpGet: { path: /live, port: http }
           failureThreshold: 30
           periodSeconds: 5
         readinessProbe:
-          httpGet: { path: /metrics, port: http }
+          httpGet: { path: /ready, port: http }
           periodSeconds: 5
         livenessProbe:
-          httpGet: { path: /metrics, port: http }
+          httpGet: { path: /live, port: http }
           periodSeconds: 10
         resources:
           {{- toYaml $svc.resources | nindent 10 }}
