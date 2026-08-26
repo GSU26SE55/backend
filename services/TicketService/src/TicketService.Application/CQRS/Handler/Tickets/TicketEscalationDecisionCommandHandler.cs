@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
+using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Helpers;
 using TicketService.Application.CQRS.Command.Tickets;
@@ -94,7 +95,30 @@ public class TicketEscalationDecisionCommandHandler : IRequestHandler<TicketEsca
                 }
 
                 if (ticket.Priority == TicketPriorityEnum.Urgent)
+                {
+                    ticket.IsIncident = true;
+                    ticket.ActiveIncidentEpisodeId ??= Guid.NewGuid();
                     await _slaTransitions.StopSlaAsync(ticket, transactionCt);
+
+                    var assets = await _uow.TicketBatteryAssets.GetAllAsync().AsNoTracking()
+                        .Where(x => x.TicketId == ticket.Id && !x.IsDeleted)
+                        .Select(x => x.BatteryAssetId)
+                        .ToListAsync(transactionCt);
+                    if (ticket.BatteryAssetId != Guid.Empty && !assets.Contains(ticket.BatteryAssetId))
+                        assets.Add(ticket.BatteryAssetId);
+
+                    await _outboxWriter.WriteAsync(new BatteryIsolationRequestedEvent(
+                        ticket.ActiveIncidentEpisodeId.Value,
+                        ticket.Id,
+                        assets,
+                        DateTime.UtcNow,
+                        request.ManagerId)
+                    {
+                        Id = DeterministicEventId.From(
+                            ticket.ActiveIncidentEpisodeId.Value,
+                            "battery-isolation-requested")
+                    }, transactionCt);
+                }
                 await _outboxWriter.WriteAsync(new TicketEscalatedEvent(ticket.Id, ticket.Code,
                     (int)(ticket.EscalationReason ?? EscalationReasonEnum.CustomerComplaint), request.Reason.Trim(),
                     primary?.StaffId, null), transactionCt);
