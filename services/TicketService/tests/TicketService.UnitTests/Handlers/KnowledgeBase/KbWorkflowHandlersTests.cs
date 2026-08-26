@@ -48,8 +48,13 @@ public class KbWorkflowHandlersTests
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// Duyệt một bài đã từng publish (Version > 0) phải trả về Published, không phải Draft.
+    /// Trước đây handler luôn rơi về Draft nên approve hoá ra lại "ẩn" bài khỏi danh sách
+    /// Published cho tới khi có người publish lại thủ công.
+    /// </summary>
     [Fact]
-    public async Task Handle_ApproveReview_UpdatesStatusToDraft()
+    public async Task Handle_ApproveReview_PublishedArticle_StaysPublished()
     {
         // Arrange
         var articleId = Guid.NewGuid();
@@ -71,8 +76,36 @@ public class KbWorkflowHandlersTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        result.Data!.Status.Should().Be(KbArticleStatusEnum.Draft);
+        // Version mặc định của KnowledgeBaseArticle là 1 ⇒ bài đã từng publish.
+        result.Data!.Status.Should().Be(KbArticleStatusEnum.Published);
         article.ReviewRequired.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Bài chưa từng publish (Version = 0) thì duyệt xong về Draft — nhánh còn lại của
+    /// cùng một quy tắc.
+    /// </summary>
+    [Fact]
+    public async Task Handle_ApproveReview_NeverPublishedArticle_BecomesDraft()
+    {
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            Status = KbArticleStatusEnum.PendingReview,
+            ReviewRequired = true,
+            Version = 0
+        };
+
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
+        var uow = resultExtended.uow;
+
+        var handler = new ApproveReviewCommandHandler(uow.Object, NoOpOutbox());
+        var result = await handler.Handle(
+            new ApproveReviewCommand { ArticleId = articleId }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Status.Should().Be(KbArticleStatusEnum.Draft);
     }
 
     [Fact]
@@ -473,15 +506,25 @@ public class KbWorkflowHandlersTests
         result.StatusCode.Should().Be(404);
     }
 
+    /// <summary>
+    /// Staff sửa bài của người khác thì đi đường đề xuất, không phải bị chặn 403.
+    /// </summary>
+    /// <remarks>
+    /// Test cũ gửi role "Customer" và kỳ vọng 403. Controller đã chặn sẵn bằng
+    /// <c>[Authorize(Roles = "Staff,Manager,Admin")]</c> nên tình huống đó không thể xảy
+    /// ra qua API thật, và khối 403 trong handler đã được gỡ vì là dead code. Bài kiểm tra
+    /// giờ khẳng định điều thực sự đúng: người không phải Manager/Admin sửa bài thì bài
+    /// chuyển sang PendingReview chờ duyệt.
+    /// </remarks>
     [Fact]
-    public async Task Handle_UpdateCommand_Unauthorized_Returns403()
+    public async Task Handle_UpdateCommand_AsStaff_MovesArticleToPendingReview()
     {
         // Arrange
         var articleId = Guid.NewGuid();
         var article = new KnowledgeBaseArticle
         {
             Id = articleId,
-            CreatedByUserId = Guid.NewGuid(), // different user
+            CreatedByUserId = Guid.NewGuid(), // bài của người khác
             IsDeleted = false
         };
 
@@ -492,8 +535,8 @@ public class KbWorkflowHandlersTests
         var command = new UpdateKbArticleCommand
         {
             ArticleId = articleId,
-            CurrentUserId = Guid.NewGuid(), // different user
-            CurrentUserRole = "Customer", // not staff/manager/admin
+            CurrentUserId = Guid.NewGuid(),
+            CurrentUserRole = "Staff", // không phải Manager/Admin ⇒ phải qua phê duyệt
             Title = "Updated Title",
             Content = "symptoms. steps. solution."
         };
@@ -502,8 +545,9 @@ public class KbWorkflowHandlersTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
+        result.IsSuccess.Should().BeTrue();
+        article.Status.Should().Be(KbArticleStatusEnum.PendingReview);
+        article.ReviewRequired.Should().BeTrue();
     }
 
     [Fact]
