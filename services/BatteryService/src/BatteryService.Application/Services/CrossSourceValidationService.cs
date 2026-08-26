@@ -47,6 +47,9 @@ public class CrossSourceValidationService : ICrossSourceValidationService
         var byAsset = recent.GroupBy(r => r.BatteryAssetId);
 
         var created = 0;
+        // Alert vừa AddAsync chưa xuất hiện trong query DB bên dưới. Giữ key trong lượt quét
+        // để 75 reading của cùng một asset không tạo 75 alert giống nhau trước SaveChanges.
+        var createdAssets = new HashSet<Guid>();
         foreach (var group in byAsset)
         {
             var assetId = group.Key;
@@ -92,6 +95,8 @@ public class CrossSourceValidationService : ICrossSourceValidationService
                 var mismatch = AnomalyRules.DetectSensorMismatch(bms, iot);
                 if (mismatch is null)
                     continue;
+                if (createdAssets.Contains(assetId))
+                    continue;
 
                 // Dedup theo asset + AnomalyType + cửa sổ 15 phút.
                 var dedupBoundary = now.Subtract(AlertDedupWindow);
@@ -131,6 +136,7 @@ public class CrossSourceValidationService : ICrossSourceValidationService
                     DedupWindowEndUtc = now.Add(AlertDedupWindow)
                 });
                 _metrics.CrossSourceMismatchAlertRecorded();
+                createdAssets.Add(assetId);
                 created++;
 
                 _logger.LogWarning(

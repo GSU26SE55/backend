@@ -64,6 +64,8 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
         if (request.BatteryAssetId.HasValue)
             query = query.Where(t => t.BatteryAssetId == request.BatteryAssetId.Value);
 
+        query = TicketQueryHelper.FilterBySla(query, request.Sla);
+
         // SortDir (mới) thắng nếu có; nếu không dùng IsDescending (legacy) để giữ tương thích ngược.
         var descending = string.IsNullOrWhiteSpace(request.SortDir)
             ? request.IsDescending

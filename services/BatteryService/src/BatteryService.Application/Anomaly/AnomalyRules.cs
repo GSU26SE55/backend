@@ -220,8 +220,10 @@ public static class AnomalyRules
             || iot.SourceType != SensorReadingSourceTypeEnum.IotGateway)
             return null;
 
+        // DS18B20 chỉ đo nhiệt; voltage=0 trong payload là placeholder, không phải số đo.
         var voltageDelta = Math.Abs(bms.Voltage - iot.Voltage);
-        if (voltageDelta > SensorMismatchVoltageDeltaV)
+        if (MeasuresVoltage(bms) && MeasuresVoltage(iot)
+            && voltageDelta > SensorMismatchVoltageDeltaV)
         {
             return new AnomalyDetection(
                 AnomalyTypeEnum.SensorMismatch, AlertSeverityEnum.Warning,
@@ -251,4 +253,7 @@ public static class AnomalyRules
     /// </summary>
     public static bool MeasuresTemperature(SensorReading reading) =>
         !string.Equals(reading.SensorSourceCode, "redundant", StringComparison.OrdinalIgnoreCase);
+
+    public static bool MeasuresVoltage(SensorReading reading) =>
+        !string.Equals(reading.SensorSourceCode, "external-temp", StringComparison.OrdinalIgnoreCase);
 }

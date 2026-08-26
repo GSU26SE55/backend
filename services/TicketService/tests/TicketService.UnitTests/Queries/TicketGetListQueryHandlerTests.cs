@@ -184,4 +184,69 @@ public class TicketGetListQueryHandlerTests
         result.Data.PageNumber.Should().Be(2);
         result.Data.PageSize.Should().Be(3);
     }
+
+    /// <summary>
+    /// Ticket InProgress kèm SlaTimer ở trạng thái cho trước. Mọi ticket đều InProgress để bộ
+    /// lọc Status mặc định (ẩn Open) không xen vào phép kiểm SLA.
+    /// </summary>
+    private static Ticket MakeSlaTicket(string code, SlaTimerStatusEnum status, DateTime? warningSentAt)
+    {
+        // Priority phải là P1/P2/P3 thật ở CẢ ticket lẫn timer: SlaCalculator.GetSlaWorkingDays
+        // ném ArgumentOutOfRange với giá trị mặc định (0) khi map sang SlaTimerDTO.
+        var ticket = MakeTicket(TicketStatusEnum.InProgress, TicketPriorityEnum.P2High, code: code);
+        ticket.SlaTimer = new SlaTimer
+        {
+            TicketId = ticket.Id,
+            Priority = TicketPriorityEnum.P2High,
+            StartedAt = DateTime.UtcNow.AddHours(-4),
+            DueAt = DateTime.UtcNow.AddHours(1),
+            OriginalDueAt = DateTime.UtcNow.AddHours(1),
+            Status = status,
+            WarningSentAt = warningSentAt,
+            CurrentPauseStartedAt = status == SlaTimerStatusEnum.Paused ? DateTime.UtcNow : null
+        };
+        return ticket;
+    }
+
+    [Theory]
+    [InlineData(SlaFilterEnum.Paused, "PAUSED")]
+    [InlineData(SlaFilterEnum.Warning, "WARNING")]
+    [InlineData(SlaFilterEnum.Breached, "BREACHED")]
+    public async Task Handle_FilterBySla_ReturnsOnlyThatState(SlaFilterEnum sla, string expectedCode)
+    {
+        SetupMock([
+            MakeSlaTicket("PAUSED", SlaTimerStatusEnum.Paused, warningSentAt: null),
+            MakeSlaTicket("WARNING", SlaTimerStatusEnum.Running, warningSentAt: DateTime.UtcNow.AddMinutes(-10)),
+            // Đã breach nhưng WarningSentAt VẪN còn (background job không xoá khi chuyển Breached).
+            // Đây là ca dễ sai nhất: lọc Warning chỉ theo WarningSentAt thì ticket này lọt vào cả hai.
+            MakeSlaTicket("BREACHED", SlaTimerStatusEnum.Breached, warningSentAt: DateTime.UtcNow.AddHours(-1)),
+            MakeSlaTicket("RUNNING", SlaTimerStatusEnum.Running, warningSentAt: null),
+            // Chưa chạy đồng hồ → không thuộc bộ lọc SLA nào.
+            MakeTicket(TicketStatusEnum.InProgress, code: "NOTIMER")
+        ]);
+
+        var result = await _handler.Handle(new TicketGetListQuery
+        {
+            Sla = sla,
+            PageNumber = 1,
+            PageSize = 10
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Items.Should().ContainSingle().Which.Code.Should().Be(expectedCode);
+    }
+
+    [Fact]
+    public async Task Handle_NoSlaFilter_ReturnsEveryTicket()
+    {
+        SetupMock([
+            MakeSlaTicket("PAUSED", SlaTimerStatusEnum.Paused, warningSentAt: null),
+            MakeSlaTicket("BREACHED", SlaTimerStatusEnum.Breached, warningSentAt: null),
+            MakeTicket(TicketStatusEnum.InProgress, code: "NOTIMER")
+        ]);
+
+        var result = await _handler.Handle(new TicketGetListQuery { PageNumber = 1, PageSize = 10 }, default);
+
+        result.Data!.Items.Should().HaveCount(3);
+    }
 }

@@ -37,6 +37,7 @@ public class AdminTicketsController : ControllerBase
     /// - <c>Keyword</c>: Theo mã hoặc tiêu đề.
     /// - <c>Status</c>, <c>Priority</c>, <c>Category</c>.
     /// - <c>BatteryAssetId</c>: Theo thiết bị.
+    /// - <c>Sla</c>: Tình trạng SLA — <c>Paused</c> | <c>Warning</c> | <c>Breached</c> (đã về 0).
     /// - <c>PageIndex</c>, <c>PageSize</c>.
     /// </remarks>
     /// <param name="query">Tiêu chí lọc.</param>
