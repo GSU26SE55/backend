@@ -754,16 +754,7 @@ public class AuthController : ControllerBase
     private IActionResult BuildLoginRedirect(string redirectUri)
     {
         var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
-        Response.Cookies.Append(OAuthStateCookie, state, new CookieOptions
-        {
-            HttpOnly = true,
-            // AuthService nhận HTTP nội bộ từ ApiGateway nên Request.IsHttps có thể false dù client dùng HTTPS.
-            // Production/Staging vẫn phải bắt buộc Secure để state cookie không bao giờ đi qua HTTP công khai.
-            Secure = ShouldUseSecureOAuthCookie(),
-            SameSite = SameSiteMode.Lax,
-            MaxAge = TimeSpan.FromMinutes(10),
-            Path = "/api/auth"
-        });
+        Response.Cookies.Append(OAuthStateCookie, state, BuildOAuthStateCookieOptions(includeLifetime: true));
 
         var authUrl = _googleOAuthHelper.BuildAuthorizationUrl(state, redirectUri);
         return Redirect(authUrl);
@@ -771,12 +762,35 @@ public class AuthController : ControllerBase
 
     private bool ShouldUseSecureOAuthCookie()
     {
+        return Request.IsHttps || IsDeployedEnvironment();
+    }
+
+    private bool IsDeployedEnvironment()
+    {
         var environment = _configuration["ASPNETCORE_ENVIRONMENT"]
                           ?? _configuration["DOTNET_ENVIRONMENT"];
 
-        return Request.IsHttps
-               || string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase)
+        return string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase)
                || string.Equals(environment, "Staging", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private CookieOptions BuildOAuthStateCookieOptions(bool includeLifetime)
+    {
+        var isDeployedEnvironment = IsDeployedEnvironment();
+
+        return new CookieOptions
+        {
+            HttpOnly = true,
+            // AuthService nhận HTTP nội bộ từ ApiGateway nên Request.IsHttps có thể false dù client dùng HTTPS.
+            // Production/Staging vẫn phải bắt buộc Secure để state cookie không bao giờ đi qua HTTP công khai.
+            Secure = ShouldUseSecureOAuthCookie(),
+            // Production FE (solars.io.vn) gọi API (api.solaris.io.vn) bằng credentialed XHR.
+            // Hai registrable domain khác nhau nên Lax không được gửi trong callback; None + Secure
+            // cho phép state cookie đi qua, còn constant-time state validation tiếp tục chống CSRF.
+            SameSite = isDeployedEnvironment ? SameSiteMode.None : SameSiteMode.Lax,
+            MaxAge = includeLifetime ? TimeSpan.FromMinutes(10) : null,
+            Path = "/api/auth"
+        };
     }
 
     /// <summary>
@@ -786,7 +800,9 @@ public class AuthController : ControllerBase
         string? code, string? state, string? error, string redirectUri, CancellationToken cancellationToken)
     {
         var savedState = Request.Cookies[OAuthStateCookie];
-        Response.Cookies.Delete(OAuthStateCookie, new CookieOptions { Path = "/api/auth" });
+        Response.Cookies.Delete(
+            OAuthStateCookie,
+            BuildOAuthStateCookieOptions(includeLifetime: false));
 
         if (!string.IsNullOrEmpty(error))
             return (Fail(401, error), 401);
