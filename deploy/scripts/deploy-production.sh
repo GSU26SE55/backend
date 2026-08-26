@@ -624,6 +624,22 @@ if ! helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m;
   kubectl -n "${namespace}" describe pod "${helm_release}-smoke-test" >&2 || true
   kubectl -n "${namespace}" logs pod/"${helm_release}-smoke-test" \
     --all-containers=true >&2 || true
+  kubectl -n "${namespace}" get pod -o wide \
+    -l 'app.kubernetes.io/component in (authservice,rabbitmq,postgres,redis)' \
+    >&2 || true
+  for dependency_service in authservice rabbitmq postgres redis; do
+    kubectl -n "${namespace}" get endpointslice \
+      -l "kubernetes.io/service-name=${dependency_service}" \
+      -o wide >&2 || true
+  done
+  kubectl -n "${namespace}" logs deployment/authservice \
+    --since=15m --tail=200 >&2 || true
+  kubectl -n "${namespace}" logs statefulset/rabbitmq \
+    --since=15m --tail=200 >&2 || true
+  kubectl -n "${namespace}" logs statefulset/postgres \
+    --since=15m --tail=200 >&2 || true
+  kubectl -n "${namespace}" logs statefulset/redis \
+    --since=15m --tail=200 >&2 || true
   kubectl -n "${namespace}" get service "${helm_release}-grafana" -o wide >&2 || true
   kubectl -n "${namespace}" get endpointslice \
     -l "kubernetes.io/service-name=${helm_release}-grafana" -o wide >&2 || true

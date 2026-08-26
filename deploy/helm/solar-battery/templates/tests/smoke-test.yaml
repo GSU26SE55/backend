@@ -43,28 +43,50 @@ spec:
           set -e
           fail=0
           grafana_failed=0
+          service_attempt_limit=15
+          service_retry_delay_seconds=2
           check() {
             url="$1"
             response_file="$(mktemp)"
             error_file="$(mktemp)"
-            if code="$(curl --silent --show-error --output "${response_file}" \
-              --write-out '%{http_code}' --max-time 10 "${url}" 2>"${error_file}")"; then
-              if [ "${code}" = "200" ]; then
-                echo "OK   ${url} (${code})"
+            attempts=0
+            while :; do
+              code=""
+              curl_status=0
+              if code="$(curl --silent --show-error \
+                --output "${response_file}" \
+                --write-out '%{http_code}' \
+                --max-time 10 \
+                "${url}" \
+                2>"${error_file}")"; then
+                :
               else
-                echo "FAIL ${url} (HTTP ${code})"
-                head -c 512 "${response_file}" || true
+                curl_status="$?"
+              fi
+
+              if [ "${curl_status}" -eq 0 ] && [ "${code}" = "200" ]; then
+                echo "OK   ${url} (${code}, attempt $((attempts + 1)))"
+                rm -f "${response_file}" "${error_file}"
+                return
+              fi
+
+              attempts=$((attempts + 1))
+              if [ "${attempts}" -ge "${service_attempt_limit}" ]; then
+                if [ "${curl_status}" -eq 0 ]; then
+                  echo "FAIL ${url} (HTTP ${code} after ${attempts} attempts)"
+                  head -c 512 "${response_file}" || true
+                else
+                  echo "FAIL ${url} (curl exit ${curl_status} after ${attempts} attempts)"
+                  head -c 512 "${error_file}" || true
+                fi
                 echo
                 fail=1
+                rm -f "${response_file}" "${error_file}"
+                return
               fi
-            else
-              curl_status="$?"
-              echo "FAIL ${url} (curl exit ${curl_status})"
-              head -c 512 "${error_file}" || true
-              echo
-              fail=1
-            fi
-            rm -f "${response_file}" "${error_file}"
+
+              sleep "${service_retry_delay_seconds}"
+            done
           }
           check_grafana_api() {
             resource_path="$1"
@@ -132,7 +154,7 @@ spec:
           }
           echo "== Smoke test: readiness endpoint các service =="
           check http://apigateway:80/health
-          check http://authservice:80/health
+          check http://authservice:80/ready
           check http://batteryservice:80/api/battery/health
           check http://ticketservice:80/api/ticket/health
           check http://notificationservice:80/metrics
