@@ -1,4 +1,6 @@
 using BatteryService.Application.Common;
+using BatteryService.Application.Anomaly;
+using BatteryService.Application.CQRS.Command.EnvironmentalIncident;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.DTOs.Realtime;
@@ -56,6 +58,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
     private readonly ITelemetryStatsService _telemetryStatsService;
     private readonly IIotDeviceAvailabilityService _availability;
     private readonly IIntegrationEventOutboxWriter _outbox;
+    private readonly ISender? _sender;
     private readonly ILogger<BatchIngestSensorReadingsCommandHandler> _logger;
 
     public BatchIngestSensorReadingsCommandHandler(
@@ -66,7 +69,8 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         ITelemetryStatsService telemetryStatsService,
         ILogger<BatchIngestSensorReadingsCommandHandler> logger,
         IIotDeviceAvailabilityService? availability = null,
-        IIntegrationEventOutboxWriter? outbox = null)
+        IIntegrationEventOutboxWriter? outbox = null,
+        ISender? sender = null)
     {
         _unitOfWork = unitOfWork;
         _metrics = metrics;
@@ -75,6 +79,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         _telemetryStatsService = telemetryStatsService;
         _outbox = outbox ?? new IntegrationEventOutboxWriter(unitOfWork);
         _availability = availability ?? new IotDeviceAvailabilityService(unitOfWork, _outbox);
+        _sender = sender;
         _logger = logger;
     }
 
@@ -278,6 +283,7 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
         var duplicates = 0;
         var rejectedOutliers = 0;
         var liveReadings = new List<LiveReadingDto>(request.Items.Count);
+        var externalTemperatures = new List<ExternalTemperatureSample>();
         foreach (var item in request.Items)
         {
             if (!assets.TryGetValue(item.BatteryAssetId, out var asset))
@@ -367,6 +373,16 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
                 SourceType = (int)item.SourceType,
                 SensorSourceCode = sensorSourceCode
             });
+
+            if (asset.SiteId.HasValue
+                && string.Equals(sensorSourceCode, SensorSource.ExternalTemp, StringComparison.OrdinalIgnoreCase))
+            {
+                externalTemperatures.Add(new ExternalTemperatureSample(
+                    asset.SiteId.Value,
+                    asset.SerialNumber,
+                    temperature,
+                    readingTime));
+            }
         }
 
         // ─── Device-level housekeeping ───
@@ -470,6 +486,11 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        // DS18B20 là cảm biến nhiệt tại site. Firmware gửi nó trong telemetry pin với source
+        // `external-temp`, nên phải bridge sang luồng EnvironmentalIncident sau khi telemetry
+        // đã commit. Handler incident chuẩn lo dedup + Alert liên kết + outbox cho Ticket/Notification.
+        await ReportExternalTemperatureIncidentsAsync(externalTemperatures, cancellationToken);
+
         // Sprint BE-IoT-Realtime (#616) — soft-dependency: publish SAU commit, lỗi KHÔNG chặn ingest.
         if (liveReadings.Count > 0)
         {
@@ -513,6 +534,76 @@ public class BatchIngestSensorReadingsCommandHandler : IRequestHandler<BatchInge
             return raw * c.Scale + c.Offset;
         return raw;
     }
+
+    private async Task ReportExternalTemperatureIncidentsAsync(
+        IReadOnlyList<ExternalTemperatureSample> samples,
+        CancellationToken cancellationToken)
+    {
+        if (_sender is null || samples.Count == 0)
+            return;
+
+        var siteIds = samples.Select(sample => sample.SiteId).Distinct().ToList();
+        var thresholds = await _unitOfWork.AmbientThresholdConfigs.GetAllAsync()
+            .Where(config => !config.IsDeleted && config.Enabled && siteIds.Contains(config.SiteId))
+            .ToDictionaryAsync(config => config.SiteId, cancellationToken);
+
+        foreach (var siteSamples in samples.GroupBy(sample => sample.SiteId))
+        {
+            if (!thresholds.TryGetValue(siteSamples.Key, out var threshold))
+                continue;
+
+            // Một batch có thể chứa nhiều pin/cảm biến tại cùng site; lấy mẫu nóng nhất để
+            // chỉ report một incident. Report handler tiếp tục dedup với incident đang Open/Acknowledged.
+            var hottest = siteSamples.MaxBy(sample => sample.Temperature)!;
+            var ambientReading = new AmbientReading
+            {
+                SiteId = hottest.SiteId,
+                Time = hottest.Time,
+                AmbientTemperature = hottest.Temperature,
+                Source = AmbientReadingSourceEnum.IotSensor,
+                SourceDeviceId = SensorSource.ExternalTemp
+            };
+            var anomaly = AnomalyRules.DetectAmbient(ambientReading, threshold)
+                .FirstOrDefault(candidate => candidate.Type == AnomalyTypeEnum.HighAmbientTemp);
+            if (anomaly is null)
+                continue;
+
+            try
+            {
+                var response = await _sender.Send(new ReportEnvironmentalIncidentCommand
+                {
+                    SiteId = hottest.SiteId,
+                    IncidentType = EnvironmentalIncidentTypeEnum.OverheatHazard,
+                    Severity = anomaly.Severity,
+                    ReportedBy = $"DS18B20:{hottest.BatterySerial}",
+                    DetectedAt = hottest.Time,
+                    Notes = $"DS18B20 {hottest.BatterySerial} measured {hottest.Temperature:F1}°C "
+                            + $"(site threshold {anomaly.ThresholdValue:F1}°C).",
+                    AuthenticatedDeviceSiteId = hottest.SiteId
+                }, cancellationToken);
+
+                if (!response.IsSuccess)
+                {
+                    _logger.LogWarning(
+                        "DS18B20 overheat incident report failed for site {SiteId}: {StatusCode} {Message}",
+                        hottest.SiteId, response.StatusCode, response.Message);
+                }
+            }
+            catch (Exception exception)
+            {
+                // Telemetry đã commit; lỗi incident không được biến batch thành 500 rồi khiến firmware
+                // gửi lại vô hạn. Mẫu DS18B20 kế tiếp sẽ thử report lại ngay.
+                _logger.LogError(exception,
+                    "DS18B20 overheat incident report crashed for site {SiteId}", hottest.SiteId);
+            }
+        }
+    }
+
+    private sealed record ExternalTemperatureSample(
+        Guid SiteId,
+        string BatterySerial,
+        decimal Temperature,
+        DateTime Time);
 
     /// <summary>
     /// Sprint IoT-2 #IoT2-17 — outlier filter §52.5.

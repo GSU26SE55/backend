@@ -39,6 +39,7 @@ public class MyMaintenanceLogsQueryHandler : IRequestHandler<MyMaintenanceLogsQu
                     ActionsTaken = m.ActionsTaken,
                     DurationMinutes = m.DurationMinutes,
                     ResolutionNote = m.ResolutionNote,
+                    PartsUsed = m.PartsUsed,
                     StartedAt = m.StartedAt,
                     CompletedAt = m.CompletedAt,
                     AttachmentFileIds = m.AttachmentFileIds.Select(id => id.ToString()).ToList(),
