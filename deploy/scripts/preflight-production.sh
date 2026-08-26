@@ -92,6 +92,8 @@ KUBECONFIG="$(read_env KUBECONFIG)"
 K3S_NAMESPACE="$(read_env K3S_NAMESPACE)"
 AI_WIREGUARD_IPV4="$(read_env AI_WIREGUARD_IPV4)"
 PLATFORM_WIREGUARD_IPV4="$(read_env PLATFORM_WIREGUARD_IPV4)"
+PLATFORM_DEPLOYMENT_PHASE="$(read_env PLATFORM_DEPLOYMENT_PHASE)"
+HELM_RELEASE="$(read_env HELM_RELEASE)"
 TICKET_PERIODIC_MAINTENANCE_ENABLED="$(read_env TICKET_PERIODIC_MAINTENANCE_ENABLED)"
 TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID="$(read_env TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID)"
 TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS="$(read_env TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS)"
@@ -125,6 +127,8 @@ export KUBECONFIG
 : "${K3S_NAMESPACE:?K3S_NAMESPACE is required}"
 : "${AI_WIREGUARD_IPV4:?AI_WIREGUARD_IPV4 is required}"
 : "${PLATFORM_WIREGUARD_IPV4:?PLATFORM_WIREGUARD_IPV4 is required}"
+: "${PLATFORM_DEPLOYMENT_PHASE:?PLATFORM_DEPLOYMENT_PHASE is required}"
+: "${HELM_RELEASE:?HELM_RELEASE is required}"
 : "${TICKET_PERIODIC_MAINTENANCE_ENABLED:?TICKET_PERIODIC_MAINTENANCE_ENABLED is required}"
 : "${TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID:?TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID is required}"
 : "${TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS:?TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS is required}"
@@ -143,6 +147,11 @@ export KUBECONFIG
 : "${SLA_BUSINESS_HOURS_WORKING_DAYS_4:?SLA_BUSINESS_HOURS_WORKING_DAYS_4 is required}"
 : "${SLA_BUSINESS_HOURS_WORKING_DAYS_5:?SLA_BUSINESS_HOURS_WORKING_DAYS_5 is required}"
 : "${SLA_BUSINESS_HOURS_WORKING_DAYS_6:?SLA_BUSINESS_HOURS_WORKING_DAYS_6 is required}"
+
+[[ "${PLATFORM_DEPLOYMENT_PHASE}" =~ ^(bootstrap|steady)$ ]] || {
+  printf 'PLATFORM_DEPLOYMENT_PHASE must be bootstrap or steady\n' >&2
+  exit 1
+}
 
 [[ "${TICKET_PERIODIC_MAINTENANCE_ENABLED}" =~ ^(true|false)$ ]] || {
   printf 'TICKET_PERIODIC_MAINTENANCE_ENABLED must be true or false\n' >&2
@@ -241,9 +250,9 @@ ip -4 route get "${AI_WIREGUARD_IPV4}" | grep -Eq '(^|[[:space:]])dev wg0([[:spa
 # also initiates a fresh WireGuard handshake when an otherwise healthy tunnel
 # has been idle.
 
-[[ "${FRONTEND_PUBLIC_ORIGIN}" == "https://${PLATFORM_PUBLIC_DOMAIN}" ]] || {
-  printf 'FRONTEND_PUBLIC_ORIGIN must equal https://%s (no path or trailing slash)\n' \
-    "${PLATFORM_PUBLIC_DOMAIN}" >&2
+[[ "${FRONTEND_PUBLIC_ORIGIN}" =~ ^https://[^/:[:space:]]+(:[0-9]+)?$ ]] || {
+  printf 'FRONTEND_PUBLIC_ORIGIN must be an HTTPS origin (no path or trailing slash): %s\n' \
+    "${FRONTEND_PUBLIC_ORIGIN}" >&2
   exit 1
 }
 for ai_url in "${AI_GRPC_ADDRESS}" "${AI_HTTP_BASE_URL}"; do
@@ -287,6 +296,26 @@ kubectl get crd certificates.cert-manager.io >/dev/null
 kubectl wait --for=condition=Ready clusterissuer/letsencrypt-prod --timeout=2m >/dev/null
 helm version >/dev/null
 
+# A fresh cluster cannot expose Loki before Helm creates it. Bootstrap is a
+# deliberate one-release phase that skips only that impossible dependency. It
+# must never be reused for an existing release because it temporarily omits the
+# four R3 AI scrape targets. Every upgrade is therefore fail-closed in steady.
+if [[ "${PLATFORM_DEPLOYMENT_PHASE}" == 'bootstrap' ]]; then
+  if helm status "${HELM_RELEASE}" --namespace "${K3S_NAMESPACE}" \
+    >/dev/null 2>&1; then
+    printf 'bootstrap phase is forbidden because Helm release already exists: %s/%s\n' \
+      "${K3S_NAMESPACE}" "${HELM_RELEASE}" >&2
+    exit 1
+  fi
+else
+  helm status "${HELM_RELEASE}" --namespace "${K3S_NAMESPACE}" \
+    >/dev/null 2>&1 || {
+      printf 'steady phase requires an existing Helm release: %s/%s\n' \
+        "${K3S_NAMESPACE}" "${HELM_RELEASE}" >&2
+      exit 1
+    }
+fi
+
 for host in \
   "api.${PLATFORM_PUBLIC_DOMAIN}" \
   "files.${PLATFORM_PUBLIC_DOMAIN}" \
@@ -302,6 +331,11 @@ done
 
 ai_host="${AI_HTTP_BASE_URL#https://}"
 ai_host="${ai_host%:443}"
+[[ "${ai_host}" == "ai.${PLATFORM_PUBLIC_DOMAIN}" ]] || {
+  printf 'AI hostname must match the platform AI subdomain: got %s, expected ai.%s\n' \
+    "${ai_host}" "${PLATFORM_PUBLIC_DOMAIN}" >&2
+  exit 1
+}
 getent ahostsv4 "${ai_host}" >/dev/null || {
   printf 'AI hostname does not resolve from the platform VPS: %s\n' "${ai_host}" >&2
   exit 1
@@ -363,15 +397,20 @@ grpcurl \
     exit 1
   }
 
-systemctl is-active --quiet solar-loki-wireguard.service || {
-  printf 'solar-loki-wireguard.service is not active\n' >&2
-  exit 1
-}
-curl --fail --silent --show-error \
-  "http://${PLATFORM_WIREGUARD_IPV4}:3100/ready" >/dev/null || {
-    printf 'Loki is not reachable on the platform WireGuard bridge\n' >&2
+if [[ "${PLATFORM_DEPLOYMENT_PHASE}" == 'steady' ]]; then
+  systemctl is-active --quiet solar-loki-wireguard.service || {
+    printf 'solar-loki-wireguard.service is not active\n' >&2
     exit 1
   }
+  curl --fail --silent --show-error \
+    "http://${PLATFORM_WIREGUARD_IPV4}:3100/ready" >/dev/null || {
+      printf 'Loki is not reachable on the platform WireGuard bridge\n' >&2
+      exit 1
+    }
+else
+  printf '%s\n' \
+    'Bootstrap phase: Loki bridge readiness is deferred until after the initial Helm install.'
+fi
 
 available_kib="$(df -Pk "${root}" | awk 'NR == 2 {print $4}')"
 (( available_kib >= 31457280 )) || {

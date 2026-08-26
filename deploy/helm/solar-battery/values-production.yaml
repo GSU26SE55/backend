@@ -8,7 +8,7 @@
 
 global:
   namespace: solar-prod
-  domain: solars.io.vn
+  domain: solaris.io.vn
   frontendOrigin: https://solars.io.vn
   aspnetEnvironment: Production
   tlsIssuer: letsencrypt-prod
@@ -114,8 +114,8 @@ config:
   # AI VPS: gRPC over HTTP/2 on 443, HTTPS REST as fallback. Never append
   # /docs: that path is only Swagger UI, not an application base URL.
   Ai__Enabled: "true"
-  Ai__GrpcAddress: https://ai.solars.io.vn
-  Ai__HttpBaseUrl: https://ai.solars.io.vn
+  Ai__GrpcAddress: https://ai.solaris.io.vn
+  Ai__HttpBaseUrl: https://ai.solaris.io.vn
   Ai__TimeoutSeconds: "5"
   Ai__IntervalMinutes: "5"
   Ai__MinReadings: "30"
@@ -123,7 +123,7 @@ config:
   Ai__PrescriptionEnabled: "true"
   TicketAi__Enabled: "true"
   TicketAi__BatteryServiceBaseUrl: http://batteryservice:80
-  TicketAi__AiGrpcAddress: https://ai.solars.io.vn
+  TicketAi__AiGrpcAddress: https://ai.solaris.io.vn
   TicketAi__BatteryGrpcAddress: http://batteryservice:8081
   TicketAi__TimeoutSeconds: "5"
   TicketAi__MaxDuplicateCandidates: "10"
@@ -152,12 +152,12 @@ config:
   SlaBusinessHours__WorkingDays__5: Friday
   SlaBusinessHours__WorkingDays__6: Saturday
 
-  # Mosquitto runs under Docker on the same VPS. The deploy job supplies a
-  # same-VPS/VPC address as iot.mqttNodeIp while TLS still validates this DNS name.
+  # Mosquitto runs under Docker on the same VPS. The deploy job supplies R4's
+  # local WireGuard address as iot.mqttNodeIp while TLS validates this DNS name.
   Mqtt__Enabled: "true"
-  Mqtt__Host: mqtt.solars.io.vn
+  Mqtt__Host: mqtt.solaris.io.vn
   Mqtt__Port: "8883"
-  Mqtt__PublicHost: mqtt.solars.io.vn
+  Mqtt__PublicHost: mqtt.solaris.io.vn
   Mqtt__PublicPort: "8883"
   Mqtt__UseTls: "true"
   Mqtt__AllowUntrustedCertificates: "false"
@@ -174,7 +174,7 @@ iot:
   mqttTlsCertificate:
     enabled: true
     secretName: mqtt-public-tls
-    dnsName: mqtt.solars.io.vn
+    dnsName: mqtt.solaris.io.vn
 
 secrets:
   externalSecretName: solar-secrets
@@ -196,7 +196,7 @@ tempo:
 monitoring:
   ai:
     enabled: true
-    domain: ai.solars.io.vn
+    domain: ai.solaris.io.vn
     scrapeInterval: 15s
     scrapeTimeout: 10s
     applicationPort: 443
@@ -220,11 +220,11 @@ monitoring:
     enabled: true
     image: prom/blackbox-exporter:v0.25.0
     httpTargets:
-    - https://api.solars.io.vn/health
-    - https://files.solars.io.vn/minio/health/live
-    - https://ai.solars.io.vn/ready
-    mqttTarget: mqtt.solars.io.vn:8883
-    mqttServerName: mqtt.solars.io.vn
+    - https://api.solaris.io.vn/health
+    - https://files.solaris.io.vn/minio/health/live
+    - https://ai.solaris.io.vn/ready
+    mqttTarget: mqtt.solaris.io.vn:8883
+    mqttServerName: mqtt.solaris.io.vn
 
 kube-prometheus-stack:
   enabled: true
@@ -256,11 +256,11 @@ kube-prometheus-stack:
       limits:   { cpu: 100m, memory: 128Mi }
   prometheus:
     prometheusSpec:
-      # Preserve ai.solars.io.vn as the TLS SNI/HTTP authority while routing the
+      # Preserve ai.solaris.io.vn as the TLS SNI/HTTP authority while routing the
       # scrape through wg0 instead of the public Reserved IP.
       hostAliases:
       - ip: 10.20.0.2
-        hostnames: [ai.solars.io.vn]
+        hostnames: [ai.solaris.io.vn]
       scrapeConfigSelectorNilUsesHelmValues: false
       scrapeConfigSelector:
         matchLabels:
@@ -316,12 +316,12 @@ kube-prometheus-stack:
         cert-manager.io/cluster-issuer: letsencrypt-prod
         traefik.ingress.kubernetes.io/router.entrypoints: websecure
         traefik.ingress.kubernetes.io/router.tls: "true"
-      hosts: [grafana.solars.io.vn]
+      hosts: [grafana.solaris.io.vn]
       path: /
       pathType: Prefix
       tls:
       - secretName: grafana-tls
-        hosts: [grafana.solars.io.vn]
+        hosts: [grafana.solaris.io.vn]
 
 loki-stack:
   enabled: true

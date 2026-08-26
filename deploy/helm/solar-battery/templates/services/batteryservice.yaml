@@ -48,7 +48,7 @@ spec:
     spec:
       {{- if or .Values.iot.mqttNodeIp (and .Values.wireguard.enabled .Values.wireguard.aiIpv4) }}
       # Keep the public MQTT DNS name for certificate verification while routing
-      # same-VPS traffic over the Droplet/VPC address (avoids Reserved-IP hairpin).
+      # same-VPS traffic over R4's local WireGuard address (avoids public-IP hairpin).
       # Keep the public AI name for TLS verification while resolving it to the
       # WireGuard peer, so both gRPC and HTTPS fallback remain encrypted end-to-end.
       hostAliases:

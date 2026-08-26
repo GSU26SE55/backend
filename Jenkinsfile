@@ -128,6 +128,8 @@ pipeline {
                               BASE_REF=origin/dev ./ci/scripts/rule-checks.sh
                             fi
 
+                            ./ci/scripts/verify-deploy-registry-auth.sh
+
                             helm repo add prometheus-community \
                               https://prometheus-community.github.io/helm-charts \
                               --force-update
@@ -138,16 +140,16 @@ pipeline {
                             helm dependency build deploy/helm/solar-battery
                             helm lint deploy/helm/solar-battery \
                               -f deploy/helm/solar-battery/values.yaml \
-                              -f deploy/helm/solar-battery/values-vps-small.yaml \
                               -f deploy/helm/solar-battery/values-production.yaml \
-                              --set-string iot.mqttNodeIp=10.0.0.10
+                              -f deploy/helm/solar-battery/values-vps-small.yaml \
+                              --set-string iot.mqttNodeIp=10.20.0.1
 
                             helm template solar deploy/helm/solar-battery \
                               --namespace solar-prod \
                               -f deploy/helm/solar-battery/values.yaml \
-                              -f deploy/helm/solar-battery/values-vps-small.yaml \
                               -f deploy/helm/solar-battery/values-production.yaml \
-                              --set-string iot.mqttNodeIp=10.0.0.10 \
+                              -f deploy/helm/solar-battery/values-vps-small.yaml \
+                              --set-string iot.mqttNodeIp=10.20.0.1 \
                               > rendered-production.yaml
 
                             if grep -Eq \
@@ -163,9 +165,9 @@ pipeline {
                               'Frontend__WebBaseUrl: "https://solars.io.vn"' \
                               'GoogleOAuth__RedirectUri: "https://solars.io.vn/auth/google/callback"' \
                               'GoogleOAuth__AllowedRedirectUris__0: "https://solars.io.vn/auth/google/callback"' \
-                              'Ai__GrpcAddress: "https://ai.solars.io.vn"' \
-                              'Ai__HttpBaseUrl: "https://ai.solars.io.vn"' \
-                              'TicketAi__AiGrpcAddress: "https://ai.solars.io.vn"' \
+                              'Ai__GrpcAddress: "https://ai.solaris.io.vn"' \
+                              'Ai__HttpBaseUrl: "https://ai.solaris.io.vn"' \
+                              'TicketAi__AiGrpcAddress: "https://ai.solaris.io.vn"' \
                               'Ticket__PeriodicMaintenance__Enabled: "true"' \
                               'Ticket__PeriodicMaintenance__TimeZoneId: "Asia/Ho_Chi_Minh"' \
                               'Ticket__PeriodicMaintenance__CycleMonths: "6"' \

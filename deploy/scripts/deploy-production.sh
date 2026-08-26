@@ -30,6 +30,14 @@ read_env() {
   sed -n "s/^${key}=//p" "${file}" | tail -n 1 | tr -d '\r'
 }
 
+kubeconfig="$(read_env KUBECONFIG "${host_env}")"
+namespace="$(read_env K3S_NAMESPACE "${host_env}")"
+[[ -n "${kubeconfig}" && -n "${namespace}" ]] || {
+  printf 'KUBECONFIG and K3S_NAMESPACE are required before registry verification\n' >&2
+  exit 1
+}
+export KUBECONFIG="${kubeconfig}"
+
 required_digest_keys=(
   APIGATEWAY_DIGEST
   AUTHSERVICE_DIGEST
@@ -50,6 +58,40 @@ for key in "${required_digest_keys[@]}"; do
   }
 done
 
+# Cosign runs on the R4 host, outside Kubernetes, so imagePullSecrets are not
+# discovered automatically. Reuse the cluster's read-only pull credential in
+# an ephemeral Docker config and remove it before any Helm mutation occurs.
+umask 077
+registry_config="$(mktemp -d /tmp/solar-registry-auth.XXXXXX)"
+registry_config_file="${registry_config}/config.json"
+cleanup_registry_config() {
+  rm -f "${registry_config_file}" || true
+  rmdir "${registry_config}" 2>/dev/null || true
+}
+trap cleanup_registry_config EXIT
+
+registry_secret_type="$(
+  kubectl -n "${namespace}" get secret ghcr-pull \
+    -o jsonpath='{.type}'
+)"
+[[ "${registry_secret_type}" == 'kubernetes.io/dockerconfigjson' ]] || {
+  printf 'required registry pull Secret has an unexpected type: %s/ghcr-pull (%s)\n' \
+    "${namespace}" "${registry_secret_type}" >&2
+  exit 1
+}
+
+kubectl -n "${namespace}" get secret ghcr-pull \
+  -o jsonpath='{.data.\.dockerconfigjson}' |
+  base64 --decode > "${registry_config_file}"
+chmod 0600 "${registry_config_file}"
+
+jq -e '.auths["ghcr.io"] | type == "object"' \
+  "${registry_config_file}" >/dev/null || {
+  printf 'required registry pull Secret has no ghcr.io credential: %s/ghcr-pull\n' \
+    "${namespace}" >&2
+  exit 1
+}
+
 image_namespace="ghcr.io/gsu26se55"
 for specification in \
   "apigateway|APIGATEWAY_DIGEST" \
@@ -65,8 +107,12 @@ do
   service="${specification%%|*}"
   key="${specification#*|}"
   image_ref="${image_namespace}/${service}@$(read_env "${key}" "${image_lock}")"
-  cosign verify --key "${root}/config/cosign.pub" "${image_ref}" >/dev/null
+  DOCKER_CONFIG="${registry_config}" \
+    cosign verify --key "${root}/config/cosign.pub" "${image_ref}" >/dev/null
 done
+
+cleanup_registry_config
+trap - EXIT
 
 platform_domain="$(read_env PLATFORM_PUBLIC_DOMAIN "${host_env}")"
 frontend_origin="$(read_env FRONTEND_PUBLIC_ORIGIN "${host_env}")"
@@ -76,9 +122,8 @@ ai_wireguard_ipv4="$(read_env AI_WIREGUARD_IPV4 "${host_env}")"
 platform_wireguard_ipv4="$(read_env PLATFORM_WIREGUARD_IPV4 "${host_env}")"
 mqtt_node_ip="$(read_env MQTT_NODE_IP "${host_env}")"
 mqtt_auth_dir="$(read_env MQTT_AUTH_DIR "${host_env}")"
-kubeconfig="$(read_env KUBECONFIG "${host_env}")"
-namespace="$(read_env K3S_NAMESPACE "${host_env}")"
 helm_release="$(read_env HELM_RELEASE "${host_env}")"
+deployment_phase="$(read_env PLATFORM_DEPLOYMENT_PHASE "${host_env}")"
 ticket_periodic_maintenance_enabled="$(read_env TICKET_PERIODIC_MAINTENANCE_ENABLED "${host_env}")"
 ticket_periodic_maintenance_time_zone_id="$(read_env TICKET_PERIODIC_MAINTENANCE_TIME_ZONE_ID "${host_env}")"
 ticket_periodic_maintenance_cycle_months="$(read_env TICKET_PERIODIC_MAINTENANCE_CYCLE_MONTHS "${host_env}")"
@@ -101,11 +146,11 @@ sla_business_hours_working_days_6="$(read_env SLA_BUSINESS_HOURS_WORKING_DAYS_6 
 [[ -n "${platform_domain}" && -n "${frontend_origin}" && -n "${ai_grpc_address}" \
   && -n "${ai_http_base_url}" && -n "${ai_wireguard_ipv4}" \
   && -n "${platform_wireguard_ipv4}" && -n "${mqtt_node_ip}" && -n "${mqtt_auth_dir}" \
-  && -n "${kubeconfig}" && -n "${namespace}" && -n "${helm_release}" ]] || {
+  && -n "${kubeconfig}" && -n "${namespace}" && -n "${helm_release}" \
+  && -n "${deployment_phase}" ]] || {
   printf 'host.env is incomplete\n' >&2
   exit 1
 }
-export KUBECONFIG="${kubeconfig}"
 
 umask 027
 release_dir="${root}/releases/${release_sha}"
@@ -226,15 +271,34 @@ run_predeployment_backup() {
   fi
 }
 
+# R4 public services and the R3 AI service intentionally use different public
+# domains. Preserve the AI hostname for TLS SNI while routing Prometheus over
+# the WireGuard host alias.
+ai_monitoring_domain="${ai_http_base_url#https://}"
+ai_monitoring_domain="${ai_monitoring_domain%:443}"
+[[ -n "${ai_monitoring_domain}" && "${ai_monitoring_domain}" != */* ]] || {
+  printf 'AI_HTTP_BASE_URL must be an HTTPS origin only: %s\n' \
+    "${ai_http_base_url}" >&2
+  exit 1
+}
+[[ "${ai_monitoring_domain}" == "ai.${platform_domain}" ]] || {
+  printf 'AI hostname must match the platform AI subdomain: got %s, expected ai.%s\n' \
+    "${ai_monitoring_domain}" "${platform_domain}" >&2
+  exit 1
+}
+
 helm_value_args=(
   -f "${chart_dir}/values.yaml"
-  -f "${chart_dir}/values-vps-small.yaml"
   -f "${chart_dir}/values-production.yaml"
+  # Capacity/storage overlay is intentionally last so it wins on the 80 GB R4.
+  -f "${chart_dir}/values-vps-small.yaml"
   --set-string "global.domain=${platform_domain}"
   --set-string "global.frontendOrigin=${frontend_origin}"
   --set-string "config.Ai__GrpcAddress=${ai_grpc_address}"
   --set-string "config.Ai__HttpBaseUrl=${ai_http_base_url}"
   --set-string "config.TicketAi__AiGrpcAddress=${ai_grpc_address}"
+  --set-string "config.Mqtt__Host=mqtt.${platform_domain}"
+  --set-string "config.Mqtt__PublicHost=mqtt.${platform_domain}"
   --set-string "config.Ticket__PeriodicMaintenance__Enabled=${ticket_periodic_maintenance_enabled}"
   --set-string "config.Ticket__PeriodicMaintenance__TimeZoneId=${ticket_periodic_maintenance_time_zone_id}"
   --set-string "config.Ticket__PeriodicMaintenance__CycleMonths=${ticket_periodic_maintenance_cycle_months}"
@@ -255,12 +319,30 @@ helm_value_args=(
   --set-string "config.SlaBusinessHours__WorkingDays__6=${sla_business_hours_working_days_6}"
   --set-string "wireguard.aiIpv4=${ai_wireguard_ipv4}"
   --set-string "wireguard.platformIpv4=${platform_wireguard_ipv4}"
+  --set-string "monitoring.ai.domain=${ai_monitoring_domain}"
+  --set-string "monitoring.blackbox.httpTargets[0]=https://api.${platform_domain}/health"
+  --set-string "monitoring.blackbox.httpTargets[1]=https://files.${platform_domain}/minio/health/live"
+  --set-string "monitoring.blackbox.httpTargets[2]=${ai_http_base_url}/ready"
+  --set-string "monitoring.blackbox.mqttTarget=mqtt.${platform_domain}:8883"
+  --set-string "monitoring.blackbox.mqttServerName=mqtt.${platform_domain}"
   --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].ip=${ai_wireguard_ipv4}"
-  --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].hostnames[0]=ai.${platform_domain}"
+  --set-string "kube-prometheus-stack.prometheus.prometheusSpec.hostAliases[0].hostnames[0]=${ai_monitoring_domain}"
+  --set-string "kube-prometheus-stack.grafana.ingress.hosts[0]=grafana.${platform_domain}"
+  --set-string "kube-prometheus-stack.grafana.ingress.tls[0].hosts[0]=grafana.${platform_domain}"
   --set-string "iot.mqttNodeIp=${mqtt_node_ip}"
+  --set-string "iot.mqttTlsCertificate.dnsName=mqtt.${platform_domain}"
   --set-string "iot.mqttPasswordSync.hostPath=${mqtt_auth_dir}"
   --set-string "services.auditaggregatorservice.geoIp.hostPath=${geoip_db}"
 )
+
+if [[ "${deployment_phase}" == 'bootstrap' ]]; then
+  # Loki does not exist until this Helm release completes, so R3 Alloy cannot
+  # be enabled yet. All other application, infrastructure and observability
+  # components remain enabled. A second, steady deployment restores this gate.
+  helm_value_args+=(--set 'monitoring.ai.enabled=false')
+else
+  helm_value_args+=(--set 'monitoring.ai.enabled=true')
+fi
 
 helm_value_args+=(--set-string "services.apigateway.digest=$(read_env APIGATEWAY_DIGEST "${image_lock}")")
 helm_value_args+=(--set-string "services.authservice.digest=$(read_env AUTHSERVICE_DIGEST "${image_lock}")")
@@ -345,6 +427,29 @@ while IFS= read -r resource; do
     exit 1
   fi
 done < <(kubectl -n "${namespace}" get deployment,statefulset,daemonset -o name)
+
+wait_for_loki_bridge() {
+  local attempts=0
+
+  while (( attempts < 60 )); do
+    attempts=$((attempts + 1))
+    if systemctl is-active --quiet solar-loki-wireguard.service \
+      && curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+        "http://${platform_wireguard_ipv4}:3100/ready" >/dev/null 2>&1; then
+      printf 'Loki WireGuard bridge is ready on %s:3100.\n' \
+        "${platform_wireguard_ipv4}"
+      return 0
+    fi
+    sleep 5
+  done
+
+  systemctl status solar-loki-wireguard.service --no-pager >&2 || true
+  kubectl -n "${namespace}" get service loki -o wide >&2 || true
+  printf 'Loki WireGuard bridge did not become ready after Helm deployment\n' >&2
+  return 1
+}
+
+wait_for_loki_bridge || exit 1
 
 verify_geoip_runtime() {
   local configured_path
@@ -507,13 +612,34 @@ verify_ai_observability_targets() {
   [[ "${verified}" == true ]]
 }
 
-verify_ai_observability_targets || exit 1
+if [[ "${deployment_phase}" == 'steady' ]]; then
+  verify_ai_observability_targets || exit 1
+else
+  printf '%s\n' \
+    'Bootstrap phase: AI target verification is deferred until R3 is connected and steady deployment runs.'
+fi
 
 if ! helm test "${helm_release}" --namespace "${namespace}" --logs --timeout 5m; then
   helm status "${helm_release}" --namespace "${namespace}" >&2 || true
   kubectl -n "${namespace}" describe pod "${helm_release}-smoke-test" >&2 || true
   kubectl -n "${namespace}" logs pod/"${helm_release}-smoke-test" \
     --all-containers=true >&2 || true
+  kubectl -n "${namespace}" get pod -o wide \
+    -l 'app.kubernetes.io/component in (authservice,rabbitmq,postgres,redis)' \
+    >&2 || true
+  for dependency_service in authservice rabbitmq postgres redis; do
+    kubectl -n "${namespace}" get endpointslice \
+      -l "kubernetes.io/service-name=${dependency_service}" \
+      -o wide >&2 || true
+  done
+  kubectl -n "${namespace}" logs deployment/authservice \
+    --since=15m --tail=200 >&2 || true
+  kubectl -n "${namespace}" logs statefulset/rabbitmq \
+    --since=15m --tail=200 >&2 || true
+  kubectl -n "${namespace}" logs statefulset/postgres \
+    --since=15m --tail=200 >&2 || true
+  kubectl -n "${namespace}" logs statefulset/redis \
+    --since=15m --tail=200 >&2 || true
   kubectl -n "${namespace}" get service "${helm_release}-grafana" -o wide >&2 || true
   kubectl -n "${namespace}" get endpointslice \
     -l "kubernetes.io/service-name=${helm_release}-grafana" -o wide >&2 || true

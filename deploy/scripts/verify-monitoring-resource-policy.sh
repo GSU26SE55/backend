@@ -352,6 +352,7 @@ do
 done
 
 grafana_deployment="${temporary_directory}/grafana-deployment.yaml"
+authservice_deployment="${temporary_directory}/authservice-deployment.yaml"
 prometheus_operator="${temporary_directory}/prometheus-operator.yaml"
 grafana_service_monitor="${temporary_directory}/grafana-service-monitor.yaml"
 monitoring_network_policy="${temporary_directory}/monitoring-network-policy.yaml"
@@ -371,6 +372,10 @@ admission_patch_job="${temporary_directory}/admission-patch-job.yaml"
 extract_source \
   'kube-prometheus-stack/charts/grafana/templates/deployment.yaml' \
   "${grafana_deployment}"
+extract_named_resource \
+  'Deployment' \
+  'authservice' \
+  "${authservice_deployment}"
 extract_source \
   'kube-prometheus-stack/templates/prometheus-operator/deployment.yaml' \
   "${prometheus_operator}"
@@ -435,6 +440,37 @@ verify_resource_value "${tempo_container}" 'requests' 'cpu' '50m' 'tempo'
 verify_resource_value "${tempo_container}" 'requests' 'memory' '256Mi' 'tempo'
 verify_resource_value "${tempo_container}" 'limits' 'cpu' '500m' 'tempo'
 verify_resource_value "${tempo_container}" 'limits' 'memory' '1Gi' 'tempo'
+
+verify_http_probe_path() {
+  local input_file="$1"
+  local probe_name="$2"
+  local expected_path="$3"
+
+  awk \
+    -v expected_probe="${probe_name}:" \
+    -v expected_path="path: ${expected_path}" '
+      /^[[:space:]]+[[:alnum:]]+Probe:[[:space:]]*$/ {
+        in_expected_probe = ($1 == expected_probe)
+        next
+      }
+
+      in_expected_probe && index($0, expected_path) > 0 {
+        found = 1
+      }
+
+      END {
+        exit(found ? 0 : 1)
+      }
+    ' "${input_file}" || {
+    printf 'AuthService %s must use %s\n' \
+      "${probe_name}" "${expected_path}" >&2
+    exit 1
+  }
+}
+
+verify_http_probe_path "${authservice_deployment}" 'startupProbe' '/live'
+verify_http_probe_path "${authservice_deployment}" 'readinessProbe' '/ready'
+verify_http_probe_path "${authservice_deployment}" 'livenessProbe' '/live'
 
 while read -r section_name container_name
 do
@@ -676,6 +712,7 @@ do
 done
 
 for expected_url in \
+  'http://authservice:80/ready' \
   'http://notificationservice:80/metrics' \
   'http://filestorageservice:80/metrics' \
   'http://smsservice:80/metrics' \
@@ -684,6 +721,18 @@ for expected_url in \
 do
   grep -Fq "${expected_url}" "${solar_smoke_test}" || {
     printf 'Solar smoke test endpoint is missing: %s\n' "${expected_url}" >&2
+    exit 1
+  }
+done
+
+for expected_retry_contract in \
+  'service_attempt_limit=15' \
+  'service_retry_delay_seconds=2' \
+  "after \${attempts} attempts"
+do
+  grep -Fq "${expected_retry_contract}" "${solar_smoke_test}" || {
+    printf 'Solar smoke test bounded service retry contract is missing: %s\n' \
+      "${expected_retry_contract}" >&2
     exit 1
   }
 done
@@ -739,6 +788,7 @@ do
 done
 
 for forbidden_url in \
+  'http://authservice:80/health' \
   'http://notificationservice:80/health' \
   'http://filestorageservice:80/health' \
   'http://smsservice:80/health'
