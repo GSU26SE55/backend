@@ -25,6 +25,10 @@ public class AccountSyncConsumerTests
 
         _uowMock.SetupGet(u => u.StaffAccounts).Returns(_staffRepoMock.Object);
         _uowMock.SetupGet(u => u.CustomerAccounts).Returns(_customerRepoMock.Object);
+        _staffRepoMock.Setup(r => r.GetAllAsync())
+            .Returns(new List<StaffAccount>().AsQueryable().BuildMock());
+        _customerRepoMock.Setup(r => r.GetAllAsync())
+            .Returns(new List<CustomerAccount>().AsQueryable().BuildMock());
         _inboxMock.Setup(i => i.TryBeginAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new InboxClaim(InboxClaimStatus.Claimed, "gh764-test-token"));
     }
@@ -326,6 +330,68 @@ public class AccountSyncConsumerTests
         staff.SkillCodes.Should().BeEquivalentTo("SKL1", "SKL2");
         _staffRepoMock.Verify(r => r.UpdateAsync(staff), Times.Once);
         _uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    #endregion
+
+    #region TicketAccountDeletedConsumer Tests
+
+    [Fact]
+    public async Task TicketAccountDeletedConsumer_ExistingHistoricalProjections_ShouldSoftDeleteBoth()
+    {
+        var accountId = Guid.NewGuid();
+        var staff = new StaffAccount
+        {
+            AccountId = accountId,
+            Status = AccountStatusEnum.Active
+        };
+        var customer = new CustomerAccount
+        {
+            AccountId = accountId,
+            Status = AccountStatusEnum.Active
+        };
+
+        _staffRepoMock.Setup(r => r.GetAllAsync())
+            .Returns(new List<StaffAccount> { staff }.AsQueryable().BuildMock());
+        _customerRepoMock.Setup(r => r.GetAllAsync())
+            .Returns(new List<CustomerAccount> { customer }.AsQueryable().BuildMock());
+
+        var consumer = new TicketAccountDeletedConsumer(_uowMock.Object, _inboxMock.Object);
+        var message = new AccountDeletedEvent(accountId, "deleted@test.com", "AccountDeleted");
+
+        await consumer.Consume(MockConsumeContext(message));
+
+        staff.Status.Should().Be(AccountStatusEnum.Inactive);
+        staff.LastSourceEventAtUtc.Should().Be(message.OccurredAt);
+        customer.Status.Should().Be(AccountStatusEnum.Inactive);
+        customer.LastSourceEventAtUtc.Should().Be(message.OccurredAt);
+        _staffRepoMock.Verify(r => r.DeleteAsync(staff), Times.Once);
+        _customerRepoMock.Verify(r => r.DeleteAsync(customer), Times.Once);
+        _uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TicketAccountDeletedConsumer_StaleEvent_ShouldNotOverwriteNewerProjection()
+    {
+        var accountId = Guid.NewGuid();
+        var message = new AccountDeletedEvent(accountId, "deleted@test.com", "AccountDeleted");
+        var newerTimestamp = message.OccurredAt.AddMinutes(1);
+        var staff = new StaffAccount
+        {
+            AccountId = accountId,
+            Status = AccountStatusEnum.Active,
+            LastSourceEventAtUtc = newerTimestamp
+        };
+        _staffRepoMock.Setup(r => r.GetAllAsync())
+            .Returns(new List<StaffAccount> { staff }.AsQueryable().BuildMock());
+
+        var consumer = new TicketAccountDeletedConsumer(_uowMock.Object, _inboxMock.Object);
+
+        await consumer.Consume(MockConsumeContext(message));
+
+        staff.Status.Should().Be(AccountStatusEnum.Active);
+        _staffRepoMock.Verify(r => r.DeleteAsync(It.IsAny<StaffAccount>()), Times.Never);
+        _uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     #endregion

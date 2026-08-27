@@ -15,7 +15,9 @@ namespace AuthService.Application.CQRS.Command.Account;
 /// NotificationService vì mỗi service một database.</para>
 ///
 /// <para>Lệnh này an toàn khi chạy lại nhiều lần: snapshot là upsert thuần ở phía consumer, không
-/// kèm tác dụng phụ nghiệp vụ nào (không gửi welcome, không ghi notification).</para>
+/// kèm tác dụng phụ nghiệp vụ nào (không gửi welcome, không ghi notification). Production gọi
+/// lệnh tự động theo chu kỳ qua account-projection reconciliation worker; endpoint admin vẫn hữu
+/// ích khi cần đối soát ngay một account hoặc toàn bộ dữ liệu.</para>
 /// </summary>
 public class AccountResyncCommand : IRequest<AccountResyncResponse>
 {

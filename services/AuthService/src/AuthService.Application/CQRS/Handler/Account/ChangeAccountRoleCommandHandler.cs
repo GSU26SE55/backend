@@ -150,12 +150,11 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
                         IsActive: account.Status.IsNotifiable(),
                         IsDeleted: false,
                         SnapshotAtUtc: snapshotAtUtc,
-                        Reason: "RoleChanged"), ct);
+                        Reason: "RoleChanged",
+                        AccountStatus: (int)account.Status), ct);
 
-                    // GH-769 — Battery và Ticket KHÔNG nghe AccountSyncSnapshotEvent (chỉ
-                    // NotificationService nghe), nên trước đây đổi role xong bản sao ở hai service
-                    // đó giữ nguyên role cũ: thiếu StaffAccount thì không giao ticket được, thừa
-                    // CustomerAccount thì vẫn giữ quyền nghiệp vụ cũ.
+                    // Lifecycle event keeps near-real-time projections current. The periodic full
+                    // snapshot remains the authoritative repair path for missing or altered rows.
                     await _messageProducer.PublishAsync(new AccountRoleChangedEvent(
                         account.Id,
                         account.Email,
@@ -163,7 +162,8 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
                         account.PhoneNumber,
                         OldRole: previousRoleName,
                         NewRole: role.Name,
-                        ChangedAtUtc: snapshotAtUtc), ct);
+                        ChangedAtUtc: snapshotAtUtc,
+                        AccountStatus: (int)account.Status), ct);
 
                     snapshotPublished = true;
                 }

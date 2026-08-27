@@ -101,18 +101,19 @@ public class AccountRoleChangedConsumerTests
     }
 
     [Fact]
-    public async Task UnknownAccount_IsIgnored_NotCreated()
+    public async Task TransitionToCustomer_WhenMirrorIsMissing_CreatesProjection()
     {
-        // Gán pin cho khách hàng nào là việc của luồng gán tài sản. Tạo bản sao ở đây sẽ dựng ra
-        // khách hàng không có tài sản nào.
+        // customer_accounts là projection tài khoản Customer, không phải bảng ownership của pin.
+        // Thiếu row ở đây phải được self-heal ngay khi role chuyển thành Customer.
         var uow = new MockUnitOfWorkBuilder();
         var consumer = new AccountRoleChangedConsumer(
             uow.Build(), _inbox.Object, NullLogger<AccountRoleChangedConsumer>.Instance);
 
-        var act = async () => await consumer.Consume(Ctx(Guid.NewGuid(), "Staff", "Customer"));
+        var accountId = Guid.NewGuid();
+        await consumer.Consume(Ctx(accountId, "Staff", "Customer"));
 
-        await act.Should().NotThrowAsync();
-        uow.CustomerAccounts.Object.GetAllAsync().Should().BeEmpty();
+        uow.CustomerAccounts.Object.GetAllAsync().Should().ContainSingle(item =>
+            item.Id == accountId && item.Role == "Customer" && item.IsActive);
     }
 
     [Fact]

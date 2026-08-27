@@ -20,7 +20,8 @@ public class AuthDataSeeder
     /// <summary>
     /// Account do CHÍNH lượt seed này tạo ra, kèm tên role. Chỉ những account ở đây mới cần phát
     /// snapshot: account đã tồn tại từ lượt trước thì lượt trước đã phát rồi, phát lại mỗi lần khởi
-    /// động chỉ tạo rác. Muốn đối soát chủ động thì dùng <c>POST /api/admin/accounts/resync</c>.
+    /// động chỉ tạo rác. Worker reconciliation sẽ tự đối soát định kỳ; khi cần chạy ngay có thể
+    /// dùng <c>POST /api/admin/accounts/resync</c>.
     /// </summary>
     private readonly List<(Account Account, string RoleName)> _createdAccounts = new();
 
@@ -83,7 +84,8 @@ public class AuthDataSeeder
                 IsActive: account.Status.IsNotifiable(),
                 IsDeleted: false,
                 SnapshotAtUtc: snapshotAtUtc,
-                Reason: "Seed"), cancellationToken);
+                Reason: "Seed",
+                AccountStatus: (int)account.Status), cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

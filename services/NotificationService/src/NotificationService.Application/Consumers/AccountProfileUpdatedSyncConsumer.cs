@@ -26,13 +26,22 @@ public class AccountProfileUpdatedSyncConsumer : IConsumer<AccountProfileUpdated
         if (account is null)
             return;
 
+        if (account.LastSnapshotAtUtc is { } applied && applied >= evt.OccurredAt)
+            return;
+
         await _unitOfWork.BeginTransactionAsync();
         try
         {
             account.Email = evt.Email.Trim().ToLowerInvariant();
             account.FullName = evt.FullName.Trim();
             account.PhoneNumber = string.IsNullOrWhiteSpace(evt.PhoneNumber) ? null : evt.PhoneNumber.Trim();
+            if (!string.IsNullOrWhiteSpace(evt.Role))
+            {
+                account.Role = evt.Role.Trim();
+                account.IsActive = evt.IsActive;
+            }
             account.LastSyncedAtUtc = DateTime.UtcNow;
+            account.LastSnapshotAtUtc = evt.OccurredAt;
             _unitOfWork.Accounts.UpdateAsync(account);
 
             await _unitOfWork.CommitTransactionAsync();

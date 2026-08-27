@@ -29,5 +29,6 @@ public record AccountRoleChangedEvent(
     string? PhoneNumber,
     string OldRole,
     string NewRole,
-    DateTime ChangedAtUtc
+    DateTime ChangedAtUtc,
+    int AccountStatus = 1
 ) : IntegrationEvent;

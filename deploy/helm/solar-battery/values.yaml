@@ -422,6 +422,13 @@ config:
   Outbox__PollIntervalSeconds: "2"
   Outbox__MaxRetries: "10"
 
+  # AuthService is the source of truth for account projections in Notification/Ticket/Battery.
+  # Realtime events provide low latency; this periodic full snapshot repairs missed events and
+  # any manual drift in downstream read-model tables.
+  AccountProjectionSync__Enabled: "true"
+  AccountProjectionSync__InitialDelaySeconds: "30"
+  AccountProjectionSync__IntervalMinutes: "5"
+
   # ----- Sprint 6.3 — worker vận hành của NotificationService -----
   # Đều có mặc định trong code; đưa ra đây để chỉnh được mà không phải build lại image.
   # (`Notification__Unsubscribe__PublicBaseUrl` nằm ở configmap.yaml vì cần nội suy domain,

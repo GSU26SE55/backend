@@ -30,14 +30,17 @@ public class BatteryAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
             if (!string.Equals(evt.Role, CustomerRole, StringComparison.OrdinalIgnoreCase))
                 return;
 
+            var account = await _unitOfWork.CustomerAccounts
+                .GetAllAsync()
+                .FirstOrDefaultAsync(item => item.Id == evt.AccountId, context.CancellationToken);
+
+            if (account?.LastSourceEventAtUtc is { } applied && applied >= evt.OccurredAt)
+                return;
+
             await _unitOfWork.BeginTransactionAsync();
 
             try
             {
-                var account = await _unitOfWork.CustomerAccounts
-                    .GetAllAsync()
-                    .FirstOrDefaultAsync(item => item.Id == evt.AccountId, context.CancellationToken);
-
                 if (account is null)
                 {
                     await _unitOfWork.CustomerAccounts.AddAsync(new CustomerAccount
@@ -50,7 +53,8 @@ public class BatteryAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                         IsActive = true,
                         IsDeleted = false,
                         DeletedAt = null,
-                        LastSyncedAtUtc = DateTime.UtcNow
+                        LastSyncedAtUtc = DateTime.UtcNow,
+                        LastSourceEventAtUtc = evt.OccurredAt
                     });
                 }
                 else
@@ -63,6 +67,7 @@ public class BatteryAccountActivatedConsumer : IConsumer<AccountActivatedEvent>
                     account.IsDeleted = false;
                     account.DeletedAt = null;
                     account.LastSyncedAtUtc = DateTime.UtcNow;
+                    account.LastSourceEventAtUtc = evt.OccurredAt;
                     _unitOfWork.CustomerAccounts.UpdateAsync(account);
                 }
 

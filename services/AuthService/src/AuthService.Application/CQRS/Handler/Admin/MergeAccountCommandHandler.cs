@@ -8,6 +8,8 @@ using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Application.CQRS.Handler.Admin;
 
@@ -29,15 +31,18 @@ public class MergeAccountCommandHandler : IRequestHandler<MergeAccountCommand, A
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IPublisher _publisher;
     private readonly ITokenRevocationStore _revocationStore;
+    private readonly IMessageProducerService _messageProducer;
 
     public MergeAccountCommandHandler(
         IAuthUnitOfWork unitOfWork,
         IPublisher publisher,
-        ITokenRevocationStore revocationStore)
+        ITokenRevocationStore revocationStore,
+        IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
         _publisher = publisher;
         _revocationStore = revocationStore;
+        _messageProducer = messageProducer;
     }
 
     public async Task<AccountActionResponse> Handle(MergeAccountCommand request, CancellationToken cancellationToken)
@@ -191,6 +196,14 @@ public class MergeAccountCommandHandler : IRequestHandler<MergeAccountCommand, A
             Reason: $"Merged into {primary.Id} by admin {request.PerformedBy}",
             ActorAccountIdOverride: request.PerformedBy,
             Metadata: new Dictionary<string, object?> { ["mergeLogId"] = mergeLog.Id }), cancellationToken);
+
+        // Merge tombstone cũng là một account deletion đối với mọi projection downstream.
+        // Outbox trước commit bảo đảm không có trạng thái "Auth đã merge nhưng service khác không
+        // bao giờ biết" nếu tiến trình chết ngay sau SaveChanges.
+        await _messageProducer.PublishAsync(new AccountDeletedEvent(
+            secondary.Id,
+            secondarySnapshot.Email,
+            DeletionSource: "AccountMerge"), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

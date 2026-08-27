@@ -49,6 +49,9 @@ public class AccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdatedEven
             if (account is null)
                 return;
 
+            if (account.LastSourceEventAtUtc is { } applied && applied >= evt.OccurredAt)
+                return;
+
             await _unitOfWork.BeginTransactionAsync();
             try
             {
@@ -58,6 +61,7 @@ public class AccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdatedEven
                 account.FullName = evt.FullName;
                 account.PhoneNumber = evt.PhoneNumber;
                 account.LastSyncedAtUtc = DateTime.UtcNow;
+                account.LastSourceEventAtUtc = evt.OccurredAt;
 
                 _unitOfWork.CustomerAccounts.UpdateAsync(account);
                 await _unitOfWork.CommitTransactionAsync();

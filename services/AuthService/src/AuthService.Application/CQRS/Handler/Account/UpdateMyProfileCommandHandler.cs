@@ -4,6 +4,7 @@ using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Application.Mapping;
 using AuthService.Domain.Entities;
+using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
@@ -91,7 +92,10 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
             account.Email,
             account.FullName,
             account.PhoneNumber,
-            AccountProfileMapper.ResolveDisplayAvatarUrl(profile)), cancellationToken);
+            AccountProfileMapper.ResolveDisplayAvatarUrl(profile),
+            Role: account.Role?.Name ?? string.Empty,
+            AccountStatus: (int)account.Status,
+            IsActive: account.Status.IsNotifiable()), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

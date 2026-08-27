@@ -16,7 +16,7 @@ namespace NotificationService.Domain.Entities;
 /// <see cref="Role"/> và <see cref="IsActive"/> lệch vĩnh viễn sau mỗi lần admin đổi role/khoá
 /// tài khoản; account tạo bằng seeder thì không bao giờ vào được bảng này. Snapshot chở đủ trạng
 /// thái hiện tại và có thể phát lại bao nhiêu lần cũng được, nên vừa vá được drift vừa dùng làm
-/// công cụ đối soát (<c>POST /api/admin/accounts/resync</c>).
+/// cơ chế tự đối soát định kỳ (và có thể chạy ngay qua <c>POST /api/admin/accounts/resync</c>).
 /// </summary>
 public class AccountReadModel : AuditableEntity
 {
@@ -39,8 +39,9 @@ public class AccountReadModel : AuditableEntity
     public DateTime LastSyncedAtUtc { get; set; }
 
     /// <summary>
-    /// Thời điểm (UTC) của <c>AccountSyncSnapshotEvent</c> gần nhất đã được áp vào dòng này —
-    /// lấy từ <c>SnapshotAtUtc</c> của event, KHÔNG phải lúc consume.
+    /// Mốc nguồn (UTC) mới nhất của mọi event account đã được áp vào dòng này. Tên cột/property
+    /// được giữ để tương thích migration cũ; với snapshot lấy từ <c>SnapshotAtUtc</c>, với event
+    /// lifecycle lấy từ <c>IntegrationEvent.OccurredAt</c>.
     ///
     /// Dùng để chặn snapshot về trễ ghi đè snapshot mới: RabbitMQ không bảo đảm thứ tự, nên hai
     /// thao tác admin liền nhau (đổi role rồi khoá tài khoản) có thể tới ngược chiều và làm
@@ -50,7 +51,7 @@ public class AccountReadModel : AuditableEntity
     /// cả 3 consumer vòng đời ghi chung, nên nó luôn mới hơn mốc của event và sẽ loại nhầm mọi
     /// snapshot hợp lệ.
     ///
-    /// <c>null</c> = dòng này chưa từng được snapshot đụng tới (chỉ mới đi qua 3 consumer vòng đời).
+    /// <c>null</c> = dòng legacy chưa có source-version.
     /// </summary>
     public DateTime? LastSnapshotAtUtc { get; set; }
 }

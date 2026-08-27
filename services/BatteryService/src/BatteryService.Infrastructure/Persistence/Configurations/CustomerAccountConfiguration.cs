@@ -44,6 +44,9 @@ public class CustomerAccountConfiguration : IEntityTypeConfiguration<CustomerAcc
             .HasColumnName("last_synced_at_utc")
             .IsRequired();
 
+        builder.Property(account => account.LastSourceEventAtUtc)
+            .HasColumnName("last_source_event_at_utc");
+
         builder.Property(account => account.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();
