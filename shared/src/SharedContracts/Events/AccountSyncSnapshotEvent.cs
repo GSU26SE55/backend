@@ -38,13 +38,27 @@ namespace SharedContracts.Events;
 /// <param name="PhoneNumber">Số điện thoại, có thể null.</param>
 /// <param name="Role">Tên role hiện tại (1 account = 1 role): Admin | Manager | Staff | Customer.</param>
 /// <param name="IsActive">
-/// <c>true</c> khi và chỉ khi <c>Account.Status == AccountStatusEnum.Active</c>. Mọi trạng thái khác
-/// (PendingVerification / Locked / Inactive / Suspended / Banned) đều là <c>false</c> — người nhận
-/// không hoạt động thì không được vào danh sách gửi thông báo.
+/// Cờ eligibility dành cho read-model thông báo: <c>true</c> với Active hoặc Locked (khóa tạm vẫn
+/// phải nhận cảnh báo vận hành), <c>false</c> với các trạng thái còn lại. Consumer cần trạng thái
+/// nghiệp vụ chính xác phải dùng <paramref name="AccountStatus"/>, không được suy ra từ cờ này.
 /// </param>
 /// <param name="IsDeleted">Account đã soft-delete bên AuthService hay chưa.</param>
 /// <param name="SnapshotAtUtc">Thời điểm chụp ảnh trạng thái (UTC) — dùng để chống message về trễ.</param>
 /// <param name="Reason">Nguồn phát: RoleChanged | StatusChanged | Resync | Seed. Chỉ để log/trace.</param>
+/// <param name="AccountStatus">
+/// Giá trị số của <c>AuthService.Domain.Enums.AccountStatusEnum</c>. Giữ riêng với
+/// <paramref name="IsActive"/> để TicketService phân biệt Pending/Locked/Inactive/Suspended/Banned.
+/// </param>
+/// <param name="HasStaffProfileSnapshot">
+/// <c>true</c> khi event mang toàn bộ projection hồ sơ Staff. Chỉ các lượt reconciliation đầy đủ
+/// mới bật cờ này; snapshot role/status realtime không được xóa nhầm dữ liệu staff vì không load
+/// hồ sơ.
+/// </param>
+/// <param name="EmployeeCode">Mã nhân viên authoritative khi có staff profile.</param>
+/// <param name="MaxConcurrentTickets">Sức chứa ticket authoritative của nhân viên.</param>
+/// <param name="IsAvailable">Trạng thái sẵn sàng nhận việc authoritative.</param>
+/// <param name="SkillTier">Giá trị số staff skill tier bên AuthService.</param>
+/// <param name="SkillCodes">Tập mã kỹ năng authoritative đã chuẩn hoá.</param>
 public record AccountSyncSnapshotEvent(
     Guid AccountId,
     string Email,
@@ -54,5 +68,12 @@ public record AccountSyncSnapshotEvent(
     bool IsActive,
     bool IsDeleted,
     DateTime SnapshotAtUtc,
-    string Reason
+    string Reason,
+    int AccountStatus = 0,
+    bool HasStaffProfileSnapshot = false,
+    string? EmployeeCode = null,
+    int MaxConcurrentTickets = 3,
+    bool IsAvailable = true,
+    int SkillTier = 0,
+    List<string>? SkillCodes = null
 ) : IntegrationEvent;

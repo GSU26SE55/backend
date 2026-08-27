@@ -171,10 +171,11 @@ public class PartnerCustomerProvisionRequestedConsumer : IConsumer<PartnerCustom
         await _messageProducer.PublishAsync(new AccountSyncSnapshotEvent(
             existing.Id, existing.Email, existing.FullName, existing.PhoneNumber,
             roleName,
-            IsActive: existing.Status == AccountStatusEnum.Active,
+            IsActive: existing.Status.IsNotifiable(),
             IsDeleted: existing.IsDeleted,
             SnapshotAtUtc: DateTime.UtcNow,
-            Reason: "PartnerImportLink"), ct);
+            Reason: "PartnerImportLink",
+            AccountStatus: (int)existing.Status), ct);
 
         await _messageProducer.PublishAsync(new PartnerCustomerProvisionedEvent(
             evt.BatchId, evt.RowId, evt.ExternalCustomerCode,

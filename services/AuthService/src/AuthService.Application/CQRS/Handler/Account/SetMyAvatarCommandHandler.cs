@@ -61,7 +61,10 @@ public class SetMyAvatarCommandHandler : IRequestHandler<SetMyAvatarCommand, Acc
             account.Email,
             account.FullName,
             account.PhoneNumber,
-            AccountProfileMapper.ResolveDisplayAvatarUrl(profile)), cancellationToken);
+            AccountProfileMapper.ResolveDisplayAvatarUrl(profile),
+            Role: account.Role?.Name ?? string.Empty,
+            AccountStatus: (int)account.Status,
+            IsActive: account.Status.IsNotifiable() && !account.IsDeleted), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

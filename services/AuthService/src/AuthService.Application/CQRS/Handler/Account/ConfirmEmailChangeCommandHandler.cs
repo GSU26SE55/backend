@@ -9,6 +9,8 @@ using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using StackExchange.Redis;
 
 namespace AuthService.Application.CQRS.Handler.Account;
@@ -22,18 +24,25 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
     private readonly IAuthUnitOfWork _unitOfWork;
     private readonly IConnectionMultiplexer _redis;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-11
+    private readonly IMessageProducerService _messageProducer;
 
-    public ConfirmEmailChangeCommandHandler(IAuthUnitOfWork unitOfWork, IConnectionMultiplexer redis, IPublisher publisher)
+    public ConfirmEmailChangeCommandHandler(
+        IAuthUnitOfWork unitOfWork,
+        IConnectionMultiplexer redis,
+        IPublisher publisher,
+        IMessageProducerService messageProducer)
     {
         _unitOfWork = unitOfWork;
         _redis = redis;
         _publisher = publisher;
+        _messageProducer = messageProducer;
     }
 
     public async Task<AccountActionResponse> Handle(ConfirmEmailChangeCommand request, CancellationToken cancellationToken)
     {
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted, cancellationToken);
         if (account == null)
             return Fail(404, "Account not found.");
@@ -99,6 +108,18 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
         // #AUDIT-11
         await _publisher.Publish(new AuditTrailNotification(
             AuditActionEnum.EmailChangeConfirmed, account.Id, true, TargetEmail: account.Email), cancellationToken);
+
+        // Email là một phần của mọi account projection. Ghi event vào Auth outbox TRƯỚC commit
+        // để đổi identity và cập nhật Battery/Ticket/Notification luôn nguyên tử.
+        await _messageProducer.PublishAsync(new AccountProfileUpdatedEvent(
+            account.Id,
+            account.Email,
+            account.FullName,
+            account.PhoneNumber,
+            account.AvatarUrl,
+            Role: account.Role?.Name ?? string.Empty,
+            AccountStatus: (int)account.Status,
+            IsActive: account.Status.IsNotifiable()), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

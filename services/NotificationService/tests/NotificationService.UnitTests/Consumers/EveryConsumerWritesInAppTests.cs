@@ -28,6 +28,7 @@ public class EveryConsumerWritesInAppTests
         ["AccountProfileUpdatedSyncConsumer"] = "chỉ đồng bộ read-model",
         ["AccountDeletedSyncConsumer"] = "chỉ soft-delete read-model",
         ["AccountSnapshotSyncConsumer"] = "chỉ đồng bộ read-model (Role + IsActive) — cố tình KHÔNG sinh notification: snapshot được phát lại mỗi lần đối soát, sinh notification ở đây là spam người dùng",
+        ["AccountLifecycleSyncConsumers"] = "chỉ đồng bộ read-model theo status/role event realtime, không sinh notification",
         ["SmsFailedConsumer"] = "cập nhật trạng thái record SMS đã tồn tại, không tạo notification mới",
         ["NotificationWriter"] = "helper, không phải consumer",
         ["NotificationDebounce"] = "helper, không phải consumer",

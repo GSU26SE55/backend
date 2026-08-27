@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.Infrastructure.BackgroundJobs;
 
@@ -17,6 +19,7 @@ namespace AuthService.Infrastructure.BackgroundJobs;
 public class LockoutReconcileBackgroundService : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(5);
+    private const int BatchSize = 500;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<LockoutReconcileBackgroundService> _logger;
@@ -58,18 +61,51 @@ public class LockoutReconcileBackgroundService : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var messageProducer = scope.ServiceProvider.GetRequiredService<IMessageProducerService>();
 
         var nowUtc = DateTime.UtcNow;
-        var affected = await db.Users
-            .Where(a => a.Status == AccountStatusEnum.Locked
-                        && a.LockoutEndAt.HasValue
-                        && a.LockoutEndAt.Value <= nowUtc
-                        && !a.IsDeleted)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(a => a.Status, AccountStatusEnum.Active)
-                .SetProperty(a => a.LockoutEndAt, (DateTime?)null)
-                .SetProperty(a => a.FailedLoginAttempts, 0),
-                ct);
+        var affected = 0;
+
+        while (!ct.IsCancellationRequested)
+        {
+            var expired = await db.Users
+                .Include(account => account.Role)
+                .Where(account => account.Status == AccountStatusEnum.Locked
+                                  && account.LockoutEndAt.HasValue
+                                  && account.LockoutEndAt.Value <= nowUtc
+                                  && !account.IsDeleted)
+                .OrderBy(account => account.LockoutEndAt)
+                .ThenBy(account => account.Id)
+                .Take(BatchSize)
+                .ToListAsync(ct);
+
+            if (expired.Count == 0)
+                break;
+
+            foreach (var account in expired)
+            {
+                account.Status = AccountStatusEnum.Active;
+                account.LockoutEndAt = null;
+                account.FailedLoginAttempts = 0;
+
+                await messageProducer.PublishAsync(new AccountStatusChangedEvent(
+                    account.Id,
+                    account.Email,
+                    (int)AccountStatusEnum.Locked,
+                    (int)AccountStatusEnum.Active,
+                    "Lockout expired — scheduled auto-unlock.",
+                    Role: account.Role?.Name ?? string.Empty,
+                    FullName: account.FullName,
+                    PhoneNumber: account.PhoneNumber,
+                    IsActive: true), ct);
+            }
+
+            await db.SaveChangesAsync(ct);
+            affected += expired.Count;
+
+            if (expired.Count < BatchSize)
+                break;
+        }
 
         if (affected > 0)
             _logger.LogInformation("LockoutReconcile auto-unlocked {Count} account(s).", affected);

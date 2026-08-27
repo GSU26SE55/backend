@@ -22,12 +22,15 @@ public class AccountActivatedSyncConsumer : IConsumer<AccountActivatedEvent>
     {
         var evt = context.Message;
 
+        var account = await _unitOfWork.Accounts.GetAllAsync()
+            .FirstOrDefaultAsync(x => x.Id == evt.AccountId, context.CancellationToken);
+
+        if (account?.LastSnapshotAtUtc is { } applied && applied >= evt.OccurredAt)
+            return;
+
         await _unitOfWork.BeginTransactionAsync();
         try
         {
-            var account = await _unitOfWork.Accounts.GetAllAsync()
-                .FirstOrDefaultAsync(x => x.Id == evt.AccountId, context.CancellationToken);
-
             if (account is null)
             {
                 await _unitOfWork.Accounts.AddAsync(new AccountReadModel
@@ -40,7 +43,8 @@ public class AccountActivatedSyncConsumer : IConsumer<AccountActivatedEvent>
                     IsActive = true,
                     IsDeleted = false,
                     DeletedAt = null,
-                    LastSyncedAtUtc = DateTime.UtcNow
+                    LastSyncedAtUtc = DateTime.UtcNow,
+                    LastSnapshotAtUtc = evt.OccurredAt
                 });
             }
             else
@@ -53,6 +57,7 @@ public class AccountActivatedSyncConsumer : IConsumer<AccountActivatedEvent>
                 account.IsDeleted = false;
                 account.DeletedAt = null;
                 account.LastSyncedAtUtc = DateTime.UtcNow;
+                account.LastSnapshotAtUtc = evt.OccurredAt;
                 _unitOfWork.Accounts.UpdateAsync(account);
             }
 

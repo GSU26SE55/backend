@@ -31,6 +31,7 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
     {
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
         if (account == null)
         {
@@ -77,7 +78,11 @@ public class UnlockAccountCommandHandler : IRequestHandler<UnlockAccountCommand,
             account.Email,
             (int)AccountStatusEnum.Locked,
             (int)AccountStatusEnum.Active,
-            "Admin unlocked"), cancellationToken);
+            "Admin unlocked",
+            Role: account.Role?.Name ?? string.Empty,
+            FullName: account.FullName,
+            PhoneNumber: account.PhoneNumber,
+            IsActive: true), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

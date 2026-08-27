@@ -290,6 +290,43 @@ public class AccountSyncSnapshotPublishTests
         captured.Select(e => e.SnapshotAtUtc).Distinct().Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task Resync_StaffSnapshot_IncludesAllAuthoritativeAssignmentFields()
+    {
+        var role = NewRole("Staff");
+        var account = NewAccount(role);
+        account.StaffProfile = new AuthService.Domain.Entities.StaffProfile
+        {
+            Id = Guid.NewGuid(),
+            AccountId = account.Id,
+            EmployeeCode = "EMP-007",
+            MaxConcurrentTickets = 6,
+            IsAvailable = false,
+            SkillTier = StaffSkillTierEnum.ModuleSpecialist,
+            Skills = new List<AuthService.Domain.Entities.StaffSkill>
+            {
+                new() { Id = Guid.NewGuid(), SkillCode = "inverter", SkillLevel = 2 },
+                new() { Id = Guid.NewGuid(), SkillCode = "battery", SkillLevel = 3 },
+                new() { Id = Guid.NewGuid(), SkillCode = "battery", SkillLevel = 1 },
+                new() { Id = Guid.NewGuid(), SkillCode = "retired", SkillLevel = 1, IsDeleted = true }
+            }
+        };
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
+        var captured = Captured();
+
+        await new AccountResyncCommandHandler(uow.Object, _producer.Object)
+            .Handle(new AccountResyncCommand(), CancellationToken.None);
+
+        var snapshot = captured.Should().ContainSingle().Subject;
+        snapshot.AccountStatus.Should().Be((int)AccountStatusEnum.Active);
+        snapshot.HasStaffProfileSnapshot.Should().BeTrue();
+        snapshot.EmployeeCode.Should().Be("EMP-007");
+        snapshot.MaxConcurrentTickets.Should().Be(6);
+        snapshot.IsAvailable.Should().BeFalse();
+        snapshot.SkillTier.Should().Be((int)StaffSkillTierEnum.ModuleSpecialist);
+        snapshot.SkillCodes.Should().Equal("battery", "inverter");
+    }
+
     // ── Khôi phục tài khoản đã xoá ─────────────────────────────────────────────────────────────
 
     [Fact]

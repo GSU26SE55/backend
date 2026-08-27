@@ -46,9 +46,10 @@ public class AccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEvent>
             if (account is null && (!isCustomer || evt.IsDeleted))
                 return;
 
-            // A late snapshot must not roll the mirror back. Existing lifecycle consumers write
-            // their application time into this field, while snapshots write SnapshotAtUtc.
-            if (account is not null && account.LastSyncedAtUtc >= evt.SnapshotAtUtc)
+            // So sánh bằng mốc PHÁT SINH ở AuthService, không dùng thời điểm consumer chạy. Nhờ đó
+            // snapshot định kỳ vẫn sửa được dữ liệu bị chỉnh tay, nhưng snapshot cũ không thể ghi
+            // đè một lifecycle event mới hơn.
+            if (account?.LastSourceEventAtUtc is { } applied && applied >= evt.SnapshotAtUtc)
                 return;
 
             await _unitOfWork.BeginTransactionAsync();
@@ -63,10 +64,11 @@ public class AccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEvent>
                         FullName = evt.FullName.Trim(),
                         PhoneNumber = NormalizePhone(evt.PhoneNumber),
                         Role = evt.Role.Trim(),
-                        IsActive = evt.IsActive,
+                        IsActive = evt.AccountStatus == 1,
                         IsDeleted = false,
                         DeletedAt = null,
-                        LastSyncedAtUtc = evt.SnapshotAtUtc
+                        LastSyncedAtUtc = DateTime.UtcNow,
+                        LastSourceEventAtUtc = evt.SnapshotAtUtc
                     };
                     await _unitOfWork.CustomerAccounts.AddAsync(account);
                 }
@@ -76,17 +78,25 @@ public class AccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEvent>
                     account.FullName = evt.FullName.Trim();
                     account.PhoneNumber = NormalizePhone(evt.PhoneNumber);
                     account.Role = evt.Role.Trim();
-                    account.IsActive = isCustomer && evt.IsActive && !evt.IsDeleted;
-                    account.LastSyncedAtUtc = evt.SnapshotAtUtc;
+                    account.IsActive = isCustomer && evt.AccountStatus == 1 && !evt.IsDeleted;
+                    account.LastSyncedAtUtc = DateTime.UtcNow;
+                    account.LastSourceEventAtUtc = evt.SnapshotAtUtc;
 
                     if (evt.IsDeleted)
                     {
                         _unitOfWork.CustomerAccounts.DeleteAsync(account);
                     }
-                    else
+                    else if (isCustomer)
                     {
+                        // Reactivation: chỉ projection của role Customer hiện tại được hồi sinh.
                         account.IsDeleted = false;
                         account.DeletedAt = null;
+                        _unitOfWork.CustomerAccounts.UpdateAsync(account);
+                    }
+                    else
+                    {
+                        // Giữ row role cũ (và trạng thái soft-delete nếu có) để asset lịch sử còn
+                        // truy ngược được chủ cũ, nhưng tuyệt đối không coi nó là Customer active.
                         _unitOfWork.CustomerAccounts.UpdateAsync(account);
                     }
                 }

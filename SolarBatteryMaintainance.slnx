@@ -66,6 +66,9 @@
     <Project Path="services/AuditAggregatorService/src/AuditAggregatorService.Infrastructure/AuditAggregatorService.Infrastructure.csproj" />
     <Project Path="services/AuditAggregatorService/tests/AuditAggregatorService.IntegrationTests/AuditAggregatorService.IntegrationTests.csproj" />
   </Folder>
+  <Folder Name="/EndToEnd/">
+    <Project Path="tests/AccountProjection.E2ETests/AccountProjection.E2ETests.csproj" />
+  </Folder>
   <Folder Name="/Shared/">
     <Project Path="shared/src/SharedContracts/SharedContracts.csproj" />
     <Project Path="shared/src/SharedInfrastructure/SharedInfrastructure.csproj" />

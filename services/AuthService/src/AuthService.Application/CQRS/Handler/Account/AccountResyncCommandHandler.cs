@@ -40,7 +40,17 @@ public class AccountResyncCommandHandler : IRequestHandler<AccountResyncCommand,
         // HasQueryFilter(a => !a.IsDeleted), nên nếu thiếu thì EF loại account đã xoá một cách im
         // lặng và ý định ở comment trên không bao giờ thành hiện thực — mọi lượt đối soát đều báo
         // DeletedAccounts = 0 và không sửa được read-model nào đang giữ account đã xoá.
-        var query = _unitOfWork.Accounts.GetAllAsync().IgnoreQueryFilters().Include(a => a.Role);
+        // Chụp mốc TRƯỚC khi đọc. Nếu account bị sửa đồng thời trong lúc query đang chạy, event
+        // lifecycle của thao tác đó sẽ có mốc mới hơn và luôn thắng snapshot. Đặt mốc sau query có
+        // thể khiến snapshot mang dữ liệu cũ nhưng lại chặn event mới hơn ở consumer.
+        var snapshotAtUtc = DateTime.UtcNow;
+
+        var query = _unitOfWork.Accounts.GetAllAsync()
+            .IgnoreQueryFilters()
+            .Include(a => a.Role)
+            .Include(a => a.StaffProfile!)
+                .ThenInclude(profile => profile.Skills)
+            .AsSplitQuery();
 
         var accounts = request.AccountId.HasValue
             ? await query.Where(a => a.Id == request.AccountId.Value).ToListAsync(cancellationToken)
@@ -58,11 +68,15 @@ public class AccountResyncCommandHandler : IRequestHandler<AccountResyncCommand,
 
         // Một mốc duy nhất cho cả lượt: consumer dùng mốc này để loại snapshot về trễ, nên mọi
         // snapshot của cùng một lượt đối soát phải cùng mốc thì mới không tự loại lẫn nhau.
-        var snapshotAtUtc = DateTime.UtcNow;
         var pending = 0;
 
         foreach (var account in accounts)
         {
+            var staffProfile = account.StaffProfile is { IsDeleted: false }
+                ? account.StaffProfile
+                : null;
+            var isStaff = string.Equals(account.Role?.Name, "Staff", StringComparison.OrdinalIgnoreCase);
+
             await _messageProducer.PublishAsync(new AccountSyncSnapshotEvent(
                 account.Id,
                 account.Email,
@@ -72,7 +86,21 @@ public class AccountResyncCommandHandler : IRequestHandler<AccountResyncCommand,
                 IsActive: account.Status.IsNotifiable() && !account.IsDeleted,
                 IsDeleted: account.IsDeleted,
                 SnapshotAtUtc: snapshotAtUtc,
-                Reason: "Resync"), cancellationToken);
+                Reason: "Resync",
+                AccountStatus: (int)account.Status,
+                // Một Staff chưa có StaffProfile vẫn có trạng thái canonical (default của Auth)
+                // để lượt đối soát có thể xóa drift do sửa tay ở ticket_db.
+                HasStaffProfileSnapshot: isStaff || staffProfile is not null,
+                EmployeeCode: staffProfile?.EmployeeCode,
+                MaxConcurrentTickets: staffProfile?.MaxConcurrentTickets ?? 3,
+                IsAvailable: staffProfile?.IsAvailable ?? true,
+                SkillTier: (int)(staffProfile?.SkillTier ?? StaffSkillTierEnum.Generalist),
+                SkillCodes: staffProfile?.Skills
+                    .Where(skill => !skill.IsDeleted)
+                    .Select(skill => skill.SkillCode)
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(code => code, StringComparer.Ordinal)
+                    .ToList() ?? new List<string>()), cancellationToken);
 
             if (++pending >= BatchSize)
             {

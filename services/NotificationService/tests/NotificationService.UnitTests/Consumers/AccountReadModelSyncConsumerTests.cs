@@ -144,4 +144,62 @@ public class AccountReadModelSyncConsumerTests
         cap.Deleted.Should().BeEmpty();
         cap.Uow.Verify(u => u.BeginTransactionAsync(), Times.Never);
     }
+
+    [Fact]
+    public async Task StatusChanged_AutoLock_UpdatesNotificationEligibilityImmediately()
+    {
+        var id = Guid.NewGuid();
+        var existing = Existing(id, "Customer");
+        var cap = BuildUow(new[] { existing });
+        var evt = new AccountStatusChangedEvent(
+            id, "new@example.com", 1, 2, "automatic lockout",
+            Role: "Customer", FullName: "Customer A", PhoneNumber: "0901234567", IsActive: true);
+
+        await new AccountStatusChangedSyncConsumer(cap.Uow.Object).Consume(Ctx(evt));
+
+        cap.Updated.Should().ContainSingle();
+        existing.Email.Should().Be("new@example.com");
+        existing.IsActive.Should().BeTrue("Locked accounts remain eligible for operational notifications");
+        existing.LastSnapshotAtUtc.Should().Be(evt.OccurredAt);
+    }
+
+    [Fact]
+    public async Task StatusChanged_StaleEvent_DoesNotOverwriteNewerSnapshot()
+    {
+        var id = Guid.NewGuid();
+        var existing = Existing(id, "Customer");
+        var incomingAt = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
+        existing.LastSnapshotAtUtc = incomingAt.AddMinutes(1);
+        var cap = BuildUow(new[] { existing });
+        var evt = new AccountStatusChangedEvent(
+            id, "old@example.com", 1, 3, "stale",
+            Role: "Customer", FullName: "Old", IsActive: false)
+        {
+            OccurredAt = incomingAt
+        };
+
+        await new AccountStatusChangedSyncConsumer(cap.Uow.Object).Consume(Ctx(evt));
+
+        cap.Updated.Should().BeEmpty();
+        existing.Email.Should().Be("old@x.z");
+        existing.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RoleChanged_MissingReadModel_CreatesCompleteProjection()
+    {
+        var cap = BuildUow(Array.Empty<AccountReadModel>());
+        var changedAt = new DateTime(2026, 8, 2, 0, 0, 0, DateTimeKind.Utc);
+        var evt = new AccountRoleChangedEvent(
+            Guid.NewGuid(), "ADMIN@EXAMPLE.COM", "Admin A", null,
+            "Staff", "Admin", changedAt, AccountStatus: 1);
+
+        await new AccountRoleChangedSyncConsumer(cap.Uow.Object).Consume(Ctx(evt));
+
+        cap.Added.Should().ContainSingle();
+        cap.Added[0].Email.Should().Be("admin@example.com");
+        cap.Added[0].Role.Should().Be("Admin");
+        cap.Added[0].IsActive.Should().BeTrue();
+        cap.Added[0].LastSnapshotAtUtc.Should().Be(changedAt);
+    }
 }

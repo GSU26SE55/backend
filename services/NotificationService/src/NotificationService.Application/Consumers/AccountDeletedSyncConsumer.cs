@@ -26,11 +26,15 @@ public class AccountDeletedSyncConsumer : IConsumer<AccountDeletedEvent>
         if (account is null)
             return;
 
+        if (account.LastSnapshotAtUtc is { } applied && applied >= evt.OccurredAt)
+            return;
+
         await _unitOfWork.BeginTransactionAsync();
         try
         {
             account.IsActive = false;
             account.LastSyncedAtUtc = DateTime.UtcNow;
+            account.LastSnapshotAtUtc = evt.OccurredAt;
             _unitOfWork.Accounts.DeleteAsync(account);
 
             await _unitOfWork.CommitTransactionAsync();

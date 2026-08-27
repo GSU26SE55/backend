@@ -39,11 +39,18 @@ public class AccountSyncSnapshotConsumerTests
     }
 
     private void Seed(StaffAccount? staff = null, CustomerAccount? customer = null)
+        => SeedMany(
+            staff is null ? Array.Empty<StaffAccount>() : new[] { staff },
+            customer is null ? Array.Empty<CustomerAccount>() : new[] { customer });
+
+    private void SeedMany(
+        IEnumerable<StaffAccount>? staffs = null,
+        IEnumerable<CustomerAccount>? customers = null)
     {
         _staffRepo.Setup(r => r.GetAllAsync())
-            .Returns((staff is null ? Array.Empty<StaffAccount>() : new[] { staff }).AsQueryable().BuildMock());
+            .Returns((staffs ?? Array.Empty<StaffAccount>()).AsQueryable().BuildMock());
         _customerRepo.Setup(r => r.GetAllAsync())
-            .Returns((customer is null ? Array.Empty<CustomerAccount>() : new[] { customer }).AsQueryable().BuildMock());
+            .Returns((customers ?? Array.Empty<CustomerAccount>()).AsQueryable().BuildMock());
     }
 
     private TicketAccountSyncSnapshotConsumer Consumer()
@@ -54,11 +61,20 @@ public class AccountSyncSnapshotConsumerTests
         string role,
         bool isActive = true,
         bool isDeleted = false,
-        DateTime? snapshotAtUtc = null)
+        DateTime? snapshotAtUtc = null,
+        int accountStatus = 1,
+        bool hasStaffProfile = false,
+        string? employeeCode = null,
+        int maxConcurrentTickets = 3,
+        bool isAvailable = true,
+        int skillTier = 0,
+        List<string>? skillCodes = null)
     {
         var msg = new AccountSyncSnapshotEvent(
             accountId, "user@example.com", "Nguyễn Văn A", "0901234567",
-            role, isActive, isDeleted, snapshotAtUtc ?? DateTime.UtcNow, "Resync");
+            role, isActive, isDeleted, snapshotAtUtc ?? DateTime.UtcNow, "Resync",
+            accountStatus, hasStaffProfile, employeeCode, maxConcurrentTickets,
+            isAvailable, skillTier, skillCodes);
         var mock = new Mock<ConsumeContext<AccountSyncSnapshotEvent>>();
         mock.SetupGet(c => c.Message).Returns(msg);
         mock.SetupGet(c => c.MessageId).Returns(Guid.NewGuid());
@@ -102,6 +118,7 @@ public class AccountSyncSnapshotConsumerTests
             Role = "Manager",
             Status = AccountStatusEnum.Active,
             LastSyncedAt = DateTime.UtcNow,
+            LastSourceEventAtUtc = DateTime.UtcNow,
         };
         Seed(staff: staff);
 
@@ -127,18 +144,17 @@ public class AccountSyncSnapshotConsumerTests
     }
 
     [Fact]
-    public async Task CustomerRole_WithNoExistingMirror_CreatesNothing()
+    public async Task CustomerRole_WithNoExistingMirror_CreatesCustomerProjection()
     {
-        // Đối soát KHÔNG phải là nơi dựng bản sao cho Customer chưa từng dính tới ticket:
-        // TicketAccountActivatedConsumer lo việc đó. Ở đây chỉ sửa những bản sao đã tồn tại,
-        // nếu không mỗi lần resync toàn hệ thống lại đổ toàn bộ Customer vào ticket_db.
+        // Đây là repair path cho event Activated bị lỡ hoặc database Ticket được dựng lại riêng.
         var accountId = Guid.NewGuid();
 
         await Consumer().Consume(Ctx(accountId, "Customer"));
 
-        _customerRepo.Verify(r => r.AddAsync(It.IsAny<CustomerAccount>()), Times.Never);
+        _customerRepo.Verify(r => r.AddAsync(It.Is<CustomerAccount>(c =>
+            c.AccountId == accountId && c.Status == AccountStatusEnum.Active)), Times.Once);
         _staffRepo.Verify(r => r.AddAsync(It.IsAny<StaffAccount>()), Times.Never);
-        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -191,6 +207,160 @@ public class AccountSyncSnapshotConsumerTests
 
         _staffRepo.Verify(r => r.AddAsync(It.IsAny<StaffAccount>()), Times.Never);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task FullStaffSnapshot_RepairsEveryStaffProjectionField()
+    {
+        var accountId = Guid.NewGuid();
+        var staff = new StaffAccount
+        {
+            Id = accountId,
+            AccountId = accountId,
+            Email = "drift@example.com",
+            FullName = "Drifted",
+            Role = "Staff",
+            Status = AccountStatusEnum.Active,
+            EmployeeCode = "WRONG",
+            MaxConcurrentTickets = 99,
+            IsAvailable = false,
+            SkillTier = StaffSkillTierEnum.SeniorSpecialist,
+            SkillCodes = new List<string> { "WRONG" }
+        };
+        Seed(staff: staff);
+
+        await Consumer().Consume(Ctx(
+            accountId,
+            "Staff",
+            hasStaffProfile: true,
+            employeeCode: "EMP-001",
+            maxConcurrentTickets: 5,
+            isAvailable: true,
+            skillTier: (int)StaffSkillTierEnum.ModuleSpecialist,
+            skillCodes: new List<string> { " inverter ", "battery", "battery" }));
+
+        staff.EmployeeCode.Should().Be("EMP-001");
+        staff.MaxConcurrentTickets.Should().Be(5);
+        staff.IsAvailable.Should().BeTrue();
+        staff.SkillTier.Should().Be(StaffSkillTierEnum.ModuleSpecialist);
+        staff.SkillCodes.Should().Equal("battery", "inverter");
+    }
+
+    [Fact]
+    public async Task FullStaffSnapshot_WithMissingProjection_KeepsNewEntityInAddedState()
+    {
+        var accountId = Guid.NewGuid();
+
+        await Consumer().Consume(Ctx(
+            accountId,
+            "Staff",
+            hasStaffProfile: true,
+            employeeCode: "EMP-NEW",
+            maxConcurrentTickets: 6,
+            isAvailable: false,
+            skillTier: (int)StaffSkillTierEnum.SeniorSpecialist,
+            skillCodes: new List<string> { "SOLAR" }));
+
+        _staffRepo.Verify(r => r.AddAsync(It.Is<StaffAccount>(staff =>
+            staff.AccountId == accountId
+            && staff.EmployeeCode == "EMP-NEW"
+            && staff.MaxConcurrentTickets == 6
+            && !staff.IsAvailable
+            && staff.SkillTier == StaffSkillTierEnum.SeniorSpecialist
+            && staff.SkillCodes.SequenceEqual(new[] { "SOLAR" }))), Times.Once);
+        _staffRepo.Verify(r => r.UpdateAsync(It.IsAny<StaffAccount>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LegacyEmployeeCodeAlias_IsDeactivatedAndReleasedBeforeCanonicalStaffInsert()
+    {
+        var canonicalAccountId = Guid.NewGuid();
+        var legacy = new StaffAccount
+        {
+            Id = Guid.NewGuid(),
+            AccountId = Guid.NewGuid(),
+            Email = "user@example.com",
+            FullName = "Legacy seed",
+            EmployeeCode = "EMP-LEGACY",
+            Role = "Staff",
+            Status = AccountStatusEnum.Active,
+            IsAvailable = true,
+            LastSyncedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        SeedMany(staffs: new[] { legacy });
+
+        await Consumer().Consume(Ctx(
+            canonicalAccountId,
+            "Staff",
+            hasStaffProfile: true,
+            employeeCode: "EMP-LEGACY"));
+
+        legacy.Status.Should().Be(AccountStatusEnum.Inactive);
+        legacy.IsAvailable.Should().BeFalse();
+        legacy.EmployeeCode.Should().BeNull();
+        _staffRepo.Verify(r => r.AddAsync(It.Is<StaffAccount>(staff =>
+            staff.AccountId == canonicalAccountId
+            && staff.EmployeeCode == "EMP-LEGACY")), Times.Once);
+        // Flush alias UPDATE trước canonical INSERT để unique employee_code không còn xung đột.
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task CanonicalStaffSnapshot_DeactivatesLegacyEmailAlias()
+    {
+        var canonicalAccountId = Guid.NewGuid();
+        var canonical = new StaffAccount
+        {
+            Id = canonicalAccountId,
+            AccountId = canonicalAccountId,
+            Email = "user@example.com",
+            Role = "Staff",
+            Status = AccountStatusEnum.Active,
+            IsAvailable = true,
+            LastSyncedAt = DateTime.UtcNow.AddDays(-1),
+        };
+        var legacy = new StaffAccount
+        {
+            Id = Guid.NewGuid(),
+            AccountId = Guid.NewGuid(),
+            Email = "user@example.com",
+            Role = "Staff",
+            Status = AccountStatusEnum.Active,
+            IsAvailable = true,
+            LastSyncedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        SeedMany(staffs: new[] { canonical, legacy });
+
+        await Consumer().Consume(Ctx(canonicalAccountId, "Manager"));
+
+        canonical.Role.Should().Be("Manager");
+        legacy.Status.Should().Be(AccountStatusEnum.Inactive);
+        legacy.IsAvailable.Should().BeFalse();
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CustomerSnapshot_DeactivatesLegacyEmailAliasAndCreatesCanonicalRow()
+    {
+        var canonicalAccountId = Guid.NewGuid();
+        var legacy = new CustomerAccount
+        {
+            Id = Guid.NewGuid(),
+            AccountId = Guid.NewGuid(),
+            Email = "user@example.com",
+            FullName = "Legacy seed",
+            Status = AccountStatusEnum.Active,
+            LastSyncedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        SeedMany(customers: new[] { legacy });
+
+        await Consumer().Consume(Ctx(canonicalAccountId, "Customer"));
+
+        legacy.Status.Should().Be(AccountStatusEnum.Inactive);
+        _customerRepo.Verify(r => r.AddAsync(It.Is<CustomerAccount>(customer =>
+            customer.AccountId == canonicalAccountId)), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

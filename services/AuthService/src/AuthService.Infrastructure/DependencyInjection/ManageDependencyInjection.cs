@@ -65,6 +65,14 @@ public static class ManageDependencyInjection
         // #AUTH-42: hard-delete account đã soft-delete > 90 ngày.
         services.AddHostedService<AccountHardDeleteBackgroundService>();
 
+        // Reconciliation loop: realtime account events are primary; periodic authoritative
+        // snapshots repair missed messages and downstream rows that drifted from AuthService.
+        services.AddOptions<AccountProjectionReconciliationOptions>()
+            .Bind(configuration.GetSection(AccountProjectionReconciliationOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddHostedService<AccountProjectionReconciliationBackgroundService>();
+
         // Concurrent session limit policy. Bind từ section "Session" hoặc dùng default (5).
         services.Configure<SessionOptions>(configuration.GetSection(SessionOptions.SectionName));
 

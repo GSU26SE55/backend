@@ -144,7 +144,11 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                         account.Email,
                         (int)AccountStatusEnum.Locked,
                         (int)AccountStatusEnum.Active,
-                        "Lockout expired — auto-unlocked on login."), cancellationToken);
+                        "Lockout expired — auto-unlocked on login.",
+                        Role: account.Role?.Name ?? string.Empty,
+                        FullName: account.FullName,
+                        PhoneNumber: account.PhoneNumber,
+                        IsActive: true), cancellationToken);
                 }
                 else
                 {
@@ -205,7 +209,11 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                     account.Email,
                     (int)previousStatus,
                     (int)AccountStatusEnum.Locked,
-                    $"Auto-locked after {MaxFailedAttempts} failed password attempts."), cancellationToken);
+                    $"Auto-locked after {MaxFailedAttempts} failed password attempts.",
+                    Role: account.Role?.Name ?? string.Empty,
+                    FullName: account.FullName,
+                    PhoneNumber: account.PhoneNumber,
+                    IsActive: account.Status.IsNotifiable()), cancellationToken);
             }
 
             await PublishLoginAttempt(account.Id, account.Email, LoginAttemptResult.WrongPassword,

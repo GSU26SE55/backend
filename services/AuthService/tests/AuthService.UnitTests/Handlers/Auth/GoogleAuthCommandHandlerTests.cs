@@ -4,6 +4,8 @@ using AuthService.Application.Interfaces.Helpers;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Enums;
 using AuthService.UnitTests.Helpers;
+using SharedContracts.Events;
+using SharedContracts.Interfaces;
 
 namespace AuthService.UnitTests.Handlers.Auth;
 
@@ -102,6 +104,54 @@ public class GoogleAuthCommandHandlerTests
         resp.IsSuccess.Should().BeTrue();
         existing.GoogleId.Should().Be("google-sub-2");
         existing.Provider.Should().Be("Google");
+    }
+
+    [Fact]
+    public async Task Google_ExistingLockedAccount_PublishesUnlockProjectionEvent()
+    {
+        var role = new Role
+        {
+            Id = CustomerRoleId,
+            Name = "Customer",
+            NormalizedName = "CUSTOMER",
+            Status = RoleStatusEnum.Active
+        };
+        var existing = new Account
+        {
+            Id = Guid.NewGuid(),
+            Email = "locked@gmail.com",
+            PasswordHash = "x",
+            FullName = "Locked Customer",
+            Status = AccountStatusEnum.Locked,
+            EmailConfirmed = true,
+            GoogleId = "google-locked",
+            RoleId = role.Id,
+            Role = role
+        };
+        _google.Setup(g => g.ValidateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GoogleUserInfo
+            {
+                Email = existing.Email,
+                EmailVerified = true,
+                Subject = existing.GoogleId
+            });
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { existing });
+        var producer = new Mock<IMessageProducerService>();
+        var handler = new GoogleAuthCommandHandler(
+            uow.Object, _jwt.Object, _hasher.Object, _google.Object, producer.Object,
+            MockPublisher.NoOp().Object,
+            Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
+
+        var response = await handler.Handle(new GoogleAuthCommand { IdToken = "x" }, CancellationToken.None);
+
+        response.IsSuccess.Should().BeTrue();
+        existing.Status.Should().Be(AccountStatusEnum.Active);
+        producer.Verify(item => item.PublishAsync(
+            It.Is<AccountStatusChangedEvent>(evt =>
+                evt.AccountId == existing.Id
+                && evt.NewStatus == (int)AccountStatusEnum.Active
+                && evt.Role == "Customer"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

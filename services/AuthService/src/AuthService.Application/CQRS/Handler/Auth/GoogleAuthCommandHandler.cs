@@ -67,6 +67,7 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
 
         var (ipAddress, userAgent, deviceId) = ClientInfoHelper.Resolve(_httpContextAccessor?.HttpContext);
         var isNewAccount = account == null;
+        var wasLocked = account?.Status == AccountStatusEnum.Locked;
 
         // Default role cho Google sign-up lần đầu là Customer. Resolve theo NormalizedName tại runtime —
         // KHÔNG hardcode GUID (xem SystemRoleResolver).
@@ -180,6 +181,19 @@ public class GoogleAuthCommandHandler : IRequestHandler<GoogleAuthCommand, Login
                 account.PhoneNumber,
                 roleName,
                 CreationSource: "GoogleOAuth"), cancellationToken);
+        }
+        else if (wasLocked)
+        {
+            await _messageProducer.PublishAsync(new AccountStatusChangedEvent(
+                account.Id,
+                account.Email,
+                (int)AccountStatusEnum.Locked,
+                (int)AccountStatusEnum.Active,
+                "Lockout expired — auto-unlocked by Google login.",
+                Role: roleName,
+                FullName: account.FullName,
+                PhoneNumber: account.PhoneNumber,
+                IsActive: true), cancellationToken);
         }
 
         await _publisher.Publish(new SessionCreatedNotification(account.Id), cancellationToken);

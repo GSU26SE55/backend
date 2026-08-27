@@ -1,4 +1,5 @@
 using BatteryService.Application.Interfaces;
+using BatteryService.Domain.Entities;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -17,9 +18,9 @@ namespace BatteryService.Infrastructure.Consumers;
 /// sang Staff vẫn nằm đó dưới dạng khách hàng đang hoạt động.
 /// </para>
 /// <para>
-/// Không tạo mới bản sao khi role chuyển THÀNH Customer mà trước đó chưa có: pin được gán cho
-/// customer nào là việc của luồng gán tài sản, không phải của một sự kiện đổi role. Ở đây chỉ
-/// cập nhật cái đã tồn tại — làm hơn thế là dựng ra khách hàng không có tài sản nào.
+/// Khi role chuyển THÀNH Customer phải tạo projection ngay cả khi chưa có pin. Bảng này là bản sao
+/// account Customer, không phải bảng ownership của pin; bỏ qua ở đây làm count lệch vĩnh viễn nếu
+/// event Activated ban đầu xảy ra lúc account còn là Staff/Manager/Admin.
 /// </para>
 /// </remarks>
 public class AccountRoleChangedConsumer : IConsumer<AccountRoleChangedEvent>
@@ -50,24 +51,52 @@ public class AccountRoleChangedConsumer : IConsumer<AccountRoleChangedEvent>
                 .GetAllAsync()
                 .FirstOrDefaultAsync(item => item.Id == evt.AccountId, context.CancellationToken);
 
-            if (account is null)
+            var isCustomer = evt.NewRole.Equals(CustomerRole, StringComparison.OrdinalIgnoreCase);
+
+            if (account is null && !isCustomer)
                 return;
 
-            var isCustomer = evt.NewRole.Equals(CustomerRole, StringComparison.OrdinalIgnoreCase);
+            if (account?.LastSourceEventAtUtc is { } applied && applied >= evt.ChangedAtUtc)
+                return;
 
             await _unitOfWork.BeginTransactionAsync();
             try
             {
-                account.Email = evt.Email.Trim().ToLowerInvariant();
-                account.FullName = evt.FullName;
-                account.PhoneNumber = evt.PhoneNumber;
-                account.Role = evt.NewRole;
-                // Rời khỏi Customer ⇒ ngừng coi là khách hàng đang hoạt động. Giữ lại bản ghi để
-                // pin đã gán vẫn truy ngược được chủ cũ, thay vì xoá và làm mồ côi dữ liệu.
-                account.IsActive = isCustomer;
-                account.LastSyncedAtUtc = DateTime.UtcNow;
+                if (account is null)
+                {
+                    await _unitOfWork.CustomerAccounts.AddAsync(new CustomerAccount
+                    {
+                        Id = evt.AccountId,
+                        Email = evt.Email.Trim().ToLowerInvariant(),
+                        FullName = evt.FullName.Trim(),
+                        PhoneNumber = string.IsNullOrWhiteSpace(evt.PhoneNumber) ? null : evt.PhoneNumber.Trim(),
+                        Role = evt.NewRole.Trim(),
+                        IsActive = evt.AccountStatus == 1,
+                        IsDeleted = false,
+                        DeletedAt = null,
+                        LastSyncedAtUtc = DateTime.UtcNow,
+                        LastSourceEventAtUtc = evt.ChangedAtUtc,
+                    });
+                }
+                else
+                {
+                    account.Email = evt.Email.Trim().ToLowerInvariant();
+                    account.FullName = evt.FullName.Trim();
+                    account.PhoneNumber = string.IsNullOrWhiteSpace(evt.PhoneNumber) ? null : evt.PhoneNumber.Trim();
+                    account.Role = evt.NewRole.Trim();
+                    // Rời khỏi Customer ⇒ ngừng coi là khách hàng đang hoạt động. Giữ lại bản ghi
+                    // để pin lịch sử vẫn truy ngược được chủ cũ.
+                    account.IsActive = isCustomer && evt.AccountStatus == 1;
+                    account.LastSyncedAtUtc = DateTime.UtcNow;
+                    account.LastSourceEventAtUtc = evt.ChangedAtUtc;
+                    if (isCustomer)
+                    {
+                        account.IsDeleted = false;
+                        account.DeletedAt = null;
+                    }
 
-                _unitOfWork.CustomerAccounts.UpdateAsync(account);
+                    _unitOfWork.CustomerAccounts.UpdateAsync(account);
+                }
                 await _unitOfWork.CommitTransactionAsync();
             }
             catch

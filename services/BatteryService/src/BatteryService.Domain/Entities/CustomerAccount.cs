@@ -20,4 +20,11 @@ public class CustomerAccount : AuditableEntity
     public bool IsActive { get; set; } = true;
 
     public DateTime LastSyncedAtUtc { get; set; }
+
+    /// <summary>
+    /// Mốc phát sinh mới nhất từ AuthService đã áp vào projection. Khác với
+    /// <see cref="LastSyncedAtUtc"/> (thời điểm consumer chạy), mốc này dùng để chặn event tới trễ
+    /// kéo dữ liệu lùi về trạng thái cũ.
+    /// </summary>
+    public DateTime? LastSourceEventAtUtc { get; set; }
 }
