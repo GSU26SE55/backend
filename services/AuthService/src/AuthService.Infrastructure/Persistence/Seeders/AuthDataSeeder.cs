@@ -464,12 +464,29 @@ public class AuthDataSeeder
             .Where(m => emailToAccount.ContainsKey(m.Email))
             .Select(m => emailToAccount[m.Email].Id)
             .ToList();
+        var seedEmployeeCodes = staffMap
+            .Select(m => m.EmployeeCode)
+            .ToList();
 
-        var existingProfileIds = await _dbContext.StaffProfiles
+        // EmployeeCode is unique across every row, including soft-deleted profiles. Production
+        // data may legitimately retain one of the historical demo codes on another account (for
+        // example after an account was recreated or data was repaired manually). Looking up only
+        // by the current seed AccountIds would then attempt a duplicate insert and prevent the
+        // entire AuthService from starting. Preserve the existing owner and skip only the
+        // conflicting demo profile instead of mutating production data during startup.
+        var existingProfiles = await _dbContext.StaffProfiles
             .IgnoreQueryFilters()
-            .Where(p => staffAccountIds.Contains(p.AccountId))
-            .Select(p => p.AccountId)
+            .Where(p => staffAccountIds.Contains(p.AccountId) ||
+                        (p.EmployeeCode != null && seedEmployeeCodes.Contains(p.EmployeeCode)))
+            .Select(p => new { p.AccountId, p.EmployeeCode })
             .ToListAsync(cancellationToken);
+        var existingProfileAccountIds = existingProfiles
+            .Select(p => p.AccountId)
+            .ToHashSet();
+        var occupiedEmployeeCodes = existingProfiles
+            .Where(p => !string.IsNullOrWhiteSpace(p.EmployeeCode))
+            .Select(p => p.EmployeeCode!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var now = DateTime.UtcNow;
         var newProfiles = new List<StaffProfile>();
@@ -479,8 +496,16 @@ public class AuthDataSeeder
         {
             if (!emailToAccount.TryGetValue(entry.Email, out var account))
                 continue;
-            if (existingProfileIds.Contains(account.Id))
+            if (existingProfileAccountIds.Contains(account.Id))
                 continue;
+            if (!occupiedEmployeeCodes.Add(entry.EmployeeCode))
+            {
+                _logger.LogWarning(
+                    "Skipping demo StaffProfile for AccountId {AccountId}: EmployeeCode {EmployeeCode} is already assigned to another profile.",
+                    account.Id,
+                    entry.EmployeeCode);
+                continue;
+            }
 
             newProfiles.Add(new StaffProfile
             {
@@ -493,6 +518,7 @@ public class AuthDataSeeder
                 SkillTier = entry.Tier,
                 CreatedAt = now
             });
+            existingProfileAccountIds.Add(account.Id);
 
             foreach (var skillCode in entry.Skills)
             {

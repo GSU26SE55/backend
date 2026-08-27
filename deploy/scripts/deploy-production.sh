@@ -362,10 +362,39 @@ helm lint "${chart_dir}" "${helm_value_args[@]}"
 
 rendered_manifest="$(mktemp)"
 backup_cronjob_manifest="$(mktemp)"
-cleanup_rendered_manifest() {
+previous_helm_revision=""
+post_upgrade_rollback_pending=false
+
+cleanup_deploy() {
+  local exit_status=$?
+
+  # Avoid recursively invoking this handler if Helm rollback itself fails.
+  trap - EXIT
   rm -f "${rendered_manifest}" "${backup_cronjob_manifest}"
+
+  if (( exit_status != 0 )) \
+    && [[ "${post_upgrade_rollback_pending}" == true ]] \
+    && [[ -n "${previous_helm_revision}" ]]; then
+    printf 'Post-upgrade validation failed; rolling Helm release %s back to revision %s.\n' \
+      "${helm_release}" "${previous_helm_revision}" >&2
+
+    if helm rollback "${helm_release}" "${previous_helm_revision}" \
+      --namespace "${namespace}" \
+      --cleanup-on-fail \
+      --wait \
+      --timeout 25m; then
+      printf 'Helm rollback completed: release=%s revision=%s\n' \
+        "${helm_release}" "${previous_helm_revision}" >&2
+    else
+      printf 'CRITICAL: automatic Helm rollback failed: release=%s target_revision=%s\n' \
+        "${helm_release}" "${previous_helm_revision}" >&2
+      helm status "${helm_release}" --namespace "${namespace}" >&2 || true
+    fi
+  fi
+
+  exit "${exit_status}"
 }
-trap cleanup_rendered_manifest EXIT
+trap cleanup_deploy EXIT
 
 helm template "${helm_release}" "${chart_dir}" \
   --namespace "${namespace}" \
@@ -405,6 +434,17 @@ else
   printf 'No existing PostgreSQL backup CronJob; skipping backup for initial Helm install\n'
 fi
 
+# Helm --atomic only rolls back failures that occur inside `helm upgrade`. The
+# production script performs additional rollout, observability and public TLS
+# validation afterwards, so remember the last healthy revision and restore it
+# if any of those fail.
+if helm status "${helm_release}" --namespace "${namespace}" >/dev/null 2>&1; then
+  previous_helm_revision="$(
+    helm history "${helm_release}" --namespace "${namespace}" -o json |
+      jq -er 'map(select(.status == "deployed")) | last | .revision'
+  )"
+fi
+
 helm_args=(
   upgrade --install "${helm_release}" "${chart_dir}"
   --namespace "${namespace}"
@@ -417,16 +457,75 @@ helm_args=(
 )
 
 helm "${helm_args[@]}"
+post_upgrade_rollback_pending=true
+
+print_workload_failure_diagnostics() {
+  local resource="$1"
+  local component
+  local container
+  local pod
+  local -a containers=()
+  local -a pods=()
+
+  printf '=== FAILED WORKLOAD: %s ===\n' "${resource}" >&2
+  kubectl -n "${namespace}" get "${resource}" -o wide >&2 || true
+  kubectl -n "${namespace}" describe "${resource}" >&2 || true
+
+  component="$(
+    kubectl -n "${namespace}" get "${resource}" \
+      -o jsonpath='{.spec.template.metadata.labels.app\.kubernetes\.io/component}' \
+      2>/dev/null || true
+  )"
+
+  if [[ -n "${component}" ]]; then
+    mapfile -t pods < <(
+      kubectl -n "${namespace}" get pod \
+        -l "app.kubernetes.io/component=${component}" \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+    )
+  fi
+
+  if [[ "${#pods[@]}" -eq 0 ]]; then
+    printf 'No pods found for failed workload %s (component=%s).\n' \
+      "${resource}" "${component:-unknown}" >&2
+  fi
+
+  for pod in "${pods[@]}"; do
+    [[ -n "${pod}" ]] || continue
+    printf '=== POD DIAGNOSTICS: %s ===\n' "${pod}" >&2
+    kubectl -n "${namespace}" get pod "${pod}" -o wide >&2 || true
+    kubectl -n "${namespace}" describe pod "${pod}" >&2 || true
+
+    mapfile -t containers < <(
+      kubectl -n "${namespace}" get pod "${pod}" \
+        -o jsonpath='{range .spec.initContainers[*]}{.name}{"\n"}{end}{range .spec.containers[*]}{.name}{"\n"}{end}'
+    )
+
+    for container in "${containers[@]}"; do
+      [[ -n "${container}" ]] || continue
+      printf '%s\n' "=== CURRENT LOGS: ${pod}/${container} ===" >&2
+      kubectl -n "${namespace}" logs "${pod}" -c "${container}" \
+        --timestamps --tail=250 >&2 || true
+      printf '%s\n' "=== PREVIOUS LOGS: ${pod}/${container} ===" >&2
+      kubectl -n "${namespace}" logs "${pod}" -c "${container}" \
+        --previous --timestamps --tail=250 >&2 || true
+    done
+  done
+
+  printf '%s\n' '=== RESOURCE QUOTA ===' >&2
+  kubectl -n "${namespace}" describe resourcequota >&2 || true
+  printf '%s\n' '=== RECENT NAMESPACE EVENTS ===' >&2
+  kubectl -n "${namespace}" get event \
+    --sort-by=.metadata.creationTimestamp >&2 || true
+}
 
 # Helm --wait covers the release resources. Explicit rollout checks provide a
 # useful resource name on failure without waiting for completed Job pods to
 # become Ready (a completed Pod never has Ready=True).
 while IFS= read -r resource; do
   [[ -n "${resource}" ]] || continue
-  if ! kubectl -n "${namespace}" rollout status "${resource}" --timeout=10m; then
-    kubectl -n "${namespace}" describe "${resource}" >&2 || true
-    kubectl -n "${namespace}" get event \
-      --sort-by=.metadata.creationTimestamp >&2 || true
+  if ! kubectl -n "${namespace}" rollout status "${resource}" --timeout=15m; then
+    print_workload_failure_diagnostics "${resource}"
     printf 'workload rollout failed after Helm upgrade: %s\n' "${resource}" >&2
     exit 1
   fi
@@ -693,3 +792,5 @@ ln -sfn "${release_dir}" "${root}/current"
 
 printf 'Backend production deployed: sha=%s helm_revision=%s\n' \
   "${release_sha}" "$(helm history "${helm_release}" -n "${namespace}" -o json | jq -r '.[-1].revision')"
+
+post_upgrade_rollback_pending=false

@@ -625,4 +625,33 @@ else
   FAILED=1
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 15: Helm --atomic cannot undo failures from validations executed after
+# `helm upgrade` returns. Production must remember the prior deployed revision,
+# collect current/previous pod logs, and roll back on every later failure.
+# ---------------------------------------------------------------------------
+ROLLOUT_RECOVERY_FAILED=0
+
+# These are intentionally literal shell fragments from the deploy source.
+# shellcheck disable=SC2016
+for required_contract in \
+  'previous_helm_revision=' \
+  'post_upgrade_rollback_pending=true' \
+  'helm rollback "${helm_release}" "${previous_helm_revision}"' \
+  'print_workload_failure_diagnostics "${resource}"' \
+  '--previous --timestamps --tail=250' \
+  'describe resourcequota'
+do
+  if ! grep -Fq -- "${required_contract}" "${PRODUCTION_DEPLOY}"; then
+    echo "FAIL: ${PRODUCTION_DEPLOY} is missing rollout recovery contract: ${required_contract}"
+    ROLLOUT_RECOVERY_FAILED=1
+  fi
+done
+
+if [ "${ROLLOUT_RECOVERY_FAILED}" -eq 0 ]; then
+  echo 'PASS: post-upgrade validation failures retain pod evidence and automatically roll back'
+else
+  FAILED=1
+fi
+
 exit "$FAILED"
