@@ -82,7 +82,8 @@ public class DeactivateMeCommandHandler : IRequestHandler<DeactivateMeCommand, A
             IsActive: AccountStatusEnum.Inactive.IsNotifiable(),
             IsDeleted: false,
             SnapshotAtUtc: DateTime.UtcNow,
-            Reason: "StatusChanged"), cancellationToken);
+            Reason: "StatusChanged",
+            AccountStatus: (int)AccountStatusEnum.Inactive), cancellationToken);
 
         // GH-766 — Battery/Ticket đồng bộ trạng thái account qua event này; trước đây không nơi nào
         // publish nó nên hai read-model kia vẫn thấy account Active sau khi bị khoá/vô hiệu hoá.
@@ -91,7 +92,11 @@ public class DeactivateMeCommandHandler : IRequestHandler<DeactivateMeCommand, A
             account.Email,
             (int)oldStatus,
             (int)AccountStatusEnum.Inactive,
-            "Self deactivated"), cancellationToken);
+            "Self deactivated",
+            Role: account.Role?.Name ?? string.Empty,
+            FullName: account.FullName,
+            PhoneNumber: account.PhoneNumber,
+            IsActive: false), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

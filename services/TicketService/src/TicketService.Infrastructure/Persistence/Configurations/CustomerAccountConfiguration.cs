@@ -36,6 +36,9 @@ public class CustomerAccountConfiguration : IEntityTypeConfiguration<CustomerAcc
         builder.Property(e => e.LastSyncedAt)
             .HasColumnName("last_synced_at");
 
+        builder.Property(e => e.LastSourceEventAtUtc)
+            .HasColumnName("last_source_event_at_utc");
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 

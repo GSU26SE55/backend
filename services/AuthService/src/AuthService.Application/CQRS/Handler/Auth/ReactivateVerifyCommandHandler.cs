@@ -91,7 +91,8 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
             IsActive: AccountStatusEnum.Active.IsNotifiable(),
             IsDeleted: false,
             SnapshotAtUtc: DateTime.UtcNow,
-            Reason: "Reactivated"), cancellationToken);
+            Reason: "Reactivated",
+            AccountStatus: (int)AccountStatusEnum.Active), cancellationToken);
 
         // GH-766 — Battery/Ticket đồng bộ trạng thái account qua event này; trước đây không nơi nào
         // publish nó nên hai read-model kia vẫn thấy account Active sau khi bị khoá/vô hiệu hoá.
@@ -100,7 +101,11 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
             account.Email,
             (int)oldStatus,
             (int)AccountStatusEnum.Active,
-            "Reactivated"), cancellationToken);
+            "Reactivated",
+            Role: account.Role?.Name ?? string.Empty,
+            FullName: account.FullName,
+            PhoneNumber: account.PhoneNumber,
+            IsActive: true), cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -18,5 +18,9 @@ public record AccountStatusChangedEvent(
     string Email,
     int OldStatus,
     int NewStatus,
-    string? Reason
+    string? Reason,
+    string Role = "",
+    string FullName = "",
+    string? PhoneNumber = null,
+    bool IsActive = false
 ) : IntegrationEvent;

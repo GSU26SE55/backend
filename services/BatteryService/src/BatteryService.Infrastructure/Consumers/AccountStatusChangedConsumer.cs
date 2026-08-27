@@ -32,13 +32,20 @@ public class AccountStatusChangedConsumer : IConsumer<AccountStatusChangedEvent>
             if (account is null)
                 return;
 
+            if (account.LastSourceEventAtUtc is { } applied && applied >= evt.OccurredAt)
+                return;
+
             await _unitOfWork.BeginTransactionAsync();
 
             try
             {
                 account.Email = evt.Email.Trim().ToLowerInvariant();
-                account.IsActive = evt.NewStatus == ActiveStatus;
+                var currentRole = string.IsNullOrWhiteSpace(evt.Role) ? account.Role : evt.Role;
+                account.Role = currentRole.Trim();
+                account.IsActive = currentRole.Equals("Customer", StringComparison.OrdinalIgnoreCase)
+                    && evt.NewStatus == ActiveStatus;
                 account.LastSyncedAtUtc = DateTime.UtcNow;
+                account.LastSourceEventAtUtc = evt.OccurredAt;
                 _unitOfWork.CustomerAccounts.UpdateAsync(account);
 
                 await _unitOfWork.CommitTransactionAsync();

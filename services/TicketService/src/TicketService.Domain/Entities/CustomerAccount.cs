@@ -11,4 +11,5 @@ public class CustomerAccount : AuditableEntity
     public string? PhoneNumber { get; set; }
     public AccountStatusEnum Status { get; set; }
     public DateTime LastSyncedAt { get; set; }
+    public DateTime? LastSourceEventAtUtc { get; set; }
 }

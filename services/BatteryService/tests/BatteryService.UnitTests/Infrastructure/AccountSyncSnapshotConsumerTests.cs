@@ -35,7 +35,8 @@ public class AccountSyncSnapshotConsumerTests
         mirror.Email.Should().Be("customer@example.com");
         mirror.Role.Should().Be("Customer");
         mirror.IsActive.Should().BeTrue();
-        mirror.LastSyncedAtUtc.Should().Be(snapshotAt);
+        mirror.LastSourceEventAtUtc.Should().Be(snapshotAt);
+        mirror.LastSyncedAtUtc.Should().BeOnOrAfter(snapshotAt);
     }
 
     [Fact]
@@ -49,11 +50,12 @@ public class AccountSyncSnapshotConsumerTests
             FullName = "New Name",
             Role = "Customer",
             IsActive = true,
-            LastSyncedAtUtc = DateTime.UtcNow
+            LastSyncedAtUtc = DateTime.UtcNow,
+            LastSourceEventAtUtc = DateTime.UtcNow
         };
         var uow = new MockUnitOfWorkBuilder().WithCustomerAccounts(mirror);
 
-        await Consumer(uow).Consume(Context(accountId, mirror.LastSyncedAtUtc.AddMinutes(-1)));
+        await Consumer(uow).Consume(Context(accountId, mirror.LastSourceEventAtUtc.Value.AddMinutes(-1)));
 
         mirror.Email.Should().Be("new@example.com");
         mirror.FullName.Should().Be("New Name");
@@ -86,7 +88,8 @@ public class AccountSyncSnapshotConsumerTests
             IsActive: true,
             IsDeleted: false,
             SnapshotAtUtc: snapshotAt,
-            Reason: "Resync");
+            Reason: "Resync",
+            AccountStatus: 1);
         var context = new Mock<ConsumeContext<AccountSyncSnapshotEvent>>();
         context.SetupGet(item => item.Message).Returns(message);
         context.SetupGet(item => item.MessageId).Returns(Guid.NewGuid());

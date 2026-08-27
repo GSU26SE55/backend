@@ -31,4 +31,10 @@ public class StaffAccount : AuditableEntity
     public StaffSkillTierEnum SkillTier { get; set; } = StaffSkillTierEnum.Generalist;
     public List<string> SkillCodes { get; set; } = new();
     public DateTime LastSyncedAt { get; set; }
+
+    /// <summary>Mốc event account (email/name/role/status/delete) mới nhất đã áp.</summary>
+    public DateTime? LastSourceEventAtUtc { get; set; }
+
+    /// <summary>Mốc event hồ sơ/skill Staff mới nhất đã áp, tách khỏi account để hai luồng không chặn nhau.</summary>
+    public DateTime? LastStaffProfileSourceEventAtUtc { get; set; }
 }

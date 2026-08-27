@@ -15,5 +15,8 @@ public record AccountProfileUpdatedEvent(
     string Email,
     string FullName,
     string? PhoneNumber,
-    string? AvatarUrl
+    string? AvatarUrl,
+    string Role = "",
+    int AccountStatus = 0,
+    bool IsActive = false
 ) : IntegrationEvent;

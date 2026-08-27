@@ -54,11 +54,20 @@ public class AccountSyncSnapshotConsumerTests
         string role,
         bool isActive = true,
         bool isDeleted = false,
-        DateTime? snapshotAtUtc = null)
+        DateTime? snapshotAtUtc = null,
+        int accountStatus = 1,
+        bool hasStaffProfile = false,
+        string? employeeCode = null,
+        int maxConcurrentTickets = 3,
+        bool isAvailable = true,
+        int skillTier = 0,
+        List<string>? skillCodes = null)
     {
         var msg = new AccountSyncSnapshotEvent(
             accountId, "user@example.com", "Nguyễn Văn A", "0901234567",
-            role, isActive, isDeleted, snapshotAtUtc ?? DateTime.UtcNow, "Resync");
+            role, isActive, isDeleted, snapshotAtUtc ?? DateTime.UtcNow, "Resync",
+            accountStatus, hasStaffProfile, employeeCode, maxConcurrentTickets,
+            isAvailable, skillTier, skillCodes);
         var mock = new Mock<ConsumeContext<AccountSyncSnapshotEvent>>();
         mock.SetupGet(c => c.Message).Returns(msg);
         mock.SetupGet(c => c.MessageId).Returns(Guid.NewGuid());
@@ -102,6 +111,7 @@ public class AccountSyncSnapshotConsumerTests
             Role = "Manager",
             Status = AccountStatusEnum.Active,
             LastSyncedAt = DateTime.UtcNow,
+            LastSourceEventAtUtc = DateTime.UtcNow,
         };
         Seed(staff: staff);
 
@@ -127,18 +137,17 @@ public class AccountSyncSnapshotConsumerTests
     }
 
     [Fact]
-    public async Task CustomerRole_WithNoExistingMirror_CreatesNothing()
+    public async Task CustomerRole_WithNoExistingMirror_CreatesCustomerProjection()
     {
-        // Đối soát KHÔNG phải là nơi dựng bản sao cho Customer chưa từng dính tới ticket:
-        // TicketAccountActivatedConsumer lo việc đó. Ở đây chỉ sửa những bản sao đã tồn tại,
-        // nếu không mỗi lần resync toàn hệ thống lại đổ toàn bộ Customer vào ticket_db.
+        // Đây là repair path cho event Activated bị lỡ hoặc database Ticket được dựng lại riêng.
         var accountId = Guid.NewGuid();
 
         await Consumer().Consume(Ctx(accountId, "Customer"));
 
-        _customerRepo.Verify(r => r.AddAsync(It.IsAny<CustomerAccount>()), Times.Never);
+        _customerRepo.Verify(r => r.AddAsync(It.Is<CustomerAccount>(c =>
+            c.AccountId == accountId && c.Status == AccountStatusEnum.Active)), Times.Once);
         _staffRepo.Verify(r => r.AddAsync(It.IsAny<StaffAccount>()), Times.Never);
-        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -191,6 +200,69 @@ public class AccountSyncSnapshotConsumerTests
 
         _staffRepo.Verify(r => r.AddAsync(It.IsAny<StaffAccount>()), Times.Never);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task FullStaffSnapshot_RepairsEveryStaffProjectionField()
+    {
+        var accountId = Guid.NewGuid();
+        var staff = new StaffAccount
+        {
+            Id = accountId,
+            AccountId = accountId,
+            Email = "drift@example.com",
+            FullName = "Drifted",
+            Role = "Staff",
+            Status = AccountStatusEnum.Active,
+            EmployeeCode = "WRONG",
+            MaxConcurrentTickets = 99,
+            IsAvailable = false,
+            SkillTier = StaffSkillTierEnum.SeniorSpecialist,
+            SkillCodes = new List<string> { "WRONG" }
+        };
+        Seed(staff: staff);
+
+        await Consumer().Consume(Ctx(
+            accountId,
+            "Staff",
+            hasStaffProfile: true,
+            employeeCode: "EMP-001",
+            maxConcurrentTickets: 5,
+            isAvailable: true,
+            skillTier: (int)StaffSkillTierEnum.ModuleSpecialist,
+            skillCodes: new List<string> { " inverter ", "battery", "battery" }));
+
+        staff.EmployeeCode.Should().Be("EMP-001");
+        staff.MaxConcurrentTickets.Should().Be(5);
+        staff.IsAvailable.Should().BeTrue();
+        staff.SkillTier.Should().Be(StaffSkillTierEnum.ModuleSpecialist);
+        staff.SkillCodes.Should().Equal("battery", "inverter");
+    }
+
+    [Fact]
+    public async Task FullStaffSnapshot_WithMissingProjection_KeepsNewEntityInAddedState()
+    {
+        var accountId = Guid.NewGuid();
+
+        await Consumer().Consume(Ctx(
+            accountId,
+            "Staff",
+            hasStaffProfile: true,
+            employeeCode: "EMP-NEW",
+            maxConcurrentTickets: 6,
+            isAvailable: false,
+            skillTier: (int)StaffSkillTierEnum.SeniorSpecialist,
+            skillCodes: new List<string> { "SOLAR" }));
+
+        _staffRepo.Verify(r => r.AddAsync(It.Is<StaffAccount>(staff =>
+            staff.AccountId == accountId
+            && staff.EmployeeCode == "EMP-NEW"
+            && staff.MaxConcurrentTickets == 6
+            && !staff.IsAvailable
+            && staff.SkillTier == StaffSkillTierEnum.SeniorSpecialist
+            && staff.SkillCodes.SequenceEqual(new[] { "SOLAR" }))), Times.Once);
+        _staffRepo.Verify(r => r.UpdateAsync(It.IsAny<StaffAccount>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

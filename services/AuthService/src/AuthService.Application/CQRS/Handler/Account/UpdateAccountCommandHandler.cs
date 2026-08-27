@@ -29,6 +29,7 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
     {
         var account = await _unitOfWork.Accounts
             .GetAllAsync()
+            .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.Id == request.Id && !a.IsDeleted, cancellationToken);
         if (account == null)
         {
@@ -80,7 +81,10 @@ public class UpdateAccountCommandHandler : IRequestHandler<UpdateAccountCommand,
             account.Email,
             account.FullName,
             account.PhoneNumber,
-            account.AvatarUrl), cancellationToken);
+            account.AvatarUrl,
+            Role: account.Role?.Name ?? string.Empty,
+            AccountStatus: (int)account.Status,
+            IsActive: account.Status.IsNotifiable()), cancellationToken);
 
         // #AUDIT-11
         await _publisher.Publish(new AuditTrailNotification(
