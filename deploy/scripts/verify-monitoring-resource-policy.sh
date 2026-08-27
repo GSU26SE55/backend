@@ -368,6 +368,7 @@ tempo_container="${temporary_directory}/tempo-container.yaml"
 solar_smoke_test="${temporary_directory}/solar-smoke-test.yaml"
 admission_create_job="${temporary_directory}/admission-create-job.yaml"
 admission_patch_job="${temporary_directory}/admission-patch-job.yaml"
+resource_quota="${temporary_directory}/resource-quota.yaml"
 
 extract_source \
   'kube-prometheus-stack/charts/grafana/templates/deployment.yaml' \
@@ -376,6 +377,10 @@ extract_named_resource \
   'Deployment' \
   'authservice' \
   "${authservice_deployment}"
+extract_named_resource \
+  'ResourceQuota' \
+  'solar-quota' \
+  "${resource_quota}"
 extract_source \
   'kube-prometheus-stack/templates/prometheus-operator/deployment.yaml' \
   "${prometheus_operator}"
@@ -471,6 +476,59 @@ verify_http_probe_path() {
 verify_http_probe_path "${authservice_deployment}" 'startupProbe' '/live'
 verify_http_probe_path "${authservice_deployment}" 'readinessProbe' '/ready'
 verify_http_probe_path "${authservice_deployment}" 'livenessProbe' '/live'
+
+verify_probe_value() {
+  local input_file="$1"
+  local probe_name="$2"
+  local field_name="$3"
+  local expected_value="$4"
+
+  awk \
+    -v expected_probe="${probe_name}:" \
+    -v expected_field="${field_name}:" \
+    -v expected_value="${expected_value}" '
+      /^[[:space:]]+[[:alnum:]]+Probe:[[:space:]]*$/ {
+        in_expected_probe = ($1 == expected_probe)
+        next
+      }
+
+      in_expected_probe && $1 == expected_field && $2 == expected_value {
+        found = 1
+      }
+
+      END {
+        exit(found ? 0 : 1)
+      }
+    ' "${input_file}" || {
+    printf 'AuthService %s must set %s=%s\n' \
+      "${probe_name}" "${field_name}" "${expected_value}" >&2
+    exit 1
+  }
+}
+
+verify_probe_value "${authservice_deployment}" 'startupProbe' 'timeoutSeconds' '5'
+verify_probe_value "${authservice_deployment}" 'startupProbe' 'failureThreshold' '120'
+verify_probe_value "${authservice_deployment}" 'readinessProbe' 'timeoutSeconds' '5'
+verify_probe_value "${authservice_deployment}" 'livenessProbe' 'timeoutSeconds' '5'
+
+grep -Fq 'progressDeadlineSeconds: 1200' "${authservice_deployment}" || {
+  printf '%s\n' \
+    'AuthService rollout progress deadline must exceed its startup probe budget' >&2
+  exit 1
+}
+
+for quota_contract in \
+  'requests.cpu: "3"' \
+  'requests.memory: "7Gi"' \
+  'limits.cpu: "12"' \
+  'limits.memory: "14Gi"'
+do
+  grep -Fq "${quota_contract}" "${resource_quota}" || {
+    printf 'R4 ResourceQuota is missing rollout headroom: %s\n' \
+      "${quota_contract}" >&2
+    exit 1
+  }
+done
 
 while read -r section_name container_name
 do
