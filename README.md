@@ -92,3 +92,5 @@ Gõ `/kltn` để xem toàn bộ lệnh → sẵn sàng làm việc.
 ## Cần hỗ trợ
 
 Liên hệ Leader: **Trần Minh Trí (SE183109)** — @Shu1237
+
+<!-- CI webhook verification -->
