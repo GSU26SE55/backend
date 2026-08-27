@@ -71,16 +71,39 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
             var ct = context.CancellationToken;
             var isStaffRole = IsStaffRole(evt.Role);
             var isCustomerRole = IsCustomerRole(evt.Role);
+            var normalizedEmail = evt.Email.Trim().ToLowerInvariant();
+            var normalizedEmployeeCode = Normalize(evt.EmployeeCode);
 
-            var staff = await _uow.StaffAccounts.GetAllAsync()
-                .FirstOrDefaultAsync(s => s.AccountId == evt.AccountId, ct);
-            var customer = await _uow.CustomerAccounts.GetAllAsync()
-                .FirstOrDefaultAsync(c => c.AccountId == evt.AccountId, ct);
+            // Dữ liệu dev/production cũ có thể chứa seed/read-model với AccountId lỗi thời nhưng
+            // cùng email hoặc employee code. Chỉ tìm alias cho snapshot account còn sống; snapshot
+            // của account đã xoá không được phép đụng một account mới tái sử dụng cùng email.
+            var staffMatches = await _uow.StaffAccounts.GetAllAsync()
+                .Where(s => s.AccountId == evt.AccountId
+                    || (!evt.IsDeleted && s.Email.ToLower() == normalizedEmail)
+                    || (!evt.IsDeleted
+                        && normalizedEmployeeCode != null
+                        && s.EmployeeCode == normalizedEmployeeCode))
+                .ToListAsync(ct);
+            var customerMatches = await _uow.CustomerAccounts.GetAllAsync()
+                .Where(c => c.AccountId == evt.AccountId
+                    || (!evt.IsDeleted && c.Email.ToLower() == normalizedEmail))
+                .ToListAsync(ct);
+
+            var staff = staffMatches.FirstOrDefault(s => s.AccountId == evt.AccountId);
+            var customer = customerMatches.FirstOrDefault(c => c.AccountId == evt.AccountId);
+            var legacyStaffAliases = staffMatches
+                .Where(s => s.AccountId != evt.AccountId)
+                .ToList();
+            var legacyCustomerAliases = customerMatches
+                .Where(c => c.AccountId != evt.AccountId)
+                .ToList();
 
             var latestAccountEventAt = new[]
                 {
                     staff?.LastSourceEventAtUtc,
                     customer?.LastSourceEventAtUtc,
+                    legacyStaffAliases.Max(s => s.LastSourceEventAtUtc),
+                    legacyCustomerAliases.Max(c => c.LastSourceEventAtUtc),
                 }
                 .Where(value => value.HasValue)
                 .Max();
@@ -95,6 +118,47 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
             var now = DateTime.UtcNow;
             var changed = false;
             var staffWasAdded = false;
+
+            if (applyAccountSnapshot && !evt.IsDeleted)
+            {
+                // Không xoá alias: ticket lịch sử có thể vẫn tham chiếu AccountId cũ. Chỉ vô hiệu
+                // hoá nó cho nghiệp vụ mới. EmployeeCode phải được nhả trước khi insert canonical
+                // vì index IX_staff_accounts_employee_code là unique kể cả với row inactive.
+                foreach (var alias in legacyStaffAliases)
+                {
+                    alias.Status = AccountStatusEnum.Inactive;
+                    alias.IsAvailable = false;
+                    if (normalizedEmployeeCode != null
+                        && string.Equals(alias.EmployeeCode, normalizedEmployeeCode, StringComparison.Ordinal))
+                    {
+                        alias.EmployeeCode = null;
+                    }
+                    alias.LastSyncedAt = now;
+                    alias.LastSourceEventAtUtc = evt.SnapshotAtUtc;
+                    _uow.StaffAccounts.UpdateAsync(alias);
+                    changed = true;
+                }
+
+                foreach (var alias in legacyCustomerAliases)
+                {
+                    alias.Status = AccountStatusEnum.Inactive;
+                    alias.LastSyncedAt = now;
+                    alias.LastSourceEventAtUtc = evt.SnapshotAtUtc;
+                    _uow.CustomerAccounts.UpdateAsync(alias);
+                    changed = true;
+                }
+
+                // PostgreSQL có thể INSERT canonical trước UPDATE alias trong cùng SaveChanges.
+                // Flush riêng khi employee code đang xung đột để loại hoàn toàn phụ thuộc thứ tự.
+                if (staff is null
+                    && isStaffRole
+                    && legacyStaffAliases.Any(alias => alias.EmployeeCode is null)
+                    && changed)
+                {
+                    await _uow.SaveChangesAsync(ct);
+                    changed = false;
+                }
+            }
 
             if (applyAccountSnapshot && evt.IsDeleted)
             {
@@ -134,7 +198,7 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
                         {
                             Id = evt.AccountId,
                             AccountId = evt.AccountId,
-                            Email = evt.Email.Trim().ToLowerInvariant(),
+                            Email = normalizedEmail,
                             FullName = evt.FullName.Trim(),
                             Role = evt.Role.Trim(),
                             Status = status,
@@ -148,7 +212,7 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
                     }
                     else
                     {
-                        staff.Email = evt.Email.Trim().ToLowerInvariant();
+                        staff.Email = normalizedEmail;
                         staff.FullName = evt.FullName.Trim();
                         staff.Role = evt.Role.Trim();
                         staff.Status = status;
@@ -180,7 +244,7 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
                         {
                             Id = evt.AccountId,
                             AccountId = evt.AccountId,
-                            Email = evt.Email.Trim().ToLowerInvariant(),
+                            Email = normalizedEmail,
                             FullName = evt.FullName.Trim(),
                             PhoneNumber = Normalize(evt.PhoneNumber),
                             Status = status,
@@ -193,7 +257,7 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
                     }
                     else
                     {
-                        customer.Email = evt.Email.Trim().ToLowerInvariant();
+                        customer.Email = normalizedEmail;
                         customer.FullName = evt.FullName.Trim();
                         customer.PhoneNumber = Normalize(evt.PhoneNumber);
                         customer.Status = status;

@@ -39,11 +39,18 @@ public class AccountSyncSnapshotConsumerTests
     }
 
     private void Seed(StaffAccount? staff = null, CustomerAccount? customer = null)
+        => SeedMany(
+            staff is null ? Array.Empty<StaffAccount>() : new[] { staff },
+            customer is null ? Array.Empty<CustomerAccount>() : new[] { customer });
+
+    private void SeedMany(
+        IEnumerable<StaffAccount>? staffs = null,
+        IEnumerable<CustomerAccount>? customers = null)
     {
         _staffRepo.Setup(r => r.GetAllAsync())
-            .Returns((staff is null ? Array.Empty<StaffAccount>() : new[] { staff }).AsQueryable().BuildMock());
+            .Returns((staffs ?? Array.Empty<StaffAccount>()).AsQueryable().BuildMock());
         _customerRepo.Setup(r => r.GetAllAsync())
-            .Returns((customer is null ? Array.Empty<CustomerAccount>() : new[] { customer }).AsQueryable().BuildMock());
+            .Returns((customers ?? Array.Empty<CustomerAccount>()).AsQueryable().BuildMock());
     }
 
     private TicketAccountSyncSnapshotConsumer Consumer()
@@ -262,6 +269,97 @@ public class AccountSyncSnapshotConsumerTests
             && staff.SkillTier == StaffSkillTierEnum.SeniorSpecialist
             && staff.SkillCodes.SequenceEqual(new[] { "SOLAR" }))), Times.Once);
         _staffRepo.Verify(r => r.UpdateAsync(It.IsAny<StaffAccount>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LegacyEmployeeCodeAlias_IsDeactivatedAndReleasedBeforeCanonicalStaffInsert()
+    {
+        var canonicalAccountId = Guid.NewGuid();
+        var legacy = new StaffAccount
+        {
+            Id = Guid.NewGuid(),
+            AccountId = Guid.NewGuid(),
+            Email = "user@example.com",
+            FullName = "Legacy seed",
+            EmployeeCode = "EMP-LEGACY",
+            Role = "Staff",
+            Status = AccountStatusEnum.Active,
+            IsAvailable = true,
+            LastSyncedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        SeedMany(staffs: new[] { legacy });
+
+        await Consumer().Consume(Ctx(
+            canonicalAccountId,
+            "Staff",
+            hasStaffProfile: true,
+            employeeCode: "EMP-LEGACY"));
+
+        legacy.Status.Should().Be(AccountStatusEnum.Inactive);
+        legacy.IsAvailable.Should().BeFalse();
+        legacy.EmployeeCode.Should().BeNull();
+        _staffRepo.Verify(r => r.AddAsync(It.Is<StaffAccount>(staff =>
+            staff.AccountId == canonicalAccountId
+            && staff.EmployeeCode == "EMP-LEGACY")), Times.Once);
+        // Flush alias UPDATE trước canonical INSERT để unique employee_code không còn xung đột.
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task CanonicalStaffSnapshot_DeactivatesLegacyEmailAlias()
+    {
+        var canonicalAccountId = Guid.NewGuid();
+        var canonical = new StaffAccount
+        {
+            Id = canonicalAccountId,
+            AccountId = canonicalAccountId,
+            Email = "user@example.com",
+            Role = "Staff",
+            Status = AccountStatusEnum.Active,
+            IsAvailable = true,
+            LastSyncedAt = DateTime.UtcNow.AddDays(-1),
+        };
+        var legacy = new StaffAccount
+        {
+            Id = Guid.NewGuid(),
+            AccountId = Guid.NewGuid(),
+            Email = "user@example.com",
+            Role = "Staff",
+            Status = AccountStatusEnum.Active,
+            IsAvailable = true,
+            LastSyncedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        SeedMany(staffs: new[] { canonical, legacy });
+
+        await Consumer().Consume(Ctx(canonicalAccountId, "Manager"));
+
+        canonical.Role.Should().Be("Manager");
+        legacy.Status.Should().Be(AccountStatusEnum.Inactive);
+        legacy.IsAvailable.Should().BeFalse();
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CustomerSnapshot_DeactivatesLegacyEmailAliasAndCreatesCanonicalRow()
+    {
+        var canonicalAccountId = Guid.NewGuid();
+        var legacy = new CustomerAccount
+        {
+            Id = Guid.NewGuid(),
+            AccountId = Guid.NewGuid(),
+            Email = "user@example.com",
+            FullName = "Legacy seed",
+            Status = AccountStatusEnum.Active,
+            LastSyncedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        SeedMany(customers: new[] { legacy });
+
+        await Consumer().Consume(Ctx(canonicalAccountId, "Customer"));
+
+        legacy.Status.Should().Be(AccountStatusEnum.Inactive);
+        _customerRepo.Verify(r => r.AddAsync(It.Is<CustomerAccount>(customer =>
+            customer.AccountId == canonicalAccountId)), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
