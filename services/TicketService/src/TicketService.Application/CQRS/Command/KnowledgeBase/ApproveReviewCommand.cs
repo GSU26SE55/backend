@@ -14,6 +14,14 @@ public class ApproveReviewCommand : IRequest<CommonResponse<KbArticleActionDTO>>
     [JsonIgnore]
     public Guid ArticleId { get; set; }
 
+    /// <summary>Người bấm duyệt — đi vào thông báo gửi cho người đề xuất.</summary>
+    [JsonIgnore]
+    public Guid CurrentUserId { get; set; }
+
+    /// <summary>Tên người duyệt, để thông báo nói rõ ai quyết định thay vì in ra Guid.</summary>
+    [JsonIgnore]
+    public string? CurrentUserName { get; set; }
+
     public Task<CommonResponse<KbArticleActionDTO>> ValidateAsync()
     {
         var response = new CommonResponse<KbArticleActionDTO>();

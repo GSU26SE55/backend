@@ -28,10 +28,13 @@ public class AdminKnowledgeBaseController : ControllerBase
     }
 
     /// <summary>
-    /// Xuất bản bài viết Knowledge Base để mọi người có thể tìm thấy.
+    /// Xuất bản bài viết Knowledge Base để mọi người có thể tìm thấy. Cũng dùng để bỏ lưu trữ
+    /// (un-archive) một bài đã Archived.
     /// </summary>
     /// <remarks>
-    /// Chỉ áp dụng cho bài viết đang ở trạng thái Nháp (Draft) hoặc Chờ phê duyệt (PendingReview).
+    /// Áp dụng cho bài viết đang ở trạng thái Nháp (Draft) hoặc Lưu trữ (Archived).
+    /// Bài đang Chờ phê duyệt (PendingReview) KHÔNG dùng endpoint này — duyệt bằng
+    /// <c>approve-review</c>.
     /// </remarks>
     /// <param name="id">ID bài viết.</param>
     /// <param name="ct">Token hủy request.</param>
@@ -85,7 +88,12 @@ public class AdminKnowledgeBaseController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ApproveReview(Guid id, CancellationToken ct)
     {
-        var command = new ApproveReviewCommand { ArticleId = id };
+        var command = new ApproveReviewCommand
+        {
+            ArticleId = id,
+            CurrentUserId = GetCurrentUserId(),
+            CurrentUserName = _currentUser.FullName
+        };
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }
@@ -105,6 +113,8 @@ public class AdminKnowledgeBaseController : ControllerBase
     public async Task<IActionResult> RejectReview(Guid id, [FromBody] RejectReviewCommand command, CancellationToken ct)
     {
         command.ArticleId = id;
+        command.CurrentUserId = GetCurrentUserId();
+        command.CurrentUserName = _currentUser.FullName;
         var result = await _mediator.Send(command, ct);
         return StatusCode(result.StatusCode, result);
     }

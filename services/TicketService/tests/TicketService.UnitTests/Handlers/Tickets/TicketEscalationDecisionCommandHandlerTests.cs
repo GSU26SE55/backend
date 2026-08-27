@@ -1,7 +1,10 @@
 using FluentAssertions;
+using MockQueryable.Moq;
 using Moq;
 using SharedContracts.Events;
+using SharedContracts.Events.Root;
 using SharedContracts.Interfaces;
+using SharedKernels.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.Interfaces.Repositories;
@@ -259,7 +262,9 @@ public class TicketEscalationDecisionCommandHandlerTests
     {
         var ticketId = Guid.NewGuid();
         var staffId = Guid.NewGuid();
+        var batteryAssetId = Guid.NewGuid();
         var ticket = BuildTicket(ticketId, TicketPriorityEnum.P1Critical);
+        ticket.BatteryAssetId = batteryAssetId;
         var primary = BuildPrimaryAssignment(ticketId, staffId);
         var staff = new StaffAccount { AccountId = staffId, SkillTier = StaffSkillTierEnum.SeniorSpecialist };
 
@@ -267,6 +272,7 @@ public class TicketEscalationDecisionCommandHandlerTests
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff },
             assignmentSeed: new[] { primary });
+        SetupBatteryAssets(uow);
 
         var command = new TicketEscalationDecisionCommand
         {
@@ -281,8 +287,19 @@ public class TicketEscalationDecisionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         ticket.Priority.Should().Be(TicketPriorityEnum.Urgent);
+        ticket.IsIncident.Should().BeTrue();
+        ticket.ActiveIncidentEpisodeId.Should().NotBeNull();
         primary.Role.Should().Be(AssignmentRoleEnum.PrimaryHandler);
         _slaTransitions.Verify(x => x.StopSlaAsync(ticket, It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(
+            It.Is<BatteryIsolationRequestedEvent>(e =>
+                e.TicketId == ticket.Id
+                && e.RequestedByAccountId == command.ManagerId
+                && e.BatteryAssetIds.SequenceEqual(new[] { batteryAssetId })
+                && e.Id == DeterministicEventId.From(
+                    ticket.ActiveIncidentEpisodeId!.Value,
+                    "battery-isolation-requested")),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>
@@ -300,6 +317,7 @@ public class TicketEscalationDecisionCommandHandlerTests
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: new[] { ticket },
             assignmentSeed: new[] { primary });
+        SetupBatteryAssets(uow);
 
         var command = new TicketEscalationDecisionCommand
         {
@@ -316,5 +334,13 @@ public class TicketEscalationDecisionCommandHandlerTests
         ticket.Priority.Should().Be(TicketPriorityEnum.Urgent);
         primary.Role.Should().Be(AssignmentRoleEnum.PreviousPrimaryHandler);
         _slaTransitions.Verify(x => x.StopSlaAsync(ticket, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private static void SetupBatteryAssets(Mock<ITicketUnitOfWork> uow)
+    {
+        var repository = new Mock<IGenericRepository<TicketBatteryAsset>>();
+        repository.Setup(x => x.GetAllAsync())
+            .Returns(Array.Empty<TicketBatteryAsset>().BuildMock());
+        uow.SetupGet(x => x.TicketBatteryAssets).Returns(repository.Object);
     }
 }

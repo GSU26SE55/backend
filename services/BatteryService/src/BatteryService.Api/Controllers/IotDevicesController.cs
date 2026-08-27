@@ -135,7 +135,7 @@ public class IotDevicesController : ControllerBase
     ///   <item><description><b>Không reject heartbeat khi skew quá ngưỡng</b> — chỉ raise <c>ClockSkewWarning</c>. Firmware nên auto-NTP-sync khi nhận warning.</description></item>
     ///   <item><description>Khoảng cách heartbeat khuyến nghị: 60s. Cấu hình ở <c>IotDevice.HeartbeatIntervalSeconds</c> (admin set [10, 3600]). Device nên dùng giá trị từ ack chứ không hard-code.</description></item>
     ///   <item><description>Polling fallback mặc định chạy 120s/lần. Ngưỡng thực tế của từng device là max(<c>Iot:OfflineAfterSeconds</c> mặc định 300s, <c>HeartbeatIntervalSeconds + 30s</c>), nên cadence dài không bị đánh offline giả.</description></item>
-    ///   <item><description>MQTT LWT dùng cùng transition service và yêu cầu im lặng ít nhất <c>Mqtt:LwtOfflineGraceSeconds</c> (mặc định 90s); retained/stale LWT không thể bypass freshness check.</description></item>
+    ///   <item><description>MQTT LWT live chuyển Offline ngay khi broker xác nhận socket đã mất; chỉ retained/stale LWT replay mới phải qua <c>Mqtt:LwtOfflineGraceSeconds</c> (mặc định 90s) và freshness check.</description></item>
     ///   <item><description><c>FirmwareUpdateAvailable = true</c> chỉ là hint — firmware vẫn phải gọi <c>/firmware-check</c> để lấy artifact URL + checksum.</description></item>
     /// </list>
     /// </remarks>

@@ -128,5 +128,22 @@ public enum NotificationTypeEnum
     PeriodicMaintenanceReminder = 40,
     PeriodicMaintenanceScheduleChanged = 41,
 
+    /// <summary>
+    /// Một bài KB được gửi đi chờ duyệt: Staff sửa nội dung (hoặc tạo bài mới) nên bài chuyển
+    /// sang <c>KbArticleStatusEnum.PendingReview</c>. Gửi cho Manager/Admin — họ là người bấm
+    /// approve/reject, và trước đây KHÔNG có gì báo cho họ biết là có việc đang chờ: badge
+    /// "chờ duyệt" ở sidebar là manh mối duy nhất, mà nó cache 60s và không poll.
+    /// </summary>
+    KbArticleReviewRequested = 42,
+
+    /// <summary>Bản sửa KB đã được duyệt — báo cho người đề xuất (<c>PendingReviewBy</c>).</summary>
+    KbArticleReviewApproved = 43,
+
+    /// <summary>
+    /// Bản sửa KB bị từ chối — báo cho người đề xuất, kèm lý do (<c>ManagerRejectReason</c>).
+    /// Không có thông báo này thì người sửa không biết bài của mình bị trả về và vì sao.
+    /// </summary>
+    KbArticleReviewRejected = 44,
+
     System = 99
 }

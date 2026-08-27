@@ -34,6 +34,11 @@ public sealed class CustomerSchedulePeriodicMaintenanceCommandHandler
     {
         var nowUtc = DateTime.UtcNow;
         var scheduledStartAtUtc = request.ScheduledStartAt.UtcDateTime;
+
+        // Thứ tự các phép kiểm dưới đây quyết định mã lỗi khách nhận được, nên giữ nguyên:
+        // "quá khứ" (400) trước khi tra ticket, rồi tồn tại (404) → quyền sở hữu (403) →
+        // đúng loại ticket (409) → còn mở (409) → cửa sổ chưa đóng (409) → giờ chọn nằm trong
+        // hạn (400). Đảo lên sẽ để lộ sự tồn tại của ticket cho người không sở hữu nó.
         if (scheduledStartAtUtc < nowUtc)
             return Fail(400, "ScheduledStartAt cannot be in the past.");
 
@@ -44,8 +49,10 @@ public sealed class CustomerSchedulePeriodicMaintenanceCommandHandler
             return Fail(404, "Ticket not found.");
         if (ticket.CustomerId != request.CustomerId)
             return Fail(403, "Only the owning Customer can schedule this ticket.");
-        if (!ticket.PeriodicMaintenanceSourceTicketId.HasValue ||
-            !ticket.PeriodicMaintenanceDueAtUtc.HasValue ||
+        // Dấu hiệu "ticket bảo trì định kỳ" là hạn kỳ, không phải ticket nguồn: từ khi lịch
+        // chuyển sang tầng tài sản, ticket sinh ra từ một kỳ bảo trì của pin chứ không neo vào
+        // ticket đã đóng, nên PeriodicMaintenanceSourceTicketId luôn trống.
+        if (!ticket.PeriodicMaintenanceDueAtUtc.HasValue ||
             !ticket.PeriodicMaintenanceScheduleDeadlineAtUtc.HasValue)
             return Fail(409, "Only a periodic-maintenance ticket can use this schedule endpoint.");
         if (ticket.Status != TicketStatusEnum.Open)

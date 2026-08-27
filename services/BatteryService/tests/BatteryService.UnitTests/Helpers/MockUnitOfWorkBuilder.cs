@@ -10,6 +10,7 @@ public sealed class MockUnitOfWorkBuilder
     public Mock<IBatteryUnitOfWork> UnitOfWork { get; } = new();
     public Mock<IGenericRepository<BatteryType>> BatteryTypes { get; } = new();
     public Mock<IGenericRepository<BatteryAsset>> BatteryAssets { get; } = new();
+    public Mock<IGenericRepository<MaintenanceCycle>> MaintenanceCycles { get; } = new();
     public Mock<IGenericRepository<Site>> Sites { get; } = new();
     public Mock<IGenericRepository<CustomerAccount>> CustomerAccounts { get; } = new();
     public Mock<IGenericRepository<ThresholdConfig>> ThresholdConfigs { get; } = new();
@@ -49,6 +50,7 @@ public sealed class MockUnitOfWorkBuilder
     {
         UnitOfWork.SetupGet(x => x.BatteryTypes).Returns(BatteryTypes.Object);
         UnitOfWork.SetupGet(x => x.BatteryAssets).Returns(BatteryAssets.Object);
+        UnitOfWork.SetupGet(x => x.MaintenanceCycles).Returns(MaintenanceCycles.Object);
         UnitOfWork.SetupGet(x => x.Sites).Returns(Sites.Object);
         UnitOfWork.SetupGet(x => x.CustomerAccounts).Returns(CustomerAccounts.Object);
         UnitOfWork.SetupGet(x => x.ThresholdConfigs).Returns(ThresholdConfigs.Object);

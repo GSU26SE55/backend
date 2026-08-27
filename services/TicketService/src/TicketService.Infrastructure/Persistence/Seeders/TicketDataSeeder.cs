@@ -39,6 +39,164 @@ public class TicketDataSeeder
         await SeedActivitiesAsync(tickets, staffs, customers, ticketAssignments, ct);
         await SeedMaintenanceLogsAsync(tickets, staffs, kbArticles, ct);
         await SeedSagaStatesAsync(tickets, ct);
+        await SeedBlogPostsAsync(staffs.First().AccountId, kbArticles, ct);
+    }
+
+    private async Task SeedBlogPostsAsync(Guid authorId, List<KnowledgeBaseArticle> kbArticles, CancellationToken ct)
+    {
+        var hasBlogPosts = await _context.BlogPosts.AnyAsync(ct);
+        if (hasBlogPosts)
+            return;
+
+        var now = DateTime.UtcNow;
+
+        var template = new BlogTemplate
+        {
+            Id = Guid.NewGuid(),
+            Name = "Standard KB-to-blog layout",
+            Description = "Default template used when converting a knowledge base article into a customer-facing blog post.",
+            ContentHtml = S("<h1>{{title}}</h1><p>{{summary}}</p>{{body}}"),
+            IsActive = true,
+            CreatedByUserId = authorId,
+            CreatedAt = now.AddDays(-40)
+        };
+        _context.BlogTemplates.Add(template);
+
+        var posts = new List<BlogPost>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "Why batteries stop charging and how we diagnose it",
+                Slug = "why-batteries-stop-charging",
+                Summary = "A field guide to the most common charging failures we see, and the checks our technicians run first.",
+                ContentHtml = S("<h2>Common causes</h2><p>Loose connectors, faulty adapters, and BMS lockouts account for most no-charge reports.</p><h2>What we check first</h2><p>Input voltage, cable continuity, and the BMS error log.</p>"),
+                Status = BlogPostStatusEnum.Published,
+                Origin = BlogPostOriginEnum.AiGeneratedFromKb,
+                SourceKbArticleId = kbArticles.ElementAtOrDefault(0)?.Id,
+                BlogTemplateId = template.Id,
+                AuthorUserId = authorId,
+                CurrentVersion = 2,
+                CreatedAt = now.AddDays(-25)
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "Keeping battery packs cool in high-ambient installations",
+                Slug = "keeping-battery-packs-cool",
+                Summary = "Ventilation and placement guidance for sites that regularly see ambient temperatures above 35°C.",
+                ContentHtml = S("<h2>Why heat matters</h2><p>Sustained operation above 45°C accelerates capacity fade.</p><h2>Recommendations</h2><p>Maintain clearance, avoid direct sun exposure, and inspect cooling fans quarterly.</p>"),
+                Status = BlogPostStatusEnum.Published,
+                Origin = BlogPostOriginEnum.AiGeneratedFromKb,
+                SourceKbArticleId = kbArticles.ElementAtOrDefault(1)?.Id,
+                BlogTemplateId = template.Id,
+                AuthorUserId = authorId,
+                CurrentVersion = 1,
+                CreatedAt = now.AddDays(-18)
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "Reading your State of Health (SOH) trend correctly",
+                Slug = "reading-soh-trend-correctly",
+                Summary = "SOH naturally declines over the battery lifecycle — here is how to tell normal aging from an early warning sign.",
+                ContentHtml = S("<h2>What SOH means</h2><p>SOH compares current capacity against nominal capacity.</p><h2>When to worry</h2><p>A drop of more than 5 points within a month warrants inspection.</p>"),
+                Status = BlogPostStatusEnum.Draft,
+                Origin = BlogPostOriginEnum.Manual,
+                BlogTemplateId = template.Id,
+                AuthorUserId = authorId,
+                CurrentVersion = 1,
+                CreatedAt = now.AddDays(-6)
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "Seasonal maintenance checklist for solar battery sites",
+                Slug = "seasonal-maintenance-checklist",
+                Summary = "A quarterly checklist covering enclosure integrity, sensor calibration, and firmware currency.",
+                ContentHtml = S("<h2>Checklist</h2><p>Inspect enclosure seals, verify sensor readings against a reference, confirm firmware is current.</p>"),
+                Status = BlogPostStatusEnum.Draft,
+                Origin = BlogPostOriginEnum.Manual,
+                BlogTemplateId = template.Id,
+                AuthorUserId = authorId,
+                CurrentVersion = 1,
+                CreatedAt = now.AddDays(-3)
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "Understanding cell imbalance and when it becomes a risk",
+                Slug = "understanding-cell-imbalance",
+                Summary = "Small voltage differences between cells are normal — this post explains where the risk threshold is.",
+                ContentHtml = S("<h2>Normal variance</h2><p>A few millivolts of difference between cells is expected.</p><h2>Risk threshold</h2><p>Differences beyond 100mV should trigger a balancing check.</p>"),
+                Status = BlogPostStatusEnum.Archived,
+                Origin = BlogPostOriginEnum.Manual,
+                BlogTemplateId = template.Id,
+                AuthorUserId = authorId,
+                CurrentVersion = 1,
+                CreatedAt = now.AddDays(-60)
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "Draft: new firmware rollout notes (auto-generation in progress)",
+                Slug = "firmware-rollout-notes-draft",
+                Summary = "AI generation for this post has not completed yet.",
+                ContentHtml = S("<p></p>"),
+                Status = BlogPostStatusEnum.Generating,
+                Origin = BlogPostOriginEnum.AiGeneratedFromKb,
+                SourceKbArticleId = kbArticles.ElementAtOrDefault(2)?.Id,
+                AuthorUserId = authorId,
+                CurrentVersion = 1,
+                CreatedAt = now.AddHours(-2)
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "Draft: repair escalation summary (generation failed)",
+                Slug = "repair-escalation-summary-failed",
+                Summary = "Automatic generation from the source KB article failed and needs a manual retry.",
+                ContentHtml = S("<p></p>"),
+                Status = BlogPostStatusEnum.GenerationFailed,
+                Origin = BlogPostOriginEnum.AiGeneratedFromKb,
+                SourceKbArticleId = kbArticles.ElementAtOrDefault(2)?.Id,
+                AuthorUserId = authorId,
+                CurrentVersion = 1,
+                CreatedAt = now.AddHours(-5)
+            }
+        };
+
+        _context.BlogPosts.AddRange(posts);
+        await _context.SaveChangesAsync(ct);
+
+        var publishedPost = posts[0];
+        _context.BlogPostVersions.Add(new BlogPostVersion
+        {
+            Id = Guid.NewGuid(),
+            BlogPostId = publishedPost.Id,
+            VersionNumber = 1,
+            Title = publishedPost.Title,
+            Summary = publishedPost.Summary,
+            ContentHtml = S("<h2>Common causes</h2><p>Loose connectors and faulty adapters account for most no-charge reports.</p>"),
+            ChangedByUserId = authorId,
+            ChangeNote = "Initial AI-generated draft from KB-CHARGE-001.",
+            CreatedAt = publishedPost.CreatedAt
+        });
+        _context.BlogPostVersions.Add(new BlogPostVersion
+        {
+            Id = Guid.NewGuid(),
+            BlogPostId = publishedPost.Id,
+            VersionNumber = 2,
+            Title = publishedPost.Title,
+            Summary = publishedPost.Summary,
+            ContentHtml = publishedPost.ContentHtml,
+            ChangedByUserId = authorId,
+            ChangeNote = "Expanded diagnostic section and published.",
+            CreatedAt = publishedPost.CreatedAt.AddDays(2)
+        });
+        await _context.SaveChangesAsync(ct);
+
+        _logger?.LogInformation("Seeded {Count} blog posts.", posts.Count);
     }
 
     private async Task SeedSagaStatesAsync(List<Ticket> tickets, CancellationToken ct)
@@ -460,7 +618,165 @@ public class TicketDataSeeder
             RatedAt = now.AddDays(-16)
         };
 
-        var tickets = new List<Ticket> { ticket1, ticket2, ticket3, ticket4, ticket5 };
+        var ticket6 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0006",
+            BatteryAssetId = batteryAssetId2,
+            CustomerId = customer2,
+            Title = "Cell voltage imbalance detected",
+            Description = "Monitoring shows a growing voltage gap between cells beyond the safe threshold.",
+            Category = TicketCategoryEnum.Other,
+            Priority = TicketPriorityEnum.P2High,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Medium,
+            Status = TicketStatusEnum.Open,
+            Origin = TicketOriginEnum.AutoFromAlert,
+            OriginAlertId = Guid.NewGuid(),
+            IsIncident = false,
+            CreatedAt = now.AddHours(-6)
+        };
+        var ticket7 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0007",
+            BatteryAssetId = batteryAssetId1,
+            CustomerId = customer1,
+            Title = "Routine maintenance request",
+            Description = "Customer requests scheduled periodic maintenance ahead of the warranty checkpoint.",
+            Category = TicketCategoryEnum.Other,
+            Priority = TicketPriorityEnum.P3Normal,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Low,
+            Status = TicketStatusEnum.Request,
+            Origin = TicketOriginEnum.ManualByCustomer,
+            IsIncident = false,
+            CreatedAt = now.AddDays(-2)
+        };
+        var ticket8 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0008",
+            BatteryAssetId = batteryAssetId2,
+            CustomerId = customer2,
+            Title = "Reassign after staff unavailability",
+            Description = "Original handler is unavailable; ticket needs reassignment to continue diagnostics.",
+            Category = TicketCategoryEnum.Charging,
+            Priority = TicketPriorityEnum.P2High,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Medium,
+            Status = TicketStatusEnum.ReAssign,
+            Origin = TicketOriginEnum.CreatedByStaff,
+            IsIncident = false,
+            CreatedAt = now.AddDays(-4)
+        };
+        var ticket9 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0009",
+            BatteryAssetId = batteryAssetId1,
+            CustomerId = customer1,
+            Title = "Out-of-scope repair request rejected",
+            Description = "Customer requested a modification outside the supported service scope.",
+            Category = TicketCategoryEnum.Repair,
+            Priority = TicketPriorityEnum.P3Normal,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Low,
+            Status = TicketStatusEnum.ClosedRejected,
+            Origin = TicketOriginEnum.ManualByCustomer,
+            IsIncident = false,
+            CreatedAt = now.AddDays(-15),
+            ClosedAt = now.AddDays(-14),
+            Reason = "Requested modification is outside the supported service scope."
+        };
+        var ticket10 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0010",
+            BatteryAssetId = batteryAssetId2,
+            CustomerId = customer2,
+            Title = "Cascade risk escalation on multi-site cluster",
+            Description = "System detected rising cascade risk score across the site, escalated automatically.",
+            Category = TicketCategoryEnum.Other,
+            Priority = TicketPriorityEnum.P1Critical,
+            ImpactScope = ImpactScopeEnum.MultiSite,
+            UrgencyLevel = UrgencyLevelEnum.High,
+            Status = TicketStatusEnum.InProgress,
+            Origin = TicketOriginEnum.System,
+            IsIncident = true,
+            CreatedAt = now.AddHours(-18)
+        };
+        var ticket11 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0011",
+            BatteryAssetId = batteryAssetId1,
+            CustomerId = customer1,
+            Title = "Firmware update completed successfully",
+            Description = "Scheduled firmware rollout finished; customer confirmed stable operation afterward.",
+            Category = TicketCategoryEnum.Performance,
+            Priority = TicketPriorityEnum.P3Normal,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Low,
+            Status = TicketStatusEnum.Closed,
+            Origin = TicketOriginEnum.CreatedByStaff,
+            IsIncident = false,
+            CreatedAt = now.AddDays(-30),
+            ResolvedAt = now.AddDays(-28),
+            ResolvedByStaffId = staffTier1,
+            ClosedAt = now.AddDays(-27),
+            ResolutionSummary = "Firmware updated and verified stable over a 48h monitoring window.",
+            Rating = 4,
+            RatingComment = "Good, though it took a bit longer than expected.",
+            RatedAt = now.AddDays(-26)
+        };
+        var ticket12 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0012",
+            BatteryAssetId = batteryAssetId2,
+            CustomerId = customer2,
+            Title = "Undervoltage warning during discharge",
+            Description = "Voltage dropped below the configured safe threshold during a high-load discharge cycle.",
+            Category = TicketCategoryEnum.Overheat,
+            Priority = TicketPriorityEnum.P2High,
+            ImpactScope = ImpactScopeEnum.SingleAsset,
+            UrgencyLevel = UrgencyLevelEnum.Medium,
+            Status = TicketStatusEnum.Pending,
+            PendingContext = PendingContextEnum.Held,
+            PendingReason = PauseReasonEnum.WorkBlocked,
+            Origin = TicketOriginEnum.AutoFromAlert,
+            OriginAlertId = Guid.NewGuid(),
+            IsIncident = false,
+            CreatedAt = now.AddDays(-7)
+        };
+        var ticket13 = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-2602-0013",
+            BatteryAssetId = batteryAssetId1,
+            CustomerId = customer1,
+            Title = "Humidity sensor anomaly near enclosure",
+            Description = "Ambient humidity readings spiked well above the safe operating range for the housing.",
+            Category = TicketCategoryEnum.Other,
+            Priority = TicketPriorityEnum.P3Normal,
+            ImpactScope = ImpactScopeEnum.Site,
+            UrgencyLevel = UrgencyLevelEnum.Low,
+            Status = TicketStatusEnum.Completed,
+            Origin = TicketOriginEnum.AutoFromAlert,
+            OriginAlertId = Guid.NewGuid(),
+            IsIncident = false,
+            CreatedAt = now.AddDays(-9),
+            ResolvedAt = now.AddDays(-8),
+            ResolvedByStaffId = staffTier1,
+            ResolutionSummary = "Enclosure ventilation adjusted; humidity returned to normal range."
+        };
+
+        var tickets = new List<Ticket>
+        {
+            ticket1, ticket2, ticket3, ticket4, ticket5,
+            ticket6, ticket7, ticket8, ticket9, ticket10, ticket11, ticket12, ticket13
+        };
 
         _context.Tickets.AddRange(tickets);
         await _context.SaveChangesAsync(ct);
@@ -473,6 +789,12 @@ public class TicketDataSeeder
             new() { Id = Guid.NewGuid(), TicketId = ticket2.Id, StaffId = staffTier2, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket2.CreatedAt.AddMinutes(15) },
             new() { Id = Guid.NewGuid(), TicketId = ticket4.Id, StaffId = staffTier3, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket4.CreatedAt.AddMinutes(15) },
             new() { Id = Guid.NewGuid(), TicketId = ticket5.Id, StaffId = staffTier2, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket5.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket6.Id, StaffId = staffTier2, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket6.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket8.Id, StaffId = staffTier1, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket8.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket10.Id, StaffId = staffTier3, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket10.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket11.Id, StaffId = staffTier1, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket11.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket12.Id, StaffId = staffTier2, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket12.CreatedAt.AddMinutes(15) },
+            new() { Id = Guid.NewGuid(), TicketId = ticket13.Id, StaffId = staffTier1, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = ticket13.CreatedAt.AddMinutes(15) },
         };
 
         return (tickets, assignments);

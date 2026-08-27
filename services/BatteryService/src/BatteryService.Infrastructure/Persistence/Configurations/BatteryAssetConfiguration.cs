@@ -87,6 +87,18 @@ public class BatteryAssetConfiguration : IEntityTypeConfiguration<BatteryAsset>
             .HasDefaultValue(ElectricalTopologyEnum.Independent)
             .IsRequired();
 
+        builder.Property(asset => asset.LastMaintenanceAtUtc)
+            .HasColumnName("last_maintenance_at_utc");
+
+        builder.Property(asset => asset.NextMaintenanceDueAtUtc)
+            .HasColumnName("next_maintenance_due_at_utc")
+            .IsRequired();
+
+        builder.Property(asset => asset.MaintenanceCycleNo)
+            .HasColumnName("maintenance_cycle_no")
+            .HasDefaultValue(1)
+            .IsRequired();
+
         builder.Property(asset => asset.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();
@@ -125,6 +137,13 @@ public class BatteryAssetConfiguration : IEntityTypeConfiguration<BatteryAsset>
         builder.HasIndex(asset => asset.LastSensorReadingAt);
         builder.HasIndex(asset => new { asset.CustomerId, asset.IsDeleted, asset.Status });
         builder.HasIndex(asset => new { asset.SiteId, asset.IsDeleted, asset.Status });
+
+        // Worker quét "pin nào đến hạn" mỗi tick — không có index này thì mỗi lần quét là
+        // một seq scan toàn bảng. Lọc is_deleted ngay trong index vì worker không bao giờ
+        // quan tâm tới pin đã xoá.
+        builder.HasIndex(asset => asset.NextMaintenanceDueAtUtc)
+            .HasDatabaseName("ix_battery_assets_next_maintenance_due")
+            .HasFilter("is_deleted = false");
 
         builder.Ignore(asset => asset.DomainEvents);
     }

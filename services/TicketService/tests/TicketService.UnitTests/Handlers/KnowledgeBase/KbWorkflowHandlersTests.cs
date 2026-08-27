@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Moq;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
 using TicketService.Application.CQRS.Handler.KnowledgeBase;
 using TicketService.Domain.Entities;
@@ -11,6 +12,14 @@ namespace TicketService.UnitTests.Handlers.KnowledgeBase;
 
 public class KbWorkflowHandlersTests
 {
+
+    /// <summary>
+    /// Outbox writer giả cho các test không quan tâm tới integration event. Handler KB ghi event
+    /// "chờ duyệt"/"đã duyệt" vào outbox, nhưng những test dưới đây kiểm tra chuyển trạng thái
+    /// bài viết — mock rỗng để chúng không phải khai báo thứ chúng không assert.
+    /// </summary>
+    private static IIntegrationEventOutboxWriter NoOpOutbox()
+        => new Mock<IIntegrationEventOutboxWriter>().Object;
     [Fact]
     public async Task Handle_PublishCommand_UpdatesStatusToPublished()
     {
@@ -39,8 +48,13 @@ public class KbWorkflowHandlersTests
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// Duyệt một bài đã từng publish (Version > 0) phải trả về Published, không phải Draft.
+    /// Trước đây handler luôn rơi về Draft nên approve hoá ra lại "ẩn" bài khỏi danh sách
+    /// Published cho tới khi có người publish lại thủ công.
+    /// </summary>
     [Fact]
-    public async Task Handle_ApproveReview_UpdatesStatusToDraft()
+    public async Task Handle_ApproveReview_PublishedArticle_StaysPublished()
     {
         // Arrange
         var articleId = Guid.NewGuid();
@@ -54,7 +68,7 @@ public class KbWorkflowHandlersTests
         var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
         var uow = resultExtended.uow;
 
-        var handler = new ApproveReviewCommandHandler(uow.Object);
+        var handler = new ApproveReviewCommandHandler(uow.Object, NoOpOutbox());
         var command = new ApproveReviewCommand { ArticleId = articleId };
 
         // Act
@@ -62,8 +76,36 @@ public class KbWorkflowHandlersTests
 
         // Assert
         result.IsSuccess.Should().BeTrue();
-        result.Data!.Status.Should().Be(KbArticleStatusEnum.Draft);
+        // Version mặc định của KnowledgeBaseArticle là 1 ⇒ bài đã từng publish.
+        result.Data!.Status.Should().Be(KbArticleStatusEnum.Published);
         article.ReviewRequired.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Bài chưa từng publish (Version = 0) thì duyệt xong về Draft — nhánh còn lại của
+    /// cùng một quy tắc.
+    /// </summary>
+    [Fact]
+    public async Task Handle_ApproveReview_NeverPublishedArticle_BecomesDraft()
+    {
+        var articleId = Guid.NewGuid();
+        var article = new KnowledgeBaseArticle
+        {
+            Id = articleId,
+            Status = KbArticleStatusEnum.PendingReview,
+            ReviewRequired = true,
+            Version = 0
+        };
+
+        var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
+        var uow = resultExtended.uow;
+
+        var handler = new ApproveReviewCommandHandler(uow.Object, NoOpOutbox());
+        var result = await handler.Handle(
+            new ApproveReviewCommand { ArticleId = articleId }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Status.Should().Be(KbArticleStatusEnum.Draft);
     }
 
     [Fact]
@@ -188,7 +230,7 @@ public class KbWorkflowHandlersTests
         var kbArticles = resultExtended.kbArticles;
         var kbVersions = resultExtended.kbVersions;
 
-        var handler = new RejectReviewCommandHandler(uow.Object);
+        var handler = new RejectReviewCommandHandler(uow.Object, NoOpOutbox());
         var command = new RejectReviewCommand { ArticleId = articleId, Reason = "Needs edit" };
 
         // Act
@@ -264,7 +306,7 @@ public class KbWorkflowHandlersTests
             Status = KbArticleStatusEnum.Draft
         };
         var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
-        var handler = new ApproveReviewCommandHandler(resultExtended.uow.Object);
+        var handler = new ApproveReviewCommandHandler(resultExtended.uow.Object, NoOpOutbox());
 
         // Act
         var result = await handler.Handle(new ApproveReviewCommand { ArticleId = articleId }, CancellationToken.None);
@@ -286,7 +328,7 @@ public class KbWorkflowHandlersTests
             Status = KbArticleStatusEnum.Draft
         };
         var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
-        var handler = new RejectReviewCommandHandler(resultExtended.uow.Object);
+        var handler = new RejectReviewCommandHandler(resultExtended.uow.Object, NoOpOutbox());
 
         // Act
         var result = await handler.Handle(new RejectReviewCommand { ArticleId = articleId, Reason = "test" }, CancellationToken.None);
@@ -446,7 +488,7 @@ public class KbWorkflowHandlersTests
         var resultExtended = MockTicketUnitOfWork.BuildExtended();
         var uow = resultExtended.uow;
 
-        var handler = new UpdateKbArticleCommandHandler(uow.Object);
+        var handler = new UpdateKbArticleCommandHandler(uow.Object, NoOpOutbox());
         var command = new UpdateKbArticleCommand
         {
             ArticleId = articleId,
@@ -464,27 +506,37 @@ public class KbWorkflowHandlersTests
         result.StatusCode.Should().Be(404);
     }
 
+    /// <summary>
+    /// Staff sửa bài của người khác thì đi đường đề xuất, không phải bị chặn 403.
+    /// </summary>
+    /// <remarks>
+    /// Test cũ gửi role "Customer" và kỳ vọng 403. Controller đã chặn sẵn bằng
+    /// <c>[Authorize(Roles = "Staff,Manager,Admin")]</c> nên tình huống đó không thể xảy
+    /// ra qua API thật, và khối 403 trong handler đã được gỡ vì là dead code. Bài kiểm tra
+    /// giờ khẳng định điều thực sự đúng: người không phải Manager/Admin sửa bài thì bài
+    /// chuyển sang PendingReview chờ duyệt.
+    /// </remarks>
     [Fact]
-    public async Task Handle_UpdateCommand_Unauthorized_Returns403()
+    public async Task Handle_UpdateCommand_AsStaff_MovesArticleToPendingReview()
     {
         // Arrange
         var articleId = Guid.NewGuid();
         var article = new KnowledgeBaseArticle
         {
             Id = articleId,
-            CreatedByUserId = Guid.NewGuid(), // different user
+            CreatedByUserId = Guid.NewGuid(), // bài của người khác
             IsDeleted = false
         };
 
         var resultExtended = MockTicketUnitOfWork.BuildExtended(kbSeed: new[] { article });
         var uow = resultExtended.uow;
 
-        var handler = new UpdateKbArticleCommandHandler(uow.Object);
+        var handler = new UpdateKbArticleCommandHandler(uow.Object, NoOpOutbox());
         var command = new UpdateKbArticleCommand
         {
             ArticleId = articleId,
-            CurrentUserId = Guid.NewGuid(), // different user
-            CurrentUserRole = "Customer", // not staff/manager/admin
+            CurrentUserId = Guid.NewGuid(),
+            CurrentUserRole = "Staff", // không phải Manager/Admin ⇒ phải qua phê duyệt
             Title = "Updated Title",
             Content = "symptoms. steps. solution."
         };
@@ -493,8 +545,9 @@ public class KbWorkflowHandlersTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(403);
+        result.IsSuccess.Should().BeTrue();
+        article.Status.Should().Be(KbArticleStatusEnum.PendingReview);
+        article.ReviewRequired.Should().BeTrue();
     }
 
     [Fact]
@@ -518,7 +571,7 @@ public class KbWorkflowHandlersTests
         var kbArticles = resultExtended.kbArticles;
         var kbVersions = resultExtended.kbVersions;
 
-        var handler = new UpdateKbArticleCommandHandler(uow.Object);
+        var handler = new UpdateKbArticleCommandHandler(uow.Object, NoOpOutbox());
         var command = new UpdateKbArticleCommand
         {
             ArticleId = articleId,
@@ -598,7 +651,7 @@ public class KbWorkflowHandlersTests
         var uow = resultExtended.uow;
         var kbVersions = resultExtended.kbVersions;
 
-        var handler = new UpdateKbArticleCommandHandler(uow.Object);
+        var handler = new UpdateKbArticleCommandHandler(uow.Object, NoOpOutbox());
         var command = new UpdateKbArticleCommand
         {
             ArticleId = articleId,
@@ -665,7 +718,7 @@ public class KbWorkflowHandlersTests
             kbSeed: new[] { article },
             kbVersionSeed: new[] { initialVersion, staffDraft });
 
-        var handler = new UpdateKbArticleCommandHandler(resultExtended.uow.Object);
+        var handler = new UpdateKbArticleCommandHandler(resultExtended.uow.Object, NoOpOutbox());
 
         // Act
         var result = await handler.Handle(new UpdateKbArticleCommand
@@ -765,7 +818,7 @@ public class KbWorkflowHandlersTests
             kbVersionSeed: new[] { deletedVersion });
         var kbVersions = resultExtended.kbVersions;
 
-        var handler = new UpdateKbArticleCommandHandler(resultExtended.uow.Object);
+        var handler = new UpdateKbArticleCommandHandler(resultExtended.uow.Object, NoOpOutbox());
 
         // Act
         var result = await handler.Handle(new UpdateKbArticleCommand

@@ -2,6 +2,8 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events.KnowledgeBase;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
@@ -14,10 +16,12 @@ namespace TicketService.Application.CQRS.Handler.KnowledgeBase;
 public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleCommand, CommonResponse<KbArticleDTO>>
 {
     private readonly ITicketUnitOfWork _uow;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
-    public UpdateKbArticleCommandHandler(ITicketUnitOfWork uow)
+    public UpdateKbArticleCommandHandler(ITicketUnitOfWork uow, IIntegrationEventOutboxWriter outboxWriter)
     {
         _uow = uow;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<CommonResponse<KbArticleDTO>> Handle(UpdateKbArticleCommand command, CancellationToken ct)
@@ -36,18 +40,17 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             return await HandleTemplateUpdate(article, command, ct);
         }
 
-        // Check authorization for regular articles
-        var isCreator = article.CreatedByUserId == command.CurrentUserId;
+        // Controller đã chặn ở [Authorize(Roles = "Staff,Manager,Admin")], nên tới được đây
+        // nghĩa là user thuộc 1 trong 3 role đó và đều được phép đề xuất sửa. Khối kiểm tra
+        // 403 cũ ở đây là dead code: điều kiện của nó luôn false với cả 3 role.
         var isManagerOrAdmin = command.CurrentUserRole.Equals("Manager", StringComparison.OrdinalIgnoreCase) ||
                                command.CurrentUserRole.Equals("Admin", StringComparison.OrdinalIgnoreCase);
 
-        if (!isCreator && !isManagerOrAdmin && !command.CurrentUserRole.Equals("Staff", StringComparison.OrdinalIgnoreCase))
-        {
-            return Fail(403, "You do not have permission to update this article.");
-        }
-
-        // Manager/Admin hoặc chủ sở hữu bài viết cập nhật trực tiếp, không qua phê duyệt lại.
-        if (isCreator || isManagerOrAdmin)
+        // Chỉ Manager/Admin được ghi thẳng. Chủ sở hữu cũng phải qua phê duyệt: mọi thay đổi
+        // nội dung KB đều cần một người có quyền duyệt xác nhận, kể cả khi người sửa chính là
+        // người viết ra bài — nếu không, tác giả có thể tự đẩy nội dung sai lên bài đã Published
+        // mà không ai rà lại.
+        if (isManagerOrAdmin)
             return await HandleDirectUpdate(article, command, ct);
 
         // Determine next version numbers
@@ -81,6 +84,22 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
         article.PendingReviewBy = command.CurrentUserId;
 
         _uow.KnowledgeBaseArticles.UpdateAsync(article);
+
+        // Báo cho Manager/Admin là có bài đang chờ duyệt. Đây là điểm mấu chốt của luồng: trước
+        // đây bài chuyển sang PendingReview hoàn toàn im lặng, người duyệt không hề biết có việc.
+        //
+        // Ghi outbox TRƯỚC SaveChangesAsync để event nằm cùng transaction với thay đổi trạng
+        // thái — không bao giờ báo "có bài chờ duyệt" cho một thay đổi chưa lưu được.
+        // Dùng command.Title (nội dung vừa gửi) chứ không phải article.Title: ở nhánh này bài gốc
+        // chưa đổi tiêu đề, tiêu đề mới còn nằm trong bản version chờ duyệt.
+        await _outboxWriter.WriteAsync(new KbArticleReviewRequestedEvent(
+            article.Id,
+            command.Title,
+            command.CurrentUserId,
+            command.CurrentUserName,
+            command.ChangeDescription,
+            IsNewArticle: false), ct);
+
         await _uow.SaveChangesAsync(ct);
 
         return new CommonResponse<KbArticleDTO>
@@ -93,8 +112,9 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
     }
 
     /// <summary>
-    /// Cập nhật trực tiếp cho Manager/Admin hoặc chủ sở hữu bài viết: ghi thẳng nội dung mới vào
-    /// article, đồng thời lưu 1 bản ghi version đã Approved để giữ lịch sử thay đổi.
+    /// Cập nhật trực tiếp — CHỈ Manager/Admin: ghi thẳng nội dung mới vào article, đồng thời lưu
+    /// 1 bản ghi version đã Approved để giữ lịch sử thay đổi. Chủ sở hữu KHÔNG đi đường này;
+    /// bài của họ vẫn phải qua approve-review như mọi người khác.
     /// </summary>
     private async Task<CommonResponse<KbArticleDTO>> HandleDirectUpdate(
         KnowledgeBaseArticle article, UpdateKbArticleCommand command, CancellationToken ct)
@@ -125,6 +145,17 @@ public class UpdateKbArticleCommandHandler : IRequestHandler<UpdateKbArticleComm
             ApplyContentToArticle(article, command);
             article.Category = command.Category;
             article.Version = nextMajor;
+            // Trả Status về trạng thái ổn định. Trước đây chỉ clear ReviewRequired/PendingReviewBy
+            // mà bỏ quên Status, nên một bài đang PendingReview bị ghi thẳng sẽ kẹt lại ở
+            // PendingReview với ReviewRequired=false — trạng thái tự mâu thuẫn, và badge
+            // "chờ duyệt" của FE đếm cả bài không còn gì để duyệt.
+            //
+            // KHÔNG đụng tới bài đã Archived: archive là quyết định "ngừng dùng bài này", và
+            // sửa nội dung không phải là cách để rút lại quyết định đó. Nếu set Published ở đây
+            // thì một lần chỉnh chính tả cũng đủ đưa hướng dẫn đã khai tử trở lại luồng gợi ý
+            // cho kỹ thuật viên. Muốn dùng lại thì bấm publish (un-archive) một cách có chủ đích.
+            if (article.Status != KbArticleStatusEnum.Archived)
+                article.Status = KbArticleStatusEnum.Published;
             article.ReviewRequired = false;
             article.PendingReviewBy = null;
             article.ManagerRejectReason = null;

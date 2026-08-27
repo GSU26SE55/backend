@@ -44,17 +44,32 @@ public class SetBmsSwitchCommandHandler
         if (target is not ("charge" or "discharge"))
             return Fail(400, "Target must be either 'charge' or 'discharge'.");
 
-        var scope = BatteryTenantScopeHelper.Resolve(_currentUser.UserId, _currentUser.Roles);
-        if (scope.IsDenied
-            || !Guid.TryParse(_currentUser.UserId, out var issuerId)
-            || issuerId == Guid.Empty)
+        // Đường hệ thống (BatteryIsolationRequestedConsumer) không chạy trong HTTP request nên
+        // không có current user để resolve tenant — issuer đi kèm trong chính command.
+        var isSystemIssued = request.IssuedByAccountId.HasValue;
+        Guid? issuerId = request.IssuedByAccountId;
+        var scope = default(BatteryTenantScopeHelper.TenantScope);
+
+        if (!isSystemIssued)
         {
-            return Fail(401, "The current user could not be identified for audit logging.");
+            scope = BatteryTenantScopeHelper.Resolve(_currentUser.UserId, _currentUser.Roles);
+            if (scope.IsDenied
+                || !Guid.TryParse(_currentUser.UserId, out var userIssuerId)
+                || userIssuerId == Guid.Empty)
+            {
+                return Fail(401, "The current user could not be identified for audit logging.");
+            }
+            issuerId = userIssuerId;
+        }
+        else if (issuerId == Guid.Empty)
+        {
+            // SLA escalation tự động — không có người bấm; cột audit nullable, để null.
+            issuerId = null;
         }
 
         var assetQuery = _unitOfWork.BatteryAssets.GetAllAsync()
             .Where(asset => asset.Id == request.BatteryAssetId && !asset.IsDeleted);
-        if (scope.IsCustomerScoped)
+        if (!isSystemIssued && scope.IsCustomerScoped)
             assetQuery = assetQuery.Where(asset => asset.CustomerId == scope.CustomerId);
 
         var asset = await assetQuery.FirstOrDefaultAsync(cancellationToken);
@@ -83,7 +98,9 @@ public class SetBmsSwitchCommandHandler
                               && command.Type == CommandType
                               && command.Status == IotDeviceCommandStatusEnum.Pending)
             .ToListAsync(cancellationToken);
-        if (pending.Any(command => HasTarget(command.ParamsJson, target)))
+        var isAutomaticSafetyCut = isSystemIssued && target == "discharge" && !request.Enable;
+        if (pending.Any(command => IsPendingConflict(
+                command.ParamsJson, target, request.Enable, isAutomaticSafetyCut)))
             return Fail(409, "A previous command for this switch is still awaiting a response.");
 
         var now = DateTime.UtcNow;
@@ -150,13 +167,27 @@ public class SetBmsSwitchCommandHandler
         };
     }
 
-    private static bool HasTarget(string paramsJson, string target)
+    private static bool IsPendingConflict(
+        string paramsJson,
+        string target,
+        bool requestedEnable,
+        bool allowSafetyOverride)
     {
         try
         {
             using var doc = JsonDocument.Parse(paramsJson);
-            return doc.RootElement.TryGetProperty("target", out var value)
-                   && string.Equals(value.GetString(), target, StringComparison.OrdinalIgnoreCase);
+            if (!doc.RootElement.TryGetProperty("target", out var targetValue)
+                || !string.Equals(targetValue.GetString(), target, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (!allowSafetyOverride)
+                return true;
+
+            return !doc.RootElement.TryGetProperty("enable", out var enableValue)
+                   || enableValue.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                   || enableValue.GetBoolean() == requestedEnable;
         }
         catch (JsonException)
         {

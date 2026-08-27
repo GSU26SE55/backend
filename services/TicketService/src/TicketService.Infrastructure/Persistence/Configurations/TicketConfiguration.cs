@@ -114,8 +114,6 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.ScheduleVersion)
             .HasColumnName("schedule_version")
             .HasDefaultValue(0);
-        builder.Property(e => e.PeriodicMaintenanceSourceTicketId)
-            .HasColumnName("periodic_maintenance_source_ticket_id");
         builder.Property(e => e.PeriodicMaintenanceDueAtUtc)
             .HasColumnName("periodic_maintenance_due_at_utc");
         builder.Property(e => e.PeriodicMaintenanceScheduleDeadlineAtUtc)

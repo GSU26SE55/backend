@@ -1,6 +1,8 @@
 using System.Text.Json;
 using MediatR;
 using SharedContracts.Common.Responses;
+using SharedContracts.Events.KnowledgeBase;
+using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.KnowledgeBase;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Application.Interfaces.Repositories;
@@ -15,11 +17,16 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
 {
     private readonly ITicketUnitOfWork _uow;
     private readonly IKbCodeGenerator _codeGenerator;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
 
-    public CreateKbArticleCommandHandler(ITicketUnitOfWork uow, IKbCodeGenerator codeGenerator)
+    public CreateKbArticleCommandHandler(
+        ITicketUnitOfWork uow,
+        IKbCodeGenerator codeGenerator,
+        IIntegrationEventOutboxWriter outboxWriter)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
+        _outboxWriter = outboxWriter;
     }
 
     public async Task<CommonResponse<KbArticleActionDTO>> Handle(CreateKbArticleCommand command, CancellationToken ct)
@@ -83,6 +90,22 @@ public class CreateKbArticleCommandHandler : IRequestHandler<CreateKbArticleComm
 
         await _uow.KnowledgeBaseArticles.AddAsync(article);
         await _uow.KbArticleVersions.AddAsync(initialVersion);
+
+        // Bài mới (không phải template) sinh ra đã ở PendingReview → báo Manager/Admin có việc
+        // chờ duyệt. Template đi thẳng Draft và có luồng publish riêng, không qua duyệt, nên
+        // không bắn gì — gửi thông báo "chờ duyệt" cho thứ không ai duyệt là báo nhiễu.
+        // Ghi outbox TRƯỚC SaveChangesAsync để event cùng transaction với bản ghi article.
+        if (!command.IsTemplate)
+        {
+            await _outboxWriter.WriteAsync(new KbArticleReviewRequestedEvent(
+                article.Id,
+                article.Title,
+                command.CurrentUserId,
+                command.CurrentUserName,
+                versionMessage,
+                IsNewArticle: true), ct);
+        }
+
         await _uow.SaveChangesAsync(ct);
 
         var message = command.IsTemplate

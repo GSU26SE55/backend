@@ -1,4 +1,5 @@
 using BatteryService.Application.CQRS.Command.Alert;
+using BatteryService.Application.CQRS.Command.EnvironmentalIncident;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.CQRS.Command.ThresholdConfig;
 using BatteryService.Application.CQRS.Handler.Alert;
@@ -7,6 +8,7 @@ using BatteryService.Application.CQRS.Handler.ThresholdConfig;
 using BatteryService.Application.CQRS.Query.Alert;
 using BatteryService.Application.CQRS.Query.SensorReading;
 using BatteryService.Application.CQRS.Query.ThresholdConfig;
+using BatteryService.Application.DTOs;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using BatteryService.UnitTests.Helpers;
@@ -251,6 +253,114 @@ public class AlertThresholdSensorHandlerTests
         r.Data.Inserted.Should().Be(1);
         r.Data.Skipped.Should().Be(1);
         asset.LastSensorReadingAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task BatchIngest_Ds18b20AboveSiteCritical_ReportsOverheatIncident()
+    {
+        var siteId = Guid.NewGuid();
+        var asset = MakeAsset();
+        asset.SiteId = siteId;
+        asset.SerialNumber = "BAT-24V-JK-V1";
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(asset)
+            .WithAmbientThresholdConfigs(new AmbientThresholdConfig
+            {
+                Id = Guid.NewGuid(),
+                SiteId = siteId,
+                Enabled = true,
+                HighAmbientTempWarning = 38m,
+                HighAmbientTempCritical = 42m,
+                CreatedAt = DateTime.UtcNow
+            });
+        var sender = new Mock<MediatR.ISender>();
+        sender.Setup(x => x.Send(It.IsAny<ReportEnvironmentalIncidentCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EnvironmentalIncidentResponse { IsSuccess = true, StatusCode = 201 });
+
+        var handler = new BatchIngestSensorReadingsCommandHandler(
+            b.Build(),
+            new NoopIotMetricsRecorder(),
+            new NoopIotCalibrationCache(),
+            new NoopTelemetryPublisher(),
+            new NoopTelemetryStatsService(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance,
+            sender: sender.Object);
+
+        var readingTime = DateTime.UtcNow;
+        var result = await handler.Handle(new BatchIngestSensorReadingsCommand
+        {
+            Items =
+            [
+                new SensorReadingItem
+                {
+                    BatteryAssetId = asset.Id,
+                    Time = readingTime,
+                    Voltage = 0m,
+                    Current = 0m,
+                    Temperature = 57m,
+                    SocPercent = 87m,
+                    SensorSourceCode = "external-temp"
+                }
+            ]
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        sender.Verify(x => x.Send(It.Is<ReportEnvironmentalIncidentCommand>(command =>
+                command.SiteId == siteId
+                && command.AuthenticatedDeviceSiteId == siteId
+                && command.IncidentType == EnvironmentalIncidentTypeEnum.OverheatHazard
+                && command.Severity == AlertSeverityEnum.Critical
+                && command.DetectedAt == readingTime
+                && command.ReportedBy == "DS18B20:BAT-24V-JK-V1"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task BatchIngest_Ds18b20BelowSiteWarning_DoesNotReportIncident()
+    {
+        var siteId = Guid.NewGuid();
+        var asset = MakeAsset();
+        asset.SiteId = siteId;
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(asset)
+            .WithAmbientThresholdConfigs(new AmbientThresholdConfig
+            {
+                Id = Guid.NewGuid(),
+                SiteId = siteId,
+                Enabled = true,
+                HighAmbientTempWarning = 38m,
+                HighAmbientTempCritical = 42m,
+                CreatedAt = DateTime.UtcNow
+            });
+        var sender = new Mock<MediatR.ISender>();
+        var handler = new BatchIngestSensorReadingsCommandHandler(
+            b.Build(),
+            new NoopIotMetricsRecorder(),
+            new NoopIotCalibrationCache(),
+            new NoopTelemetryPublisher(),
+            new NoopTelemetryStatsService(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance,
+            sender: sender.Object);
+
+        await handler.Handle(new BatchIngestSensorReadingsCommand
+        {
+            Items =
+            [
+                new SensorReadingItem
+                {
+                    BatteryAssetId = asset.Id,
+                    Time = DateTime.UtcNow,
+                    Voltage = 0m,
+                    Current = 0m,
+                    Temperature = 33m,
+                    SocPercent = 87m,
+                    SensorSourceCode = "external-temp"
+                }
+            ]
+        }, default);
+
+        sender.Verify(x => x.Send(It.IsAny<ReportEnvironmentalIncidentCommand>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

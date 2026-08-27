@@ -87,6 +87,19 @@ public class CrossSourceValidationTests
         result!.Unit.Should().Be("°C");
     }
 
+    [Fact]
+    public void DetectSensorMismatch_ExternalTempVoltageZero_UsesTemperatureOnly()
+    {
+        var bms = Reading(SensorReadingSourceTypeEnum.Bms, voltage: 26.5m, temperature: 32m, sensorSourceCode: "primary");
+        var iot = Reading(SensorReadingSourceTypeEnum.IotGateway, voltage: 0m, temperature: 40m, sensorSourceCode: "external-temp");
+
+        var result = AnomalyRules.DetectSensorMismatch(bms, iot);
+
+        result.Should().NotBeNull();
+        result!.Unit.Should().Be("°C", "DS18B20 voltage=0 chỉ là placeholder");
+        result.ActualValue.Should().Be(8m);
+    }
+
     // ── CrossSourceValidationService ───────────────────────────────────────────
 
     [Fact]
@@ -115,9 +128,9 @@ public class CrossSourceValidationTests
 
         var created = await Sut(builder).ScanRecentReadingsAsync(DateTime.UtcNow.AddMinutes(-1));
 
-        created.Should().BeGreaterThan(0, "ΔV=0.6V > 0.5V — đường V vẫn phải phát hiện");
+        created.Should().Be(1, "một lượt quét chỉ tạo một alert mismatch cho mỗi asset");
         builder.Alerts.Verify(r => r.AddAsync(It.Is<Alert>(a =>
-            a.AnomalyType == AnomalyTypeEnum.SensorMismatch)), Times.AtLeastOnce);
+            a.AnomalyType == AnomalyTypeEnum.SensorMismatch)), Times.Once);
     }
 
     [Fact]

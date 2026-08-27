@@ -71,11 +71,17 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
 
         // Tên staff phụ trách — lấy từ StaffAccount đã sync, để mọi role (kể cả
         // Staff) hiển thị được tên mà không cần gọi /api/staff (Admin/Manager only).
-        var assignedStaffIds = ticket.Assignments.Select(a => a.StaffId).Distinct().ToList();
-        var staffNames = assignedStaffIds.Count == 0
+        // Gồm CẢ tác giả log bảo trì, không chỉ người đang được phân công: staff bị
+        // reassign đi thì assignment mất, nhưng log họ đã ghi vẫn nằm trong ticket và
+        // vẫn phải hiện đúng tên người nộp.
+        var lookupStaffIds = ticket.Assignments.Select(a => a.StaffId)
+            .Concat(ticket.MaintenanceLogs.Select(m => m.StaffId))
+            .Distinct()
+            .ToList();
+        var staffNames = lookupStaffIds.Count == 0
             ? new Dictionary<Guid, string>()
             : await _unitOfWork.StaffAccounts.GetAllAsync().AsNoTracking()
-                .Where(s => assignedStaffIds.Contains(s.AccountId) && !s.IsDeleted)
+                .Where(s => lookupStaffIds.Contains(s.AccountId) && !s.IsDeleted)
                 .ToDictionaryAsync(s => s.AccountId, s => s.FullName, cancellationToken);
 
         var dto = new TicketDetailDTO
@@ -108,7 +114,6 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             ReopenCount = ticket.ReopenCount,
             IsIncident = ticket.IsIncident,
             EnvironmentalIncidentId = ticket.EnvironmentalIncidentId?.ToString(),
-            PeriodicMaintenanceSourceTicketId = ticket.PeriodicMaintenanceSourceTicketId?.ToString(),
             PeriodicMaintenanceDueAtUtc = ticket.PeriodicMaintenanceDueAtUtc,
             PeriodicMaintenanceScheduleDeadlineAtUtc = ticket.PeriodicMaintenanceScheduleDeadlineAtUtc,
             ResolutionSummary = ticket.ResolutionSummary,
@@ -176,14 +181,23 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             {
                 Id = m.Id.ToString(),
                 StaffId = m.StaffId.ToString(),
+                StaffName = staffNames.TryGetValue(m.StaffId, out var logAuthor) ? logAuthor : null,
                 LogType = m.LogType,
                 Summary = m.Summary,
                 DiagnosisDetails = m.DiagnosisDetails,
                 ActionsTaken = m.ActionsTaken,
                 DurationMinutes = m.DurationMinutes,
                 ResolutionNote = m.ResolutionNote,
+                PartsUsed = m.PartsUsed,
                 StartedAt = m.StartedAt,
                 CompletedAt = m.CompletedAt,
+                // Bốn danh sách này trước đây bị bỏ trắng ở riêng endpoint chi tiết
+                // (endpoint list phẳng thì có map), nên tab Logs và form sửa log đọc
+                // từ ticket detail đều thấy log không có ảnh nào.
+                AttachmentFileIds = m.AttachmentFileIds.Select(fid => fid.ToString()).ToList(),
+                BeforePhotosFileIds = m.BeforePhotosFileIds.Select(fid => fid.ToString()).ToList(),
+                AfterPhotosFileIds = m.AfterPhotosFileIds.Select(fid => fid.ToString()).ToList(),
+                RelatedKbArticleIds = m.RelatedKbArticleIds.Select(fid => fid.ToString()).ToList(),
                 CreatedAt = m.CreatedAt
             }).ToList(),
             AttachmentFileIds = ticket.Attachments.Select(a => a.FileId.ToString()).ToList()

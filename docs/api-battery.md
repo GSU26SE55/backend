@@ -823,6 +823,7 @@ Base route: `/api/battery-types`
 | `pageSize` | `int` | Số item/trang |
 | `keyword` | `string?` | Tìm theo tên loại pin **hoặc nhà sản xuất** (`Name` + `Manufacturer`, case-insensitive) |
 | `includeDeleted` | `bool` | Bao gồm đã xóa (mặc định `false`) |
+| `chemistry` | `BatteryChemistryEnum?` | Lọc theo hóa học pin (`1` LiFePO4, `2` Nmc, `3` Nca, `4` Lco, `99` Other). Không truyền = không lọc |
 | `SortBy` | `string?` | Cột sort server-side. Whitelist: `name`, `manufacturer`, `chemistry`, `nominalCapacityAh`, `nominalVoltage`, `maxCycleCount`. Ngoài whitelist → `createdAt` |
 | `SortDir` | `string?` | `asc` \| `desc` (mặc định `desc`; giá trị lạ → `desc`) |
 

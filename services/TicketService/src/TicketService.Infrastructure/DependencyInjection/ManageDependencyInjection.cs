@@ -58,10 +58,6 @@ public static class ManageDependencyInjection
             .ValidateOnStart();
         services.AddOptions<PeriodicMaintenanceOptions>()
             .Bind(configuration.GetSection(PeriodicMaintenanceOptions.SectionName))
-            .Validate(options => options.CycleMonths > 0,
-                "Ticket:PeriodicMaintenance:CycleMonths must be greater than zero.")
-            .Validate(options => options.LeadDays > 0,
-                "Ticket:PeriodicMaintenance:LeadDays must be greater than zero.")
             .Validate(options => options.OverdueScheduleWindowDays > 0,
                 "Ticket:PeriodicMaintenance:OverdueScheduleWindowDays must be greater than zero.")
             .Validate(options => options.PollIntervalSeconds > 0,
@@ -155,7 +151,10 @@ public static class ManageDependencyInjection
         services.AddHostedService<OutboxRelayBackgroundService>();
         services.AddHostedService<SlaTimerBackgroundService>();
         services.AddHostedService<TicketScheduleActivationBackgroundService>();
-        services.AddHostedService<PeriodicMaintenanceBackgroundService>();
+        // Nhắc khách chọn giờ cho ticket bảo trì định kỳ, và bàn lại cho Manager
+        // khi khách im lặng qua ba mốc.
+        services.AddHostedService<BackgroundJobs.PeriodicMaintenanceReminderBackgroundService>();
+
 
         // Read receipt — channel-based bulk writer (#541/#542)
         services.AddSingleton<IChatReadReceiptQueue, ChatReadReceiptQueue>();

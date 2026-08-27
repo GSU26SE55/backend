@@ -22,16 +22,27 @@ public class MaintenanceLogsByTicketQueryHandler : IRequestHandler<MaintenanceLo
             .OrderByDescending(m => m.CreatedAt)
             .ToListAsync(ct);
 
+        // Cùng nguồn tên với TicketGetByIdQueryHandler (StaffAccount đã sync) — hai endpoint
+        // trả cùng một log thì phải ra cùng một tên.
+        var staffIds = logs.Select(m => m.StaffId).Distinct().ToList();
+        var staffNames = staffIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _uow.StaffAccounts.GetAllAsync().AsNoTracking()
+                .Where(s => staffIds.Contains(s.AccountId) && !s.IsDeleted)
+                .ToDictionaryAsync(s => s.AccountId, s => s.FullName, ct);
+
         return logs.Select(m => new MaintenanceLogDTO
         {
             Id = m.Id.ToString(),
             StaffId = m.StaffId.ToString(),
+            StaffName = staffNames.TryGetValue(m.StaffId, out var author) ? author : null,
             LogType = m.LogType,
             Summary = m.Summary,
             DiagnosisDetails = m.DiagnosisDetails,
             ActionsTaken = m.ActionsTaken,
             DurationMinutes = m.DurationMinutes,
             ResolutionNote = m.ResolutionNote,
+            PartsUsed = m.PartsUsed,
             StartedAt = m.StartedAt,
             CompletedAt = m.CompletedAt,
             AttachmentFileIds = m.AttachmentFileIds.Select(id => id.ToString()).ToList(),

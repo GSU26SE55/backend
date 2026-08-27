@@ -169,10 +169,15 @@ public class AmbientReadingsController : ControllerBase
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Trả config (200 với <c>Data: null</c> nếu site chưa cấu hình).</response>
     /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin/Manager.</response>
+    /// <response code="403">Không có role Admin/Manager/Staff.</response>
     /// <response code="404">Site chưa được cấu hình threshold (handler trả 404 nếu null).</response>
+    // Staff ĐỌC được (không sửa — upsert vẫn Admin/Manager). Staff đã đọc được
+    // `readings/history` và ngưỡng theo battery type (ThresholdConfigsController:
+    // "Admin,Manager,Staff"); thiếu ngưỡng ambient thì họ xem được số đo môi trường
+    // quanh sự cố nhưng không có căn cứ nào để biết dòng nào vượt ngưỡng — đúng việc
+    // họ phải làm khi ra hiện trường.
     [HttpGet("threshold-configs/by-site/{siteId:guid}")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(CommonResponse<AmbientThresholdConfigDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

@@ -34,6 +34,9 @@ public class GetBatteryTypesQueryHandler : IRequestHandler<GetBatteryTypesQuery,
                 (type.Manufacturer != null && type.Manufacturer.ToLower().Contains(keyword)));
         }
 
+        if (request.Chemistry.HasValue)
+            query = query.Where(type => type.Chemistry == request.Chemistry.Value);
+
         var descending = SortHelper.IsDescending(request.SortDir);
         // Whitelist: name | manufacturer | chemistry | nominalCapacityAh | nominalVoltage | maxCycleCount | createdAt (default).
         var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch

@@ -23,6 +23,9 @@ public class ApplicationDbContext : DbContext
 
     public virtual DbSet<BatteryAsset> BatteryAssets { get; set; }
 
+    /// <summary>Lịch sử bảo trì định kỳ theo từng kỳ của mỗi pin.</summary>
+    public virtual DbSet<MaintenanceCycle> MaintenanceCycles { get; set; }
+
     public virtual DbSet<Site> Sites { get; set; }
 
     public virtual DbSet<CustomerAccount> CustomerAccounts { get; set; }

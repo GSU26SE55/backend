@@ -137,10 +137,15 @@ public class ReportEnvironmentalIncidentCommandHandler
         };
     }
 
-    internal static EnvironmentalIncidentDto Map(IncidentEntity i) => new()
+    /// <param name="customerName">
+    /// Tên khách sở hữu site. Truyền vào thay vì tra ở đây vì Account nằm ở repository khác;
+    /// mặc định rỗng cho các luồng command không cần hiển thị tên.
+    /// </param>
+    internal static EnvironmentalIncidentDto Map(IncidentEntity i, string customerName = "") => new()
     {
         Id = i.Id.ToString(),
         SiteId = i.SiteId.ToString(),
+        CustomerName = customerName,
         IncidentType = i.IncidentType,
         Status = i.Status,
         Severity = i.Severity,
