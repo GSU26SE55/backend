@@ -160,10 +160,14 @@ config:
 
 resourceQuota:
   enabled: true
-  requestsCpu: "2"
+  # ResourceQuota is an admission ceiling, not a reservation. Keep enough
+  # transient headroom for one replacement application pod plus Helm hook Jobs
+  # while the previous pod is still terminating. Production #11 reached all
+  # three former ceilings and Kubernetes rejected the replacement pods.
+  requestsCpu: "3"
   # Prometheus plus the complete backend/observability stack needs more than
   # 4 GiB of requested memory. Keep this aligned with the recovered R4 quota.
-  requestsMemory: "6Gi"
-  limitsCpu: "10"
-  limitsMemory: "12Gi"
+  requestsMemory: "7Gi"
+  limitsCpu: "12"
+  limitsMemory: "14Gi"
   pvcs: "15"

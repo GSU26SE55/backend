@@ -9,6 +9,9 @@ metadata:
     {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "authservice") | nindent 4 }}
 spec:
   replicas: {{ $svc.replicas }}
+  # Keep Kubernetes from declaring the rollout failed at its ten-minute
+  # default while Auth is still applying bounded startup migrations on R4.
+  progressDeadlineSeconds: 1200
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -85,13 +88,20 @@ spec:
         # tạm thời không làm kubelet restart AuthService.
         startupProbe:
           httpGet: { path: /live, port: http }
-          failureThreshold: 30
+          # Auth applies EF migrations and seeds before binding HTTP. R4 is a
+          # single-node cluster, so image extraction and concurrent rollouts can
+          # temporarily make a one-second probe time out. Allow ten minutes for
+          # startup, while /live still fails fast after the process is serving.
+          timeoutSeconds: 5
+          failureThreshold: 120
           periodSeconds: 5
         readinessProbe:
           httpGet: { path: /ready, port: http }
+          timeoutSeconds: 5
           periodSeconds: 5
         livenessProbe:
           httpGet: { path: /live, port: http }
+          timeoutSeconds: 5
           periodSeconds: 10
         resources:
           {{- toYaml $svc.resources | nindent 10 }}

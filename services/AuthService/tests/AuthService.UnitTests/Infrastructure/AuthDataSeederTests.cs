@@ -91,6 +91,43 @@ public class AuthDataSeederTests : IDisposable
     }
 
     [Fact]
+    public async Task SeedAsync_DemoEmployeeCodeOwnedByAnotherProfile_PreservesOwnerAndStarts()
+    {
+        var existingOwnerAccountId = Guid.NewGuid();
+        _ctx.StaffProfiles.Add(new StaffProfile
+        {
+            Id = Guid.NewGuid(),
+            AccountId = existingOwnerAccountId,
+            EmployeeCode = "STF-T1-001",
+            Department = "Production",
+            MaxConcurrentTickets = 4,
+            IsAvailable = true,
+            SkillTier = StaffSkillTierEnum.Generalist,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow.AddMonths(-1)
+        });
+        await _ctx.SaveChangesAsync();
+
+        await NewSeeder().SeedAsync();
+
+        var tier1AccountId = await _ctx.Users
+            .Where(a => a.Email == "staff.tier1@solarbattery.local")
+            .Select(a => a.Id)
+            .SingleAsync();
+        var allProfiles = await _ctx.StaffProfiles
+            .IgnoreQueryFilters()
+            .ToListAsync();
+
+        allProfiles.Should().ContainSingle(p => p.EmployeeCode == "STF-T1-001");
+        allProfiles.Single(p => p.EmployeeCode == "STF-T1-001").AccountId
+            .Should().Be(existingOwnerAccountId);
+        allProfiles.Should().NotContain(p => p.AccountId == tier1AccountId);
+        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-T2-001");
+        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-T3-001");
+    }
+
+    [Fact]
     public async Task SeedAsync_LegacyTechnicianRole_NoStaff_RenamesTechnicianToStaff()
     {
         // Pre-seed: legacy TECHNICIAN role tồn tại, không có STAFF.
