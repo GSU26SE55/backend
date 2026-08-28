@@ -205,10 +205,12 @@ public class AlertThresholdSensorHandlerTests
     }
 
     [Fact]
-    public async Task GetThresholdByType_NotFound_404()
+    public async Task GetThresholdByType_NotConfigured_Returns200WithNullData()
     {
         var r = await new GetThresholdConfigByBatteryTypeQueryHandler(new MockUnitOfWorkBuilder().Build()).Handle(new GetThresholdConfigByBatteryTypeQuery { BatteryTypeId = Guid.NewGuid() }, default);
-        r.StatusCode.Should().Be(404);
+        r.StatusCode.Should().Be(200);
+        r.IsSuccess.Should().BeTrue();
+        r.Data.Should().BeNull();
     }
 
     [Fact]
@@ -218,7 +220,8 @@ public class AlertThresholdSensorHandlerTests
         var inactive = new ThresholdConfig { Id = Guid.NewGuid(), BatteryTypeId = t.Id, BatteryType = t, IsActive = false, EffectiveFromUtc = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
         var b = new MockUnitOfWorkBuilder().WithBatteryTypes(t).WithThresholdConfigs(inactive);
         var rNoInactive = await new GetThresholdConfigByBatteryTypeQueryHandler(b.Build()).Handle(new GetThresholdConfigByBatteryTypeQuery { BatteryTypeId = t.Id, IncludeInactive = false }, default);
-        rNoInactive.StatusCode.Should().Be(404);
+        rNoInactive.StatusCode.Should().Be(200);
+        rNoInactive.Data.Should().BeNull();
         var rWithInactive = await new GetThresholdConfigByBatteryTypeQueryHandler(b.Build()).Handle(new GetThresholdConfigByBatteryTypeQuery { BatteryTypeId = t.Id, IncludeInactive = true }, default);
         rWithInactive.IsSuccess.Should().BeTrue();
     }

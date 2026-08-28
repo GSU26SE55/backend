@@ -36,6 +36,10 @@ public class MaintenanceCycleConfiguration : IEntityTypeConfiguration<Maintenanc
             .HasColumnName("soh_percent_at_cycle")
             .HasPrecision(5, 2);
 
+        // Không có khoá ngoại: ticket nằm ở service khác.
+        builder.Property(cycle => cycle.TicketId)
+            .HasColumnName("ticket_id");
+
         builder.Property(cycle => cycle.AvgTemperatureCelsius)
             .HasColumnName("avg_temperature_celsius")
             .HasPrecision(5, 2);
@@ -96,6 +100,13 @@ public class MaintenanceCycleConfiguration : IEntityTypeConfiguration<Maintenanc
         // Tab lịch sử đọc theo pin, mới nhất trước.
         builder.HasIndex(cycle => new { cycle.BatteryAssetId, cycle.DueAtUtc })
             .HasDatabaseName("ix_maintenance_cycles_asset_due");
+
+        // Truy ngược "ticket này thuộc kỳ nào", và lọc nhanh các kỳ chưa gắn ticket khi
+        // backfill. Partial index: phần lớn giá trị sẽ non-null, nhưng các dòng null là
+        // thứ backfill phải quét nên vẫn đáng đánh chỉ mục riêng.
+        builder.HasIndex(cycle => cycle.TicketId)
+            .HasDatabaseName("ix_maintenance_cycles_ticket")
+            .HasFilter("ticket_id IS NOT NULL");
 
         builder.Ignore(cycle => cycle.DomainEvents);
     }

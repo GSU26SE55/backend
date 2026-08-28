@@ -26,6 +26,23 @@ public class AlertDto
     public string BatterySerialNumber { get; set; } = string.Empty;
 
     /// <summary>
+    /// Mã thiết bị IoT (<c>IotDevice.DeviceCode</c>) cho alert cấp thiết bị. Rỗng cho các alert
+    /// khác. Màn hình "Device alerts" hiển thị cột này thay cho serial pin — không có nó thì
+    /// FE chỉ còn <see cref="IotDeviceId"/> dạng GUID trần, vô nghĩa với người vận hành.
+    /// </summary>
+    public string IotDeviceCode { get; set; } = string.Empty;
+
+    /// <summary>Tên hiển thị của thiết bị IoT. Rỗng khi alert không gắn thiết bị.</summary>
+    public string IotDeviceName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Tên site chứa alert — lấy từ <c>Site.Name</c>. Rỗng khi alert không gắn site. Alert cấp
+    /// thiết bị luôn có site (device thuộc về đúng 1 site), nên đây là cột định vị của màn hình
+    /// "Device alerts": mất gateway nào, ở site nào.
+    /// </summary>
+    public string SiteName { get; set; } = string.Empty;
+
+    /// <summary>
     /// Khách hàng sở hữu alert này. Lấy từ BatteryAsset.CustomerId (alert cấp pin) hoặc
     /// Site.CustomerId (alert cấp site) — cùng hai đường mà tenant scope đã dùng để lọc.
     /// Rỗng khi không tra được tài khoản (đã xoá hoặc chưa đồng bộ).
