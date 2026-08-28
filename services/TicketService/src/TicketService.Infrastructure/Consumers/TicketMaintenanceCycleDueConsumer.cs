@@ -144,7 +144,7 @@ public class TicketMaintenanceCycleDueConsumer : IConsumer<MaintenanceCycleDueEv
             await _uow.SaveChangesAsync(ct);
 
             _logger.LogInformation(
-                "Raised periodic maintenance ticket {Code} for battery {BatteryAssetId}, cycle #{CycleNo} due {DueAtUtc}.
+                "Raised periodic maintenance ticket {Code} for battery {BatteryAssetId}, cycle #{CycleNo} due {DueAtUtc}.",
                 code, evt.BatteryAssetId, evt.CycleNo, evt.DueAtUtc);
         });
     }
