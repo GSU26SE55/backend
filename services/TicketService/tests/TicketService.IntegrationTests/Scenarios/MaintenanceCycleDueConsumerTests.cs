@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Idempotency;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Repositories;
@@ -180,6 +181,7 @@ public class MaintenanceCycleDueConsumerTests : IClassFixture<TicketApiFactory>
             scope.ServiceProvider.GetRequiredService<ITicketCodeGenerator>(),
             Options(),
             inbox ?? new InMemoryInboxStore(),
+            scope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>(),
             NullLogger<TicketMaintenanceCycleDueConsumer>.Instance);
 
         await consumer.Consume(new StubConsumeContext<MaintenanceCycleDueEvent>(evt));

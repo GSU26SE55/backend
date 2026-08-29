@@ -42,6 +42,11 @@ public class TicketRateCommand : IRequest<TicketActionResponse>, IValidatable<Ti
         if (Rating < 1 || Rating > 5)
             response.ListErrors.Add(new Errors { Field = "Rating", Detail = "Rating must be between 1 and 5 stars." });
 
+        // Cột rating_comment là text không giới hạn, nên không có cap thì nhận được cả bài
+        // văn qua API. Mobile đã chặn ở 500 — khớp lại để hai đường vào cùng luật.
+        if (!string.IsNullOrWhiteSpace(RatingComment) && RatingComment.Trim().Length > 500)
+            response.ListErrors.Add(new Errors { Field = "RatingComment", Detail = "Rating comment must be at most 500 characters." });
+
         if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;

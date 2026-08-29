@@ -1,3 +1,4 @@
+using BatteryService.Application.Anomaly;
 using BatteryService.Application.CQRS.Query.SensorReading;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Helpers;
@@ -101,6 +102,8 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
                 .Select(toDto)
                 .ToListAsync(cancellationToken);
 
+            await AttachAnomaliesAsync(request.BatteryAssetId, valueItems, cancellationToken);
+
             return new CommonResponse<SensorReadingHistoryResponseDto>
             {
                 IsSuccess = true,
@@ -135,6 +138,8 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
         var hasMore = page.Count > limit;
         var items = hasMore ? page.Take(limit).ToList() : page;
 
+        await AttachAnomaliesAsync(request.BatteryAssetId, items, cancellationToken);
+
         return new CommonResponse<SensorReadingHistoryResponseDto>
         {
             IsSuccess = true,
@@ -146,6 +151,60 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
                 HasMore = hasMore
             }
         };
+    }
+
+    /// <summary>
+    /// Chấm anomaly cho từng dòng bằng ĐÚNG luật BE (<see cref="AnomalyRules"/>) thay vì để FE
+    /// tự so ngưỡng. Chạy SAU khi materialize: Detect là C# thuần, không dịch được sang SQL.
+    ///
+    /// Không có ThresholdConfig cho loại pin thì để danh sách rỗng — nghĩa là "chưa cấu hình
+    /// ngưỡng", KHÔNG phải "không vi phạm"; bịa ngưỡng mặc định ở đây sẽ tạo cảnh báo giả.
+    /// </summary>
+    private async Task AttachAnomaliesAsync(
+        Guid batteryAssetId,
+        IReadOnlyList<SensorReadingDto> items,
+        CancellationToken cancellationToken)
+    {
+        if (items.Count == 0) return;
+
+        var batteryTypeId = await _unitOfWork.BatteryAssets.GetAllAsync()
+            .AsNoTracking()
+            .Where(asset => asset.Id == batteryAssetId && !asset.IsDeleted)
+            .Select(asset => (Guid?)asset.BatteryTypeId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (batteryTypeId is null) return;
+
+        var threshold = await _unitOfWork.ThresholdConfigs.GetAllAsync()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.BatteryTypeId == batteryTypeId.Value && !t.IsDeleted, cancellationToken);
+        if (threshold is null) return;
+
+        foreach (var item in items)
+        {
+            // Detect nhận entity SensorReading — dựng lại từ DTO để dùng CHUNG một bộ luật với
+            // luồng phát hiện thật, thay vì chép lại điều kiện ở đây rồi lệch nhau về sau.
+            var reading = new Domain.Entities.SensorReading
+            {
+                BatteryAssetId = batteryAssetId,
+                Time = item.Time,
+                Voltage = item.Voltage,
+                Current = item.Current,
+                Temperature = item.Temperature,
+                SocPercent = item.SocPercent,
+                CycleCount = item.CycleCount
+            };
+
+            item.Anomalies = AnomalyRules.Detect(reading, threshold)
+                .Select(a => new SensorReadingAnomalyDto
+                {
+                    Type = a.Type,
+                    Severity = a.Severity,
+                    ThresholdValue = a.ThresholdValue,
+                    ActualValue = a.ActualValue,
+                    Unit = a.Unit
+                })
+                .ToList();
+        }
     }
 
     private static DateTime ToUtc(DateTime value)

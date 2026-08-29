@@ -28,12 +28,45 @@ public class UpsertAmbientThresholdConfigCommand
     /// <summary>Tính năng bật/tắt.</summary>
     public bool Enabled { get; set; } = true;
 
+    // Nhiệt độ đủ rộng cho mọi site thật nhưng vẫn chặn được typo sai bậc; độ ẩm là phần trăm.
+    private const decimal TempMin = -50m;
+    private const decimal TempMax = 150m;
+    private const decimal HumidityMin = 0m;
+    private const decimal HumidityMax = 100m;
+
+    private static void AddRangeError(
+        AmbientThresholdConfigResponse response,
+        decimal? value,
+        string field,
+        decimal min,
+        decimal max,
+        string unit)
+    {
+        if (value.HasValue && (value.Value < min || value.Value > max))
+        {
+            response.ListErrors.Add(new Errors
+            {
+                Field = field,
+                Detail = $"{field} must be between {min} and {max} {unit}."
+            });
+        }
+    }
+
     public Task<AmbientThresholdConfigResponse> ValidateAsync()
     {
         var response = new AmbientThresholdConfigResponse();
 
         if (SiteId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = nameof(SiteId), Detail = "SiteId is required." });
+
+        // Khoảng hợp lệ trước đây chỉ FE kiểm. Gọi thẳng API là lưu được "500" vào một field
+        // tính bằng %, tạo ra ngưỡng không bao giờ trip được — sai âm thầm, không ai thấy.
+        AddRangeError(response, HighAmbientTempWarning, nameof(HighAmbientTempWarning), TempMin, TempMax, "°C");
+        AddRangeError(response, HighAmbientTempCritical, nameof(HighAmbientTempCritical), TempMin, TempMax, "°C");
+        AddRangeError(response, ComboTempThreshold, nameof(ComboTempThreshold), TempMin, TempMax, "°C");
+        AddRangeError(response, HighHumidityWarning, nameof(HighHumidityWarning), HumidityMin, HumidityMax, "%");
+        AddRangeError(response, HighHumidityCritical, nameof(HighHumidityCritical), HumidityMin, HumidityMax, "%");
+        AddRangeError(response, ComboHumidityThreshold, nameof(ComboHumidityThreshold), HumidityMin, HumidityMax, "%");
 
         if (HighAmbientTempWarning.HasValue && HighAmbientTempCritical.HasValue
             && HighAmbientTempCritical.Value < HighAmbientTempWarning.Value)
@@ -52,6 +85,19 @@ public class UpsertAmbientThresholdConfigCommand
             {
                 Field = nameof(HighHumidityCritical),
                 Detail = "Critical must be >= Warning."
+            });
+        }
+
+        // Combo rule cần cả hai vế: chỉ set một nửa thì rule không bao giờ chạy, cấu hình
+        // trông như đã bật nhưng thực tế là chết. FE đã chặn, BE trước đây thì không.
+        if (ComboTempThreshold.HasValue != ComboHumidityThreshold.HasValue)
+        {
+            response.ListErrors.Add(new Errors
+            {
+                Field = ComboTempThreshold.HasValue
+                    ? nameof(ComboHumidityThreshold)
+                    : nameof(ComboTempThreshold),
+                Detail = "Combo rule needs both temperature and humidity thresholds."
             });
         }
 

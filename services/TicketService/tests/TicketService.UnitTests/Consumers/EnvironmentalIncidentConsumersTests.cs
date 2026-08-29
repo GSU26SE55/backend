@@ -144,7 +144,11 @@ public class EnvironmentalIncidentConsumersTests
 
         ticket.Status.Should().Be(TicketStatusEnum.ClosedRejected);
         ticket.ClosedAt.Should().NotBeNull();
-        timer.Status.Should().Be(SlaTimerStatusEnum.Met, "dừng timer để không breach ticket đã đóng");
+        // Stopped chứ không phải Met: ticket đóng vì báo động giả nên SLA bị HUỶ, không phải
+        // đã đạt. Đánh Met sẽ tính ticket này là "đúng hạn" trong SLA compliance dù chẳng ai
+        // xử lý gì — thổi phồng chỉ số. Đây cũng là trạng thái StopSlaAsync dùng cho mọi luồng
+        // kết thúc khác (reject/merge) và seeder map cho ClosedRejected.
+        timer.Status.Should().Be(SlaTimerStatusEnum.Stopped, "dừng timer để không breach ticket đã đóng");
     }
 
     [Fact]
