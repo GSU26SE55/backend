@@ -18,6 +18,12 @@ public class MaintenanceCycleDto
     /// <summary>SoH (%) tại mốc này — mốc so sánh sức khoẻ giữa các kỳ.</summary>
     public decimal? SohPercentAtCycle { get; set; }
 
+    /// <summary>
+    /// Ticket bảo trì mở cho kỳ này, hoặc <c>null</c> nếu chưa gắn được. FE dùng để mở
+    /// thẳng trang chi tiết ticket từ dòng nhật ký; null thì không hiện liên kết.
+    /// </summary>
+    public string? TicketId { get; set; }
+
     // ── Tình trạng pin trong kỳ vừa qua (chụp lúc ghi mốc) ───────────────────
     // Tất cả nullable: pin mất kết nối cả kỳ thì không có gì để tổng hợp.
 

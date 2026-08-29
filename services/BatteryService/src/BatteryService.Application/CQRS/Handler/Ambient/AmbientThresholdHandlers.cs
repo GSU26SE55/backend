@@ -87,8 +87,11 @@ public class GetAmbientThresholdBySiteQueryHandler
             .Where(c => !c.IsDeleted && c.SiteId == request.SiteId)
             .FirstOrDefaultAsync(cancellationToken);
 
+        // Site chua cau hinh nguong KHONG phai loi — giong ThresholdConfig theo BatteryType:
+        // day la query thanh cong tra ve tap rong. Tra 200 + Data = null de client phan biet
+        // "chua cau hinh" (null) voi loi that su (403/500), thay vi phai doc isError.
         if (row is null)
-            return new AmbientThresholdConfigResponse { IsSuccess = false, StatusCode = 404, Message = "No threshold config." };
+            return new AmbientThresholdConfigResponse { IsSuccess = true, StatusCode = 200, Data = null, Message = "No threshold config." };
 
         return new AmbientThresholdConfigResponse
         {

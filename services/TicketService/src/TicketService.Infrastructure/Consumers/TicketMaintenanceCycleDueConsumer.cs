@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events;
+using SharedContracts.Events.Root;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Idempotency;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Repositories;
@@ -39,6 +41,7 @@ public class TicketMaintenanceCycleDueConsumer : IConsumer<MaintenanceCycleDueEv
     private readonly ITicketCodeGenerator _codeGenerator;
     private readonly IOptions<PeriodicMaintenanceOptions> _options;
     private readonly IInboxStore _inboxStore;
+    private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly ILogger<TicketMaintenanceCycleDueConsumer> _logger;
 
     public TicketMaintenanceCycleDueConsumer(
@@ -46,12 +49,14 @@ public class TicketMaintenanceCycleDueConsumer : IConsumer<MaintenanceCycleDueEv
         ITicketCodeGenerator codeGenerator,
         IOptions<PeriodicMaintenanceOptions> options,
         IInboxStore inboxStore,
+        IIntegrationEventOutboxWriter outboxWriter,
         ILogger<TicketMaintenanceCycleDueConsumer> logger)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
         _options = options;
         _inboxStore = inboxStore;
+        _outboxWriter = outboxWriter;
         _logger = logger;
     }
 
@@ -116,6 +121,25 @@ public class TicketMaintenanceCycleDueConsumer : IConsumer<MaintenanceCycleDueEv
                 BatteryAssetId = evt.BatteryAssetId,
                 CreatedAt = nowUtc
             });
+
+            // Báo ngược cho BatteryService để nối kỳ với ticket vừa mở. Ghi outbox TRƯỚC
+            // SaveChanges để sự kiện nằm cùng transaction với ticket: không bao giờ có ticket
+            // mà quên báo, cũng không báo về một ticket ghi hụt.
+            //
+            // Id tất định theo kỳ: sự kiện giao lại hay consumer chạy lại đều quy về một, nên
+            // phía nhận không ghi đè lung tung.
+            await _outboxWriter.WriteAsync(
+                new PeriodicMaintenanceTicketRaisedEvent(
+                    evt.MaintenanceCycleId,
+                    evt.BatteryAssetId,
+                    ticketId,
+                    code,
+                    evt.DueAtUtc)
+                {
+                    Id = DeterministicEventId.From(
+                        evt.MaintenanceCycleId, "periodic-maintenance-ticket-raised")
+                },
+                ct);
 
             await _uow.SaveChangesAsync(ct);
 

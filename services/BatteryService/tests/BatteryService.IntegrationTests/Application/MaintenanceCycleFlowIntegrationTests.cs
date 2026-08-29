@@ -163,6 +163,32 @@ public class MaintenanceCycleFlowIntegrationTests
         response.Data![0].CycleNo.Should().Be(1);
     }
 
+    [Fact]
+    public async Task Query_ReturnsTheAsynchronousTicketLink()
+    {
+        await using var dbContext = CreateDbContext();
+        var assetId = await SeedAssetAsync(dbContext);
+        var ticketId = Guid.NewGuid();
+        dbContext.MaintenanceCycles.Add(new MaintenanceCycle
+        {
+            Id = Guid.NewGuid(),
+            BatteryAssetId = assetId,
+            CycleNo = 1,
+            DueAtUtc = DueAt,
+            RecordedAtUtc = NowUtc,
+            TicketId = ticketId,
+            CreatedAt = NowUtc
+        });
+        await dbContext.SaveChangesAsync();
+
+        var handler = new GetMaintenanceCyclesQueryHandler(new UnitOfWork(dbContext));
+        var response = await handler.Handle(
+            new GetMaintenanceCyclesQuery { BatteryAssetId = assetId }, CancellationToken.None);
+
+        response.Data.Should().ContainSingle();
+        response.Data![0].TicketId.Should().Be(ticketId.ToString());
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>

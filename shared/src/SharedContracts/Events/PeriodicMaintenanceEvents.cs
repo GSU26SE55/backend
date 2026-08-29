@@ -71,3 +71,36 @@ public record MaintenanceCycleDueEvent(
     DateTime DueAtUtc,
     int IntervalMonths
 ) : IntegrationEvent;
+
+/// <summary>
+/// TicketService đã mở ticket bảo trì cho một kỳ — báo ngược để BatteryService nối kỳ với ticket.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Nửa còn lại của <see cref="MaintenanceCycleDueEvent"/>. Kỳ được ghi TRƯỚC khi ticket tồn
+/// tại (BatteryService ghi mốc rồi mới phát sự kiện), nên lúc INSERT không thể biết ticket
+/// nào sẽ xử lý kỳ đó. Sự kiện này quay lại lấp chỗ trống ấy, để trang lịch sử bảo trì của
+/// pin mở thẳng được sang ticket tương ứng.
+/// </para>
+/// <para>
+/// Không dùng khoá ngoại giữa hai service: liên kết là một cột <c>ticket_id</c> trần, điền
+/// bất đồng bộ. Vì vậy nó <b>nhất quán sau cùng</b> — có một khoảng ngắn kỳ đã ghi mà chưa
+/// có ticket, và FE phải coi <c>null</c> là hợp lệ chứ không phải lỗi.
+/// </para>
+/// <para>
+/// <c>MaintenanceCycleId</c> đi thẳng từ <see cref="MaintenanceCycleDueEvent"/>, nên không
+/// cần tra lại theo cặp (pin, hạn kỳ) ở phía nhận.
+/// </para>
+/// </remarks>
+/// <param name="MaintenanceCycleId">Kỳ đã sinh ra ticket này.</param>
+/// <param name="BatteryAssetId">Pin của kỳ — để phía nhận kiểm tra chéo trước khi ghi.</param>
+/// <param name="TicketId">Ticket vừa mở.</param>
+/// <param name="TicketCode">Mã ticket, để log đọc được mà không phải tra bảng.</param>
+/// <param name="DueAtUtc">Hạn kỳ — mốc đối chiếu khi cần dò lại thủ công.</param>
+public record PeriodicMaintenanceTicketRaisedEvent(
+    Guid MaintenanceCycleId,
+    Guid BatteryAssetId,
+    Guid TicketId,
+    string TicketCode,
+    DateTime DueAtUtc
+) : IntegrationEvent;

@@ -124,4 +124,24 @@ public static class ConsumerTestHarness
         c.Setup(x => x.TrySetIfNotExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
         return c.Object;
     }
+
+    /// <summary>
+    /// Mô phỏng Redis <c>SET NX</c> cho hai delivery đồng thời: đúng một caller chiếm được key,
+    /// các caller sau nhận <c>false</c>. Khác <see cref="ProceedCache"/> (mọi message độc lập đều
+    /// được phép đi qua), helper này dành riêng cho test duplicate delivery/concurrency.
+    /// </summary>
+    public static ICacheService ClaimOnceCache()
+    {
+        var claimed = 0;
+        var c = new Mock<ICacheService>();
+        c.Setup(x => x.GetAsync<string>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        c.Setup(x => x.TrySetIfNotExistsAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<TimeSpan>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => Interlocked.Exchange(ref claimed, 1) == 0);
+        return c.Object;
+    }
 }

@@ -366,15 +366,16 @@ public class AmbientHandlersTests
     }
 
     [Fact]
-    public async Task GetThresholdBySite_NotFound_ShouldReturn404()
+    public async Task GetThresholdBySite_NotConfigured_ShouldReturn200WithNullData()
     {
         var uow = BuildUow(thresholds: new List<AmbientThresholdConfig>());
         var handler = new GetAmbientThresholdBySiteQueryHandler(uow.Object);
 
         var result = await handler.Handle(new GetAmbientThresholdBySiteQuery { SiteId = Guid.NewGuid() }, default);
 
-        result.IsSuccess.Should().BeFalse();
-        result.StatusCode.Should().Be(404);
+        result.IsSuccess.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        result.Data.Should().BeNull();
     }
 
     [Fact]
