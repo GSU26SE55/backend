@@ -17,7 +17,7 @@ public class ChatReaderDTO
 
     /// <summary>
     /// Ảnh đại diện — null thì client tự vẽ chữ cái đầu của <see cref="DisplayName"/>.
-    /// Đồng bộ từ AuthService qua AccountProfileUpdatedEvent.
+    /// Đồng bộ từ AuthService qua profile event hoặc snapshot reconcile authoritative.
     /// </summary>
     public string? AvatarUrl { get; set; }
 

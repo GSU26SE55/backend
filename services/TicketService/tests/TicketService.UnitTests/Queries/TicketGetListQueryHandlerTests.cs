@@ -179,6 +179,41 @@ public class TicketGetListQueryHandlerTests
         result.Data!.Items.Should().HaveCount(1);
     }
 
+    [Theory]
+    [InlineData(TicketSourceFilterEnum.Customer, "CUSTOMER")]
+    [InlineData(TicketSourceFilterEnum.AiPredicted, "AI-ALERT,AI-CASCADE")]
+    [InlineData(TicketSourceFilterEnum.Environmental, "ENVIRONMENTAL")]
+    [InlineData(TicketSourceFilterEnum.PeriodicMaintenance, "PERIODIC")]
+    public async Task Handle_FilterBySource_ReturnsOnlyMatchingTickets(
+        TicketSourceFilterEnum source,
+        string expectedCodes)
+    {
+        var customer = MakeTicket(code: "CUSTOMER");
+        var aiAlert = MakeTicket(code: "AI-ALERT");
+        aiAlert.Origin = TicketOriginEnum.AutoFromAlert;
+        var aiCascade = MakeTicket(code: "AI-CASCADE");
+        aiCascade.Origin = TicketOriginEnum.System;
+        var environmental = MakeTicket(code: "ENVIRONMENTAL");
+        environmental.Origin = TicketOriginEnum.System;
+        environmental.EnvironmentalIncidentId = Guid.NewGuid();
+        var periodic = MakeTicket(code: "PERIODIC");
+        periodic.Origin = TicketOriginEnum.System;
+        periodic.PeriodicMaintenanceDueAtUtc = DateTime.UtcNow.AddDays(7);
+
+        SetupMock([customer, aiAlert, aiCascade, environmental, periodic]);
+
+        var result = await _handler.Handle(new TicketGetListQuery
+        {
+            Source = source,
+            PageNumber = 1,
+            PageSize = 10
+        }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.Items.Select(item => item.Code)
+            .Should().BeEquivalentTo(expectedCodes.Split(','));
+    }
+
     [Fact]
     public async Task Handle_IsDescendingTrue_OrdersNewestFirst()
     {

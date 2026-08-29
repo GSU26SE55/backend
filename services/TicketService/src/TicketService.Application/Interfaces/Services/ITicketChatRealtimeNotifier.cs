@@ -29,7 +29,9 @@ public interface ITicketChatRealtimeNotifier
     /// Bắn tới từng tác giả (không broadcast cả group): chỉ người gửi mới quan tâm ai đã đọc tin
     /// của mình, và ai đọc gì là thông tin không nên phát cho mọi người trong ticket.
     /// </summary>
+    /// <param name="ticketId">Ticket chứa các chat vừa được đọc.</param>
     /// <param name="readsByAuthor">Tác giả → danh sách receipt mới của chính tin họ gửi.</param>
+    /// <param name="cancellationToken">Token hủy thao tác gửi SignalR.</param>
     Task NotifyChatReadAsync(
         Guid ticketId,
         IReadOnlyDictionary<Guid, List<ChatReaderDTO>> readsByAuthor,

@@ -143,4 +143,29 @@ public class AccountResyncQueryFilterTests
         resp.IsSuccess.Should().BeTrue();
         producer.Snapshots.Should().ContainSingle().Which.IsDeleted.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Resync_PublishesAuthoritativeResolvedAvatarSnapshot()
+    {
+        var (ctx, _) = await SeedAsync(false);
+        await using var _ctx = ctx;
+        var account = await ctx.Users.SingleAsync();
+        ctx.AccountProfiles.Add(new AccountProfile
+        {
+            Id = Guid.NewGuid(),
+            AccountId = account.Id,
+            ExternalAvatarUrl = "https://cdn.example.com/google-avatar.png",
+            AvatarSource = AvatarSourceEnum.Google
+        });
+        await ctx.SaveChangesAsync();
+
+        var producer = new CapturingProducer();
+        var handler = new AccountResyncCommandHandler(new UnitOfWork(ctx), producer);
+
+        await handler.Handle(new AccountResyncCommand { AccountId = account.Id }, CancellationToken.None);
+
+        var snapshot = producer.Snapshots.Should().ContainSingle().Subject;
+        snapshot.HasAvatarSnapshot.Should().BeTrue();
+        snapshot.AvatarUrl.Should().Be("https://cdn.example.com/google-avatar.png");
+    }
 }
