@@ -182,6 +182,22 @@ export interface TicketChatDTO {
   voiceTranscriptionError?: string | null;
   transcribedAt?: string | null;
   createdAt: string;
+
+  /**
+   * TÔI đã đọc tin này chưa — dùng vẽ mốc "Tin nhắn chưa đọc" và cuộn tới tin cũ nhất chưa đọc.
+   * Tin do chính mình gửi LUÔN true. Đây KHÔNG phải tick "đã xem" — xem readReceipts.
+   */
+  isRead: boolean;
+
+  /**
+   * AI đã đọc tin này — tick "đã xem" kiểu Messenger, vẽ avatar chồng dưới bubble.
+   * BE chỉ điền cho tin do CHÍNH mình gửi; tin của người khác luôn là mảng rỗng.
+   * Realtime cập nhật qua event ChatRead (merge theo chatId + userId, đừng ghi đè).
+   */
+  readReceipts: ChatReaderDTO[];
+
+  /** = readReceipts.length — tách sẵn để render nhanh "Đã xem bởi N người". */
+  readCount: number;
 }
 
 export interface ChatReaderDTO {
@@ -189,6 +205,8 @@ export interface ChatReaderDTO {
   userId: string;
   /** Resolve từ CustomerAccounts/StaffAccounts theo role; fallback về userId nếu không tìm thấy. */
   displayName: string;
+  /** Ảnh đại diện; null thì client tự vẽ chữ cái đầu của displayName. */
+  avatarUrl?: string | null;
   role: ActorRoleEnum;
   readAt: string;
 }
@@ -299,6 +317,7 @@ export interface NotificationPreferenceDTO {
 //   ReactionChanged(payload: SignalRReactionChangedPayload) → group public|internal
 //   MentionReceived(chat: TicketChatDTO)              → gửi RIÊNG cho user được mention (Clients.User)
 //   UserTyping(ticketId, userId, displayName)         → chỉ group PUBLIC, trừ chính người gõ
+//   ChatRead(payload: SignalRChatReadPayload)         → gửi RIÊNG cho TÁC GIẢ của tin được đọc (Clients.User)
 
 export interface SignalRChatDeletedPayload {
   chatId: string;
@@ -308,6 +327,16 @@ export interface SignalRChatDeletedPayload {
 export interface SignalRReactionChangedPayload {
   chatId: string;
   reactions: TicketChatReactionsAggregateDTO;
+}
+
+/**
+ * Tick "đã xem" kiểu Messenger. Chỉ TÁC GIẢ của tin nhận được event này — không broadcast cả group.
+ * `readers` chỉ chứa receipt MỚI của lần flush đó, không phải toàn bộ danh sách đã đọc:
+ * client merge vào state theo (chatId, userId) chứ đừng ghi đè.
+ */
+export interface SignalRChatReadPayload {
+  ticketId: string;
+  readers: ChatReaderDTO[];
 }
 
 /** UserTyping gửi 3 tham số rời, không phải 1 object — handler nhận (ticketId, userId, displayName). */

@@ -568,7 +568,7 @@ public class TicketDataSeeder
             Status = TicketStatusEnum.Pending,
             PendingContext = PendingContextEnum.Held,
             PendingReason = PauseReasonEnum.CustomerUnavailable,
-            Origin = TicketOriginEnum.CreatedByStaff,
+            Origin = TicketOriginEnum.ManualByCustomer,
             IsIncident = false,
             CreatedAt = now.AddDays(-10)
         };
@@ -666,7 +666,7 @@ public class TicketDataSeeder
             ImpactScope = ImpactScopeEnum.SingleAsset,
             UrgencyLevel = UrgencyLevelEnum.Medium,
             Status = TicketStatusEnum.ReAssign,
-            Origin = TicketOriginEnum.CreatedByStaff,
+            Origin = TicketOriginEnum.ManualByCustomer,
             IsIncident = false,
             CreatedAt = now.AddDays(-4)
         };
@@ -719,7 +719,7 @@ public class TicketDataSeeder
             ImpactScope = ImpactScopeEnum.SingleAsset,
             UrgencyLevel = UrgencyLevelEnum.Low,
             Status = TicketStatusEnum.Closed,
-            Origin = TicketOriginEnum.CreatedByStaff,
+            Origin = TicketOriginEnum.ManualByCustomer,
             IsIncident = false,
             CreatedAt = now.AddDays(-30),
             ResolvedAt = now.AddDays(-28),

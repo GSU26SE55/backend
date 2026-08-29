@@ -10,6 +10,9 @@ public class StaffAccount : AuditableEntity
     public string FullName { get; set; } = string.Empty;
     public string? EmployeeCode { get; set; }
 
+    /// <summary>Ảnh đại diện đồng bộ từ AuthService — dùng vẽ avatar "đã xem" trong chat.</summary>
+    public string? AvatarUrl { get; set; }
+
     /// <summary>
     /// Vai trò đồng bộ từ AuthService: "Staff" | "Manager" | "Admin".
     /// </summary>

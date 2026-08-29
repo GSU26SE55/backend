@@ -7,6 +7,7 @@ using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Application.IntegrationEvents;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Enums;
@@ -19,17 +20,20 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
     private readonly ITicketStateMachine _stateMachine;
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
+    private readonly ITicketActivationService _slaTransitions;
 
     public TicketTriageRejectCommandHandler(
         ITicketUnitOfWork uow,
         ITicketStateMachine stateMachine,
         IActivityLogger activityLogger,
-        IIntegrationEventOutboxWriter producer)
+        IIntegrationEventOutboxWriter producer,
+        ITicketActivationService slaTransitions)
     {
         _uow = uow;
         _stateMachine = stateMachine;
         _activityLogger = activityLogger;
         _outboxWriter = producer;
+        _slaTransitions = slaTransitions;
     }
 
     public async Task<TicketActionResponse> Handle(TicketTriageRejectCommand request, CancellationToken ct)
@@ -54,6 +58,14 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
             ActorDisplayName = request.ManagerName!,
             Payload = new Dictionary<string, object?> { { "Reason", request.Reason } }
         }, ct);
+
+        // ClosedRejected là trạng thái KẾT THÚC: không còn ai xử lý ticket nữa, nên đồng hồ SLA
+        // phải dừng. Thiếu dòng này, timer ở nguyên Running và SlaTimerBackgroundService — vốn chỉ
+        // lọc theo Status == Running chứ không xét trạng thái ticket — vẫn đếm ngược rồi đánh
+        // Breached, bắn SlaBreachedEvent và kích hoạt escalation cho một ticket đã đóng, đồng thời
+        // làm sai báo cáo SLA. TicketMergeCommandHandler và TicketDeclareIncidentCommandHandler đã
+        // dừng timer ở các luồng kết thúc tương ứng của chúng.
+        await _slaTransitions.StopSlaAsync(ticket, ct);
 
         await _activityLogger.LogAsync(
             ticket.Id,
