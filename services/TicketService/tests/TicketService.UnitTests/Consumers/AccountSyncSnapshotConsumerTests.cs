@@ -68,13 +68,15 @@ public class AccountSyncSnapshotConsumerTests
         int maxConcurrentTickets = 3,
         bool isAvailable = true,
         int skillTier = 0,
-        List<string>? skillCodes = null)
+        List<string>? skillCodes = null,
+        bool hasAvatarSnapshot = false,
+        string? avatarUrl = null)
     {
         var msg = new AccountSyncSnapshotEvent(
             accountId, "user@example.com", "Nguyễn Văn A", "0901234567",
             role, isActive, isDeleted, snapshotAtUtc ?? DateTime.UtcNow, "Resync",
             accountStatus, hasStaffProfile, employeeCode, maxConcurrentTickets,
-            isAvailable, skillTier, skillCodes);
+            isAvailable, skillTier, skillCodes, hasAvatarSnapshot, avatarUrl);
         var mock = new Mock<ConsumeContext<AccountSyncSnapshotEvent>>();
         mock.SetupGet(c => c.Message).Returns(msg);
         mock.SetupGet(c => c.MessageId).Returns(Guid.NewGuid());
@@ -155,6 +157,47 @@ public class AccountSyncSnapshotConsumerTests
             c.AccountId == accountId && c.Status == AccountStatusEnum.Active)), Times.Once);
         _staffRepo.Verify(r => r.AddAsync(It.IsAny<StaffAccount>()), Times.Never);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("Staff")]
+    [InlineData("Customer")]
+    public async Task AuthoritativeAvatarSnapshot_RepairsProjection(string role)
+    {
+        var accountId = Guid.NewGuid();
+        var staff = role == "Staff"
+            ? new StaffAccount { Id = accountId, AccountId = accountId, AvatarUrl = "drifted" }
+            : null;
+        var customer = role == "Customer"
+            ? new CustomerAccount { Id = accountId, AccountId = accountId, AvatarUrl = "drifted" }
+            : null;
+        Seed(staff, customer);
+
+        await Consumer().Consume(Ctx(
+            accountId,
+            role,
+            hasAvatarSnapshot: true,
+            avatarUrl: " https://cdn.example.com/avatar.png "));
+
+        (staff?.AvatarUrl ?? customer?.AvatarUrl)
+            .Should().Be("https://cdn.example.com/avatar.png");
+    }
+
+    [Fact]
+    public async Task LifecycleSnapshotWithoutAvatar_DoesNotClearProjection()
+    {
+        var accountId = Guid.NewGuid();
+        var customer = new CustomerAccount
+        {
+            Id = accountId,
+            AccountId = accountId,
+            AvatarUrl = "https://cdn.example.com/existing.png"
+        };
+        Seed(customer: customer);
+
+        await Consumer().Consume(Ctx(accountId, "Customer"));
+
+        customer.AvatarUrl.Should().Be("https://cdn.example.com/existing.png");
     }
 
     [Fact]

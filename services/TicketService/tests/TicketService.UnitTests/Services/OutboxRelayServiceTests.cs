@@ -171,6 +171,39 @@ public class OutboxRelayServiceTests
     }
 
     [Fact]
+    public async Task RelayBatchAsync_PeriodicMaintenanceTicketRaisedEvent_PublishesAndMarksProcessed()
+    {
+        var evt = new PeriodicMaintenanceTicketRaisedEvent(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "TKT-MAINT-001",
+            DateTime.UtcNow.AddDays(3));
+        var msg = new OutboxMessage
+        {
+            Id = evt.Id,
+            Type = nameof(PeriodicMaintenanceTicketRaisedEvent),
+            Payload = JsonSerializer.Serialize(evt),
+            OccurredAtUtc = DateTime.UtcNow
+        };
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(outboxSeed: [msg]);
+        var sut = CreateSut(uow, msg);
+
+        var result = await sut.RelayBatchAsync(1, CancellationToken.None);
+
+        result.Published.Should().Be(1);
+        result.Failed.Should().Be(0);
+        msg.ProcessedAtUtc.Should().NotBeNull();
+        _transport.Verify(
+            transport => transport.PublishAsync(
+                It.Is<PeriodicMaintenanceTicketRaisedEvent>(published =>
+                    published.MaintenanceCycleId == evt.MaintenanceCycleId
+                    && published.TicketId == evt.TicketId),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task RelayBatchAsync_NoPendingMessages_ReturnsEmptyResult()
     {
         // Arrange

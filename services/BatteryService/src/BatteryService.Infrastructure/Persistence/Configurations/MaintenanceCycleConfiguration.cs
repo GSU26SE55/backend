@@ -101,9 +101,8 @@ public class MaintenanceCycleConfiguration : IEntityTypeConfiguration<Maintenanc
         builder.HasIndex(cycle => new { cycle.BatteryAssetId, cycle.DueAtUtc })
             .HasDatabaseName("ix_maintenance_cycles_asset_due");
 
-        // Truy ngược "ticket này thuộc kỳ nào", và lọc nhanh các kỳ chưa gắn ticket khi
-        // backfill. Partial index: phần lớn giá trị sẽ non-null, nhưng các dòng null là
-        // thứ backfill phải quét nên vẫn đáng đánh chỉ mục riêng.
+        // Truy ngược "ticket này thuộc kỳ nào". Partial index chỉ lưu các kỳ đã gắn
+        // ticket, tránh tốn không gian index cho các dòng null chờ backfill.
         builder.HasIndex(cycle => cycle.TicketId)
             .HasDatabaseName("ix_maintenance_cycles_ticket")
             .HasFilter("ticket_id IS NOT NULL");

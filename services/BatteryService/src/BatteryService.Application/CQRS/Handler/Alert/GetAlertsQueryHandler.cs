@@ -126,12 +126,16 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             .Select(x => new AlertDto
             {
                 Id = x.alert.Id.ToString(),
-                BatteryAssetId = x.alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
+                BatteryAssetId = x.alert.BatteryAssetId.HasValue
+                    ? x.alert.BatteryAssetId.Value.ToString()
+                    : string.Empty,
                 IotDeviceId = x.alert.IotDeviceId.HasValue ? x.alert.IotDeviceId.Value.ToString() : null,
                 // Sprint Bonus NS-21 (#661) — null cho alert cấp pin, GUID cho alert cấp site.
                 SiteId = x.alert.SiteId.HasValue ? x.alert.SiteId.Value.ToString() : null,
                 // Alert cấp site (ambient/env) không có BatteryAsset → serial rỗng thay vì null.
-                BatterySerialNumber = x.alert.BatteryAsset.SerialNumber ?? string.Empty,
+                BatterySerialNumber = x.alert.BatteryAsset != null
+                    ? x.alert.BatteryAsset.SerialNumber ?? string.Empty
+                    : string.Empty,
                 // Alert cấp thiết bị không có BatteryAsset → hai cột dưới là thứ duy nhất định
                 // danh được sự cố. Rỗng cho alert pin/site, giống quy ước của BatterySerialNumber.
                 // Navigation nullable (alert pin/site không gắn device) — EF dịch cả cụm sang
