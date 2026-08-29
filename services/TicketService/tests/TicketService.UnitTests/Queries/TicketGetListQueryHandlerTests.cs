@@ -95,6 +95,37 @@ public class TicketGetListQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_AdminDefaultList_IncludesOpenTickets()
+    {
+        _mockCurrentUser.Setup(x => x.Role).Returns("Admin");
+        SetupMock([
+            MakeTicket(TicketStatusEnum.Open, code: "OPEN"),
+            MakeTicket(TicketStatusEnum.Pending, code: "PENDING")
+        ]);
+
+        var result = await _handler.Handle(
+            new TicketGetListQuery { PageNumber = 1, PageSize = 10 }, default);
+
+        result.Data!.Items.Select(ticket => ticket.Code)
+            .Should().BeEquivalentTo("OPEN", "PENDING");
+    }
+
+    [Fact]
+    public async Task Handle_ManagerDefaultList_ExcludesOpenTickets()
+    {
+        _mockCurrentUser.Setup(x => x.Role).Returns("Manager");
+        SetupMock([
+            MakeTicket(TicketStatusEnum.Open, code: "OPEN"),
+            MakeTicket(TicketStatusEnum.Pending, code: "PENDING")
+        ]);
+
+        var result = await _handler.Handle(
+            new TicketGetListQuery { PageNumber = 1, PageSize = 10 }, default);
+
+        result.Data!.Items.Should().ContainSingle().Which.Code.Should().Be("PENDING");
+    }
+
+    [Fact]
     public async Task Handle_FilterByKeyword_MatchesTitleCaseInsensitive()
     {
         SetupMock([

@@ -73,6 +73,7 @@ public class SseTelemetryStreamTests
     // ---------------------------------------------------------------- 1) e2e < 1s
 
     [Fact]
+    [Trait("Category", "Performance")]
     public async Task Publish_ReachesSubscriberAsReadingEvent_UnderOneSecond()
     {
         var assetId = Guid.NewGuid();

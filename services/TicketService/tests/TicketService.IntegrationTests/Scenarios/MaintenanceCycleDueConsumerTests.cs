@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SharedContracts.Events;
+using SharedContracts.Interfaces;
 using SharedInfrastructure.Idempotency;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Repositories;
@@ -72,6 +74,29 @@ public class MaintenanceCycleDueConsumerTests : IClassFixture<TicketApiFactory>
         (await db.TicketBatteryAssets.AsNoTracking()
             .AnyAsync(x => x.TicketId == ticket.Id && x.BatteryAssetId == BatteryAssetId))
             .Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DueCycle_WritesTicketRaisedEventToTheTransactionalOutbox()
+    {
+        var cycleId = Guid.NewGuid();
+        var dueAtUtc = DateTime.UtcNow.AddDays(5);
+
+        await ConsumeAsync(Event(dueAtUtc, maintenanceCycleId: cycleId));
+
+        await using var db = NewDbContext();
+        var ticket = await db.Tickets.AsNoTracking()
+            .SingleAsync(t => t.BatteryAssetId == BatteryAssetId);
+        var message = await db.OutboxMessages.AsNoTracking()
+            .SingleAsync(m => m.Type == nameof(PeriodicMaintenanceTicketRaisedEvent));
+        var raised = JsonSerializer.Deserialize<PeriodicMaintenanceTicketRaisedEvent>(message.Payload);
+
+        raised.Should().NotBeNull();
+        raised!.MaintenanceCycleId.Should().Be(cycleId);
+        raised.BatteryAssetId.Should().Be(BatteryAssetId);
+        raised.TicketId.Should().Be(ticket.Id);
+        raised.TicketCode.Should().Be(ticket.Code);
+        raised.DueAtUtc.Should().BeCloseTo(dueAtUtc, TimeSpan.FromSeconds(5));
     }
 
     /// <summary>
@@ -163,8 +188,18 @@ public class MaintenanceCycleDueConsumerTests : IClassFixture<TicketApiFactory>
 
     // ---------- helpers ----------
 
-    private static MaintenanceCycleDueEvent Event(DateTime dueAtUtc, int cycleNo = 2) =>
-        new(BatteryAssetId, CustomerId, "SN-TEST-0001", Guid.NewGuid(), cycleNo, dueAtUtc, 6);
+    private static MaintenanceCycleDueEvent Event(
+        DateTime dueAtUtc,
+        int cycleNo = 2,
+        Guid? maintenanceCycleId = null) =>
+        new(
+            BatteryAssetId,
+            CustomerId,
+            "SN-TEST-0001",
+            maintenanceCycleId ?? Guid.NewGuid(),
+            cycleNo,
+            dueAtUtc,
+            6);
 
     private TicketDbContext NewDbContext() =>
         _factory.Services.CreateScope().ServiceProvider.GetRequiredService<TicketDbContext>();
@@ -180,6 +215,7 @@ public class MaintenanceCycleDueConsumerTests : IClassFixture<TicketApiFactory>
             scope.ServiceProvider.GetRequiredService<ITicketCodeGenerator>(),
             Options(),
             inbox ?? new InMemoryInboxStore(),
+            scope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>(),
             NullLogger<TicketMaintenanceCycleDueConsumer>.Instance);
 
         await consumer.Consume(new StubConsumeContext<MaintenanceCycleDueEvent>(evt));

@@ -121,7 +121,7 @@ public static class BatteryMapper
         {
             CustomerName = customerName,
             Id = alert.Id.ToString(),
-            BatteryAssetId = alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
+            BatteryAssetId = alert.BatteryAssetId?.ToString() ?? string.Empty,
             IotDeviceId = alert.IotDeviceId?.ToString(),
             SiteId = alert.SiteId?.ToString(),                // Sprint Bonus NS-21 (#661)
             BatterySerialNumber = alert.BatteryAsset?.SerialNumber ?? string.Empty,

@@ -48,6 +48,45 @@ public class AlertThresholdSensorHandlerTests
         CreatedAt = DateTime.UtcNow
     };
 
+    private static Alert MakeIotAlert(AnomalyTypeEnum anomalyType = AnomalyTypeEnum.DeviceOffline)
+    {
+        var site = new Site
+        {
+            Id = Guid.NewGuid(),
+            Name = "Site IoT",
+            CustomerId = Guid.NewGuid(),
+            InstallDate = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow
+        };
+        var device = new IotDevice
+        {
+            Id = Guid.NewGuid(),
+            DeviceCode = "ESP32-001",
+            DisplayName = "Gateway 1",
+            SiteId = site.Id,
+            Site = site,
+            ApiKeyHash = "hash",
+            ApiKeyLastFour = "1234",
+            ApiKeyIssuedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        return new Alert
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            IotDevice = device,
+            SiteId = site.Id,
+            Site = site,
+            Status = AlertStatusEnum.Open,
+            AnomalyType = anomalyType,
+            Severity = AlertSeverityEnum.Warning,
+            DetectedAt = DateTime.UtcNow,
+            DedupWindowEndUtc = DateTime.UtcNow.AddMinutes(5),
+            CreatedAt = DateTime.UtcNow
+        };
+    }
+
     // ===== Alert =====
 
     [Fact]
@@ -140,6 +179,55 @@ public class AlertThresholdSensorHandlerTests
             To = DateTime.UtcNow.AddDays(1)
         }, default);
         r.Data!.TotalItems.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetAlertById_IotAlert_ReturnsDeviceAndSiteIdentity()
+    {
+        var alert = MakeIotAlert();
+        var builder = new MockUnitOfWorkBuilder().WithAlerts(alert);
+
+        var result = await new GetAlertByIdQueryHandler(builder.Build(), TestBatteryCurrentUserService.Admin())
+            .Handle(new GetAlertByIdQuery { Id = alert.Id }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.BatterySerialNumber.Should().BeEmpty();
+        result.Data.IotDeviceCode.Should().Be("ESP32-001");
+        result.Data.IotDeviceName.Should().Be("Gateway 1");
+        result.Data.SiteName.Should().Be("Site IoT");
+    }
+
+    [Fact]
+    public async Task GetAlerts_IotOnly_ReturnsOnlyDeviceAlertTypes()
+    {
+        var offline = MakeIotAlert();
+        var integrity = MakeIotAlert(AnomalyTypeEnum.IotDataIntegrityViolation);
+        var battery = MakeAlert();
+        var builder = new MockUnitOfWorkBuilder().WithAlerts(offline, integrity, battery);
+
+        var result = await new GetAlertsQueryHandler(builder.Build(), TestBatteryCurrentUserService.Admin())
+            .Handle(new GetAlertsQuery { IotOnly = true }, default);
+
+        result.Data!.TotalItems.Should().Be(2);
+        result.Data.Items.Should().OnlyContain(item =>
+            item.AnomalyType == AnomalyTypeEnum.DeviceOffline
+            || item.AnomalyType == AnomalyTypeEnum.IotDataIntegrityViolation);
+        result.Data.Items.Should().OnlyContain(item => !string.IsNullOrWhiteSpace(item.IotDeviceCode));
+    }
+
+    [Fact]
+    public async Task GetAlerts_ExcludeIotDeviceAlerts_ReturnsOnlyBatteryAlerts()
+    {
+        var offline = MakeIotAlert();
+        var integrity = MakeIotAlert(AnomalyTypeEnum.IotDataIntegrityViolation);
+        var battery = MakeAlert();
+        var builder = new MockUnitOfWorkBuilder().WithAlerts(offline, integrity, battery);
+
+        var result = await new GetAlertsQueryHandler(builder.Build(), TestBatteryCurrentUserService.Admin())
+            .Handle(new GetAlertsQuery { ExcludeIotDeviceAlerts = true }, default);
+
+        result.Data!.TotalItems.Should().Be(1);
+        result.Data.Items.Should().ContainSingle(item => item.Id == battery.Id.ToString());
     }
 
     // ===== ThresholdConfig =====
