@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Application.Common.Utils;
 
@@ -39,6 +40,74 @@ public static class ChatChildDataLoader
             .ToListAsync(ct);
 
         return readIds.ToHashSet();
+    }
+
+    /// <summary>
+    /// Batch-load "ai đã đọc" cho danh sách chat — nguồn cho <c>TicketChatDTO.ReadReceipts</c>
+    /// (tick "đã xem" kiểu Messenger). Gom tên + avatar 1 lần cho cả trang, không N+1.
+    ///
+    /// Chỉ nên truyền vào chatId của những tin do CHÍNH actor gửi: người gửi mới cần biết ai đã xem,
+    /// nạp cho cả trang chỉ làm phình payload.
+    /// </summary>
+    public static async Task<Dictionary<Guid, List<ChatReaderDTO>>> LoadReadReceiptsAsync(
+        ITicketUnitOfWork uow,
+        IReadOnlyCollection<Guid> chatIds,
+        CancellationToken ct)
+    {
+        if (chatIds.Count == 0)
+            return new();
+
+        // Repo có thể chưa được mock trong unit test cũ — receipt thuần hiển thị, thiếu thì coi
+        // như chưa ai đọc chứ không ném NullReference làm hỏng cả luồng đọc chat.
+        var source = uow.TicketChatReads?.GetAllAsync();
+        if (source is null)
+            return new();
+
+        var reads = await source
+            .AsNoTracking()
+            .Where(r => chatIds.Contains(r.ChatId) && !r.IsDeleted)
+            .OrderBy(r => r.ReadAt)
+            .Select(r => new { r.ChatId, r.UserId, r.UserRole, r.ReadAt })
+            .ToListAsync(ct);
+
+        if (reads.Count == 0)
+            return new();
+
+        var readerIds = reads.Select(r => r.UserId).Distinct().ToList();
+
+        var customers = await uow.CustomerAccounts.GetAllAsync()
+            .AsNoTracking()
+            .Where(a => readerIds.Contains(a.AccountId) && !a.IsDeleted)
+            .Select(a => new { a.AccountId, a.FullName, a.AvatarUrl })
+            .ToListAsync(ct);
+        var staff = await uow.StaffAccounts.GetAllAsync()
+            .AsNoTracking()
+            .Where(a => readerIds.Contains(a.AccountId) && !a.IsDeleted)
+            .Select(a => new { a.AccountId, a.FullName, a.AvatarUrl })
+            .ToListAsync(ct);
+
+        var customerById = customers.ToDictionary(a => a.AccountId);
+        var staffById = staff.ToDictionary(a => a.AccountId);
+
+        return reads
+            .GroupBy(r => r.ChatId)
+            .ToDictionary(g => g.Key, g => g.Select(r =>
+            {
+                var isCustomer = r.UserRole == ActorRoleEnum.Customer;
+                var account = isCustomer
+                    ? customerById.GetValueOrDefault(r.UserId)
+                    : staffById.GetValueOrDefault(r.UserId);
+
+                return new ChatReaderDTO
+                {
+                    ChatId = r.ChatId.ToString(),
+                    UserId = r.UserId.ToString(),
+                    DisplayName = account?.FullName ?? r.UserId.ToString(),
+                    AvatarUrl = account?.AvatarUrl,
+                    Role = r.UserRole,
+                    ReadAt = r.ReadAt
+                };
+            }).ToList());
     }
 
     public static async Task<Dictionary<Guid, List<TicketChatMentionDTO>>> LoadMentionsAsync(

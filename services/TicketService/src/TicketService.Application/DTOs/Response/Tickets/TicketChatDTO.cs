@@ -67,6 +67,22 @@ public class TicketChatDTO
     /// </summary>
     public bool IsRead { get; set; }
 
+    /// <summary>
+    /// Những người KHÁC đã đọc tin này (không gồm chính tác giả) — kiểu "đã xem" của Messenger.
+    /// Client vẽ avatar chồng dưới bubble tin cuối cùng mà mỗi người đã đọc.
+    ///
+    /// KHÁC <see cref="IsRead"/>: IsRead = "TÔI đã đọc tin này" (vẽ mốc "Tin nhắn chưa đọc"),
+    /// còn danh sách này = "AI đã đọc tin này". Tin mình gửi luôn có IsRead=true nhưng
+    /// ReadReceipts rỗng cho tới khi có người thật sự mở đọc.
+    ///
+    /// Chỉ điền cho tin do CHÍNH actor gửi — tin của người khác không cần biết ai đã xem,
+    /// điền hết sẽ phình payload mà client không dùng tới.
+    /// </summary>
+    public List<ChatReaderDTO> ReadReceipts { get; set; } = new();
+
+    /// <summary>Số người đã đọc — bằng <c>ReadReceipts.Count</c>, tách ra để client hiển thị nhanh.</summary>
+    public int ReadCount { get; set; }
+
     public bool IsDeleted { get; set; }
     public VoiceTranscriptionStatusEnum? VoiceTranscriptionStatus { get; set; }
     public string? VoiceTranscriptionError { get; set; }

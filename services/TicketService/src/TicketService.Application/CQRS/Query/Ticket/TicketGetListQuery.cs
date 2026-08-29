@@ -27,6 +27,13 @@ public class TicketGetListQuery : PaginationRequest, IRequest<CommonResponse<Pag
     public SlaFilterEnum? Sla { get; set; }
 
     /// <summary>
+    /// Lọc theo nguồn tạo ticket. Không map 1-1 với <see cref="TicketOriginEnum"/>:
+    /// Environmental / PeriodicMaintenance / CascadeRisk đều là Origin = System, tách nhau
+    /// bằng field chuyên biệt. Xem <see cref="TicketSourceFilterEnum"/>.
+    /// </summary>
+    public TicketSourceFilterEnum? Source { get; set; }
+
+    /// <summary>
     /// Đảo chiều theo CreatedAt (legacy — giữ tương thích ngược).
     /// Nếu <see cref="SortDir"/> được set thì SortDir thắng.
     /// </summary>

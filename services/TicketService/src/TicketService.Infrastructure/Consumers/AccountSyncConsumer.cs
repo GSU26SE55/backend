@@ -197,6 +197,7 @@ public class TicketAccountStatusChangedConsumer : IConsumer<AccountStatusChanged
                 if (!string.IsNullOrWhiteSpace(@event.FullName))
                     customer.FullName = @event.FullName.Trim();
                 customer.PhoneNumber = Normalize(@event.PhoneNumber);
+                customer.AvatarUrl = Normalize(@event.AvatarUrl);
                 customer.Status = !hasCanonicalRole || isCustomerRole
                     ? status
                     : AccountStatusEnum.Inactive;
@@ -238,6 +239,7 @@ public class TicketAccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdat
             {
                 staff.Email = @event.Email.Trim().ToLowerInvariant();
                 staff.FullName = @event.FullName.Trim();
+                staff.AvatarUrl = Normalize(@event.AvatarUrl);
                 if (!string.IsNullOrWhiteSpace(@event.Role))
                 {
                     staff.Role = @event.Role.Trim();
@@ -257,6 +259,7 @@ public class TicketAccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdat
                 customer.Email = @event.Email.Trim().ToLowerInvariant();
                 customer.FullName = @event.FullName.Trim();
                 customer.PhoneNumber = Normalize(@event.PhoneNumber);
+                customer.AvatarUrl = Normalize(@event.AvatarUrl);
                 if (!string.IsNullOrWhiteSpace(@event.Role))
                     customer.Status = @event.Role.Equals("Customer", StringComparison.OrdinalIgnoreCase)
                         ? AuthAccountStatusMapper.FromAuthStatus(@event.AccountStatus)

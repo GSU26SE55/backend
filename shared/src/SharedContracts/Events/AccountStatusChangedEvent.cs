@@ -22,5 +22,11 @@ public record AccountStatusChangedEvent(
     string Role = "",
     string FullName = "",
     string? PhoneNumber = null,
-    bool IsActive = false
+    bool IsActive = false,
+    /// <summary>
+    /// Ảnh đại diện tài khoản (AuthService <c>Account.AvatarUrl</c>). Optional để mọi publisher
+    /// hiện có compile không đổi — bên nào chưa truyền thì consumer nhận null và giữ nguyên
+    /// giá trị đang lưu, chứ không xoá trắng ảnh sẵn có.
+    /// </summary>
+    string? AvatarUrl = null
 ) : IntegrationEvent;

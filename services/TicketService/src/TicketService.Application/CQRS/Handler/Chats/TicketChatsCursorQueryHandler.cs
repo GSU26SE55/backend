@@ -79,34 +79,46 @@ public class TicketChatsCursorQueryHandler : IRequestHandler<TicketChatsCursorQu
         // Tin của chính actor luôn tính là đã đọc — BE không ghi read-receipt cho tác giả.
         var readChatIds = await ChatChildDataLoader.LoadReadChatIdsForUserAsync(
             _uow, rawChats.Select(c => c.Id).ToList(), request.ActorUserId, ct);
+        // "Đã xem" kiểu Messenger — chỉ nạp cho tin do CHÍNH actor gửi.
+        var ownChatIds = rawChats
+            .Where(c => c.AuthorUserId == request.ActorUserId && !c.IsDeleted)
+            .Select(c => c.Id)
+            .ToList();
+        var receiptsByChat = await ChatChildDataLoader.LoadReadReceiptsAsync(_uow, ownChatIds, ct);
 
-        var items = rawChats.Select(c => new TicketChatDTO
+        var items = rawChats.Select(c =>
         {
-            Id = c.Id.ToString(),
-            TicketId = c.TicketId.ToString(),
-            AuthorUserId = c.AuthorUserId.ToString(),
-            IsRead = c.AuthorUserId == request.ActorUserId || readChatIds.Contains(c.Id),
-            AuthorRole = c.AuthorRole,
-            AuthorDisplayName = c.AuthorDisplayName,
-            IsInternal = c.IsInternal,
-            CreatedAt = c.CreatedAt,
-            IsPinned = c.IsPinned,
-            PinnedAt = c.PinnedAt,
-            PinnedByUserId = c.PinnedByUserId?.ToString(),
-            ParentChatId = c.ParentChatId?.ToString(),
-            ThreadRootId = c.ThreadRootId?.ToString(),
-            ReplyCount = c.ReplyCount,
-            IsDeleted = c.IsDeleted,
-            Body = c.IsDeleted ? "This message has been deleted." : c.Body,
-            BodyHtml = c.IsDeleted ? null : c.BodyHtml,
-            BodyFormat = c.IsDeleted ? default : c.BodyFormat,
-            AttachmentFileIds = c.IsDeleted ? [] : c.AttachmentFileIds.Select(id => id.ToString()).ToList(),
-            EditedAt = c.IsDeleted ? null : c.EditedAt,
-            EditCount = c.IsDeleted ? 0 : c.EditCount,
-            LastEditedByUserId = c.IsDeleted ? null : c.LastEditedByUserId?.ToString(),
-            Mentions = c.IsDeleted ? [] : (mentionsByChat.TryGetValue(c.Id, out var m) ? m : []),
-            Reactions = c.IsDeleted ? new() : (reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()),
-            ActiveTranslation = c.IsDeleted ? null : (translationsByChat.TryGetValue(c.Id, out var tr) ? tr : null),
+            var receipts = receiptsByChat.TryGetValue(c.Id, out var rr) ? rr : new List<ChatReaderDTO>();
+            return new TicketChatDTO
+            {
+                Id = c.Id.ToString(),
+                TicketId = c.TicketId.ToString(),
+                AuthorUserId = c.AuthorUserId.ToString(),
+                IsRead = c.AuthorUserId == request.ActorUserId || readChatIds.Contains(c.Id),
+                ReadReceipts = receipts,
+                ReadCount = receipts.Count,
+                AuthorRole = c.AuthorRole,
+                AuthorDisplayName = c.AuthorDisplayName,
+                IsInternal = c.IsInternal,
+                CreatedAt = c.CreatedAt,
+                IsPinned = c.IsPinned,
+                PinnedAt = c.PinnedAt,
+                PinnedByUserId = c.PinnedByUserId?.ToString(),
+                ParentChatId = c.ParentChatId?.ToString(),
+                ThreadRootId = c.ThreadRootId?.ToString(),
+                ReplyCount = c.ReplyCount,
+                IsDeleted = c.IsDeleted,
+                Body = c.IsDeleted ? "This message has been deleted." : c.Body,
+                BodyHtml = c.IsDeleted ? null : c.BodyHtml,
+                BodyFormat = c.IsDeleted ? default : c.BodyFormat,
+                AttachmentFileIds = c.IsDeleted ? [] : c.AttachmentFileIds.Select(id => id.ToString()).ToList(),
+                EditedAt = c.IsDeleted ? null : c.EditedAt,
+                EditCount = c.IsDeleted ? 0 : c.EditCount,
+                LastEditedByUserId = c.IsDeleted ? null : c.LastEditedByUserId?.ToString(),
+                Mentions = c.IsDeleted ? [] : (mentionsByChat.TryGetValue(c.Id, out var m) ? m : []),
+                Reactions = c.IsDeleted ? new() : (reactionsByChat.TryGetValue(c.Id, out var r) ? r : new TicketChatReactionsAggregateDTO()),
+                ActiveTranslation = c.IsDeleted ? null : (translationsByChat.TryGetValue(c.Id, out var tr) ? tr : null),
+            };
         }).ToList();
 
         var nextCursor = hasMore ? EncodeCursor(rawChats.Last().Id, rawChats.Last().CreatedAt) : null;
