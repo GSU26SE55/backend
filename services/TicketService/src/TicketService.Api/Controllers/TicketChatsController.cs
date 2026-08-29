@@ -211,7 +211,7 @@ public class TicketChatsController : ControllerBase
         {
             try
             {
-                await _mediator.Send(new ChatMarkAsReadCommand
+                var markResult = await _mediator.Send(new ChatMarkAsReadCommand
                 {
                     TicketId = ticketId,
                     UserId = actorId.Value,
@@ -219,9 +219,22 @@ public class TicketChatsController : ControllerBase
                     ActorRoles = GetCurrentRoles(),
                     ChatIds = chatIds
                 }, ct);
+
+                // Handler trả 503 (hàng đợi đầy) bằng GIÁ TRỊ, không ném exception — catch bên dưới
+                // không thấy. Nuốt im lặng thì client tưởng đã đọc hết, không gọi lại, unread kẹt.
+                // Không đổi status của response chính (đây là side-effect), nhưng báo qua header
+                // để client biết đường POST mark-read lại.
+                if (!markResult.IsSuccess)
+                {
+                    Response.Headers["X-Mark-Read-Incomplete"] = "true";
+                    _logger.LogWarning(
+                        "[GetChats] Auto mark-read incomplete for ticket {TicketId}, user {UserId}: {StatusCode} {Message}",
+                        ticketId, actorId.Value, markResult.StatusCode, markResult.Message);
+                }
             }
             catch (Exception ex)
             {
+                Response.Headers["X-Mark-Read-Incomplete"] = "true";
                 _logger.LogWarning(ex, "[GetChats] Auto mark-read failed for ticket {TicketId}, user {UserId}", ticketId, actorId.Value);
             }
         }

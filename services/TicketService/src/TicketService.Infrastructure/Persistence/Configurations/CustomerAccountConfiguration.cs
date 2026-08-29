@@ -29,6 +29,10 @@ public class CustomerAccountConfiguration : IEntityTypeConfiguration<CustomerAcc
             .HasColumnName("phone_number")
             .HasMaxLength(50);
 
+        builder.Property(e => e.AvatarUrl)
+            .HasColumnName("avatar_url")
+            .HasMaxLength(1024);
+
         builder.Property(e => e.Status)
             .HasColumnName("status")
             .HasConversion<int>();

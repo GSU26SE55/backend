@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.SignalR;
@@ -77,6 +78,30 @@ public class SignalRTicketChatNotifier : ITicketChatRealtimeNotifier
             return Task.CompletedTask;
 
         return _hubContext.Clients.User(mentionedUserId.ToString()).SendAsync("MentionReceived", chat, cancellationToken);
+    }
+
+    public async Task NotifyChatReadAsync(
+        Guid ticketId,
+        IReadOnlyDictionary<Guid, List<ChatReaderDTO>> readsByAuthor,
+        CancellationToken cancellationToken = default)
+    {
+        if (readsByAuthor == null || readsByAuthor.Count == 0)
+            return;
+
+        foreach (var (authorUserId, readers) in readsByAuthor)
+        {
+            if (readers == null || readers.Count == 0)
+                continue;
+
+            await _hubContext.Clients.User(authorUserId.ToString()).SendAsync(
+                "ChatRead",
+                new
+                {
+                    ticketId = ticketId.ToString(),
+                    readers
+                },
+                cancellationToken);
+        }
     }
 
     public async Task ForceDisconnectFromTicketAsync(Guid ticketId, Guid userId, CancellationToken cancellationToken = default)

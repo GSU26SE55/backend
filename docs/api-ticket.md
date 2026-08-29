@@ -321,7 +321,7 @@ ClosedPendingRate → Closed (Customer rate / System auto-close / Admin) | → O
 |---|---|---|
 | `ManualByCustomer` | 1 | Customer tự tạo qua app/web |
 | `AutoFromAlert` | 2 | Tự động tạo từ `BatteryAnomalyDetectedEvent` |
-| `CreatedByStaff` | 3 | Staff tạo thay cho Customer |
+| *(reserved)* | 3 | `CreatedByStaff` đã bỏ; dữ liệu cũ được migration gộp về `ManualByCustomer`. Không tái sử dụng wire value này |
 | `System` | 4 | **Hệ thống tự tạo** (không từ 1 alert cụ thể) — Sprint Bonus NS-13/NS-22. Vd: cascade risk High mà pin chưa có ticket active (#657), hoặc sự cố môi trường Critical (#662). ⚠️ Wire value cross-service — FE cần mirror giá trị 4 |
 
 ### `ImpactScopeEnum`
@@ -2295,6 +2295,7 @@ Base path: `/api/admin/tickets`
 | `Priority` | `TicketPriorityEnum?` | Lọc theo priority |
 | `Category` | `TicketCategoryEnum?` | Lọc theo loại lỗi |
 | `BatteryAssetId` | `Guid?` | Lọc theo thiết bị |
+| `Source` | `TicketSourceFilterEnum?` | Nguồn hiển thị: `Customer=1`, `AiPredicted=2`, `Environmental=3`, `PeriodicMaintenance=4` |
 | `IsDescending` | `bool` | (legacy) Đảo chiều theo `createdAt`, mặc định `true`. **Nếu có `SortDir` thì `SortDir` thắng** |
 | `SortBy` | `string?` | Cột sort server-side. Whitelist: `code`, `title`, `category`, `status`, `priority`, `createdAt`. Ngoài whitelist → `createdAt` |
 | `SortDir` | `string?` | `asc` \| `desc` (mặc định `desc`; giá trị lạ → `desc`) |
@@ -2302,6 +2303,10 @@ Base path: `/api/admin/tickets`
 | `PageSize` | `int` | Số item/trang |
 
 > **Sắp xếp:** mặc định `createdAt` desc. Đã hỗ trợ sort server-side qua `SortBy`/`SortDir` (order toàn dataset trước phân trang, tie-breaker `Id ASC`). Sort theo `status`/`priority`/`category` = theo **giá trị số** enum. Chi tiết enum + nullable: xem **Server-side Sort** đầu tài liệu.
+
+> `Source` không map 1-1 với `TicketOriginEnum`: ticket môi trường và bảo trì đều có
+> `Origin=System`, backend phân loại thêm bằng `EnvironmentalIncidentId` và
+> `PeriodicMaintenanceDueAtUtc`.
 
 **Response thành công `200`:** `CommonResponse<PaginationResponse<TicketDTO>>`
 

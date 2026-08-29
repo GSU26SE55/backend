@@ -46,7 +46,11 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
                 t.CustomerId,
                 PrimaryHandlerStaffId = t.Assignments.Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler).Select(a => (Guid?)a.StaffId).FirstOrDefault(),
                 AssignedStaffIds = t.Assignments.Where(a => !a.IsDeleted).Select(a => a.StaffId).ToList(),
-                ParticipantUserIds = t.Participants.Where(p => !p.IsDeleted && p.RemovedAt == null).Select(p => p.UserId).ToList()
+                ParticipantUserIds = t.Participants.Where(p => !p.IsDeleted && p.RemovedAt == null).Select(p => p.UserId).ToList(),
+                // Participant được cấp CanViewInternal vẫn THẤY tin internal ở list chat và vẫn bị
+                // TicketUnreadCountQuery ĐẾM là chưa đọc. Không lấy cờ này về thì mark-read lọc bỏ
+                // đúng những tin đó — user đọc mãi mà badge không bao giờ về 0.
+                ActorCanViewInternal = t.Participants.Any(p => !p.IsDeleted && p.RemovedAt == null && p.UserId == request.UserId && p.CanViewInternal)
             })
             .FirstOrDefaultAsync(ct);
         if (ticket == null)
@@ -56,7 +60,7 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
         if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.UserId, request.ActorRoles, allowedUserIds))
             return new ChatMarkAsReadResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to access this ticket." };
 
-        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles);
+        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, ticket.ActorCanViewInternal);
 
         // Tin do chính actor gửi KHÔNG bao giờ là chưa đọc, nên loại thẳng ở đây: mọi query đếm
         // unread đều bỏ qua chúng (AuthorUserId != actor), ghi receipt cho chúng chỉ tốn slot
@@ -78,9 +82,12 @@ public class ChatMarkAsReadCommandHandler : IRequestHandler<ChatMarkAsReadComman
             return new ChatMarkAsReadResponse { IsSuccess = true, StatusCode = 200, Message = "No valid chats to mark as read.", Data = 0 };
         }
 
+        // Phải lọc !IsDeleted cho khớp với MỌI query đếm unread (chúng đều lọc). Thiếu điều kiện
+        // này thì receipt đã soft-delete vẫn bị coi là "đã đọc" ở đây nên không enqueue lại, trong
+        // khi query đếm bỏ qua nó nên tin vẫn là chưa đọc — unread kẹt vĩnh viễn.
         var alreadyReadChatIds = await _uow.TicketChatReads.GetAllAsync()
             .AsNoTracking()
-            .Where(r => validChatIds.Contains(r.ChatId) && r.UserId == request.UserId)
+            .Where(r => validChatIds.Contains(r.ChatId) && r.UserId == request.UserId && !r.IsDeleted)
             .Select(r => r.ChatId)
             .ToListAsync(ct);
 

@@ -59,6 +59,11 @@ namespace SharedContracts.Events;
 /// <param name="IsAvailable">Trạng thái sẵn sàng nhận việc authoritative.</param>
 /// <param name="SkillTier">Giá trị số staff skill tier bên AuthService.</param>
 /// <param name="SkillCodes">Tập mã kỹ năng authoritative đã chuẩn hoá.</param>
+/// <param name="HasAvatarSnapshot">
+/// <c>true</c> khi <paramref name="AvatarUrl"/> là giá trị authoritative, kể cả khi null. Cờ riêng
+/// giúp snapshot lifecycle cũ không vô tình xoá avatar chỉ vì chưa load profile.
+/// </param>
+/// <param name="AvatarUrl">Avatar hiển thị đã resolve từ profile authoritative.</param>
 public record AccountSyncSnapshotEvent(
     Guid AccountId,
     string Email,
@@ -75,5 +80,7 @@ public record AccountSyncSnapshotEvent(
     int MaxConcurrentTickets = 3,
     bool IsAvailable = true,
     int SkillTier = 0,
-    List<string>? SkillCodes = null
+    List<string>? SkillCodes = null,
+    bool HasAvatarSnapshot = false,
+    string? AvatarUrl = null
 ) : IntegrationEvent;

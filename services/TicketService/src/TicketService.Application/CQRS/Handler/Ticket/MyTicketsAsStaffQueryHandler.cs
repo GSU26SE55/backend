@@ -90,7 +90,15 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
             var chatsBase = _unitOfWork.TicketChats.GetAllAsync().AsNoTracking()
                 .Where(c => ticketIds.Contains(c.TicketId) && !c.IsDeleted && c.AuthorUserId != staffId);
             if (!canViewInternal)
-                chatsBase = chatsBase.Where(c => !c.IsInternal);
+            {
+                // Xét participant.CanViewInternal y hệt TicketUnreadCountQuery — nếu không, badge
+                // ở dòng danh sách lệch với badge trong chi tiết chính ticket đó.
+                var internalVisibleTicketIds = _unitOfWork.TicketParticipants.GetAllAsync().AsNoTracking()
+                    .Where(p => p.UserId == staffId && p.RemovedAt == null && !p.IsDeleted && p.CanViewInternal)
+                    .Select(p => p.TicketId);
+
+                chatsBase = chatsBase.Where(c => !c.IsInternal || internalVisibleTicketIds.Contains(c.TicketId));
+            }
             var unreadList = await chatsBase
                 .Where(c => !readChatIds.Contains(c.Id))
                 .Select(c => c.TicketId).Distinct()

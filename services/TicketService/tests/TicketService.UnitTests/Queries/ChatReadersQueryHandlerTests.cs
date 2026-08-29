@@ -68,8 +68,8 @@ public class ChatReadersQueryHandlerTests
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { chat.Ticket! },
-            customerSeed: new[] { new CustomerAccount { AccountId = customerReader, FullName = "Customer A" } },
-            staffSeed: new[] { new StaffAccount { AccountId = staffReader, FullName = "Technician B" } });
+            customerSeed: new[] { new CustomerAccount { AccountId = customerReader, FullName = "Customer A", AvatarUrl = "customer.png" } },
+            staffSeed: new[] { new StaffAccount { AccountId = staffReader, FullName = "Technician B", AvatarUrl = "staff.png" } });
         var chatsRepo = new Mock<IGenericRepository<TicketChat>>();
         chatsRepo.Setup(r => r.GetByIdAsync(chat.Id)).ReturnsAsync(chat);
         uow.SetupGet(u => u.TicketChats).Returns(chatsRepo.Object);
@@ -82,7 +82,9 @@ public class ChatReadersQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Data!.Should().HaveCount(3);
         result.Data![0].DisplayName.Should().Be("Technician B");
+        result.Data![0].AvatarUrl.Should().Be("staff.png");
         result.Data![1].DisplayName.Should().Be("Customer A");
+        result.Data![1].AvatarUrl.Should().Be("customer.png");
         // Không tìm thấy account (đã xoá / khác service) → fallback về UserId.
         result.Data![2].DisplayName.Should().Be(unknownReader.ToString());
     }

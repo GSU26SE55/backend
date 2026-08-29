@@ -14,6 +14,13 @@ public class ChatReaderDTO
     /// Fallback về UserId khi không tìm thấy account (đã xoá / khác service).
     /// </summary>
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Ảnh đại diện — null thì client tự vẽ chữ cái đầu của <see cref="DisplayName"/>.
+    /// Đồng bộ từ AuthService qua profile event hoặc snapshot reconcile authoritative.
+    /// </summary>
+    public string? AvatarUrl { get; set; }
+
     public ActorRoleEnum Role { get; set; }
     /// <summary>
     /// Read at.

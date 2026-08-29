@@ -179,8 +179,18 @@ public class AccountSyncConsumerTests
     {
         // Arrange
         var accountId = Guid.NewGuid();
-        var staff = new StaffAccount { AccountId = accountId, Status = AccountStatusEnum.Active };
-        var customer = new CustomerAccount { AccountId = accountId, Status = AccountStatusEnum.Active };
+        var staff = new StaffAccount
+        {
+            AccountId = accountId,
+            Status = AccountStatusEnum.Active,
+            AvatarUrl = "https://cdn.example.com/staff.png"
+        };
+        var customer = new CustomerAccount
+        {
+            AccountId = accountId,
+            Status = AccountStatusEnum.Active,
+            AvatarUrl = "https://cdn.example.com/customer.png"
+        };
 
         _staffRepoMock.Setup(r => r.GetAllAsync()).Returns(new List<StaffAccount> { staff }.AsQueryable().BuildMock());
         _customerRepoMock.Setup(r => r.GetAllAsync()).Returns(new List<CustomerAccount> { customer }.AsQueryable().BuildMock());
@@ -198,9 +208,34 @@ public class AccountSyncConsumerTests
         // Assert
         staff.Status.Should().Be(AccountStatusEnum.Suspended);
         customer.Status.Should().Be(AccountStatusEnum.Suspended);
+        // Contract cũ không gửi AvatarUrl. Null phải giữ nguyên, không được hiểu là xoá avatar.
+        staff.AvatarUrl.Should().Be("https://cdn.example.com/staff.png");
+        customer.AvatarUrl.Should().Be("https://cdn.example.com/customer.png");
         _staffRepoMock.Verify(r => r.UpdateAsync(staff), Times.Once);
         _customerRepoMock.Verify(r => r.UpdateAsync(customer), Times.Once);
         _uowMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TicketAccountStatusChangedConsumer_ExplicitAvatar_ShouldUpdateBothHistoricalProjections()
+    {
+        var accountId = Guid.NewGuid();
+        var staff = new StaffAccount { AccountId = accountId, AvatarUrl = "old-staff" };
+        var customer = new CustomerAccount { AccountId = accountId, AvatarUrl = "old-customer" };
+        _staffRepoMock.Setup(r => r.GetAllAsync())
+            .Returns(new List<StaffAccount> { staff }.AsQueryable().BuildMock());
+        _customerRepoMock.Setup(r => r.GetAllAsync())
+            .Returns(new List<CustomerAccount> { customer }.AsQueryable().BuildMock());
+
+        var consumer = new TicketAccountStatusChangedConsumer(_uowMock.Object, _inboxMock.Object);
+        var message = new AccountStatusChangedEvent(
+            accountId, "staff@test.com", 1, 1, "Reason",
+            Role: "Staff", AvatarUrl: " https://cdn.example.com/new.png ");
+
+        await consumer.Consume(MockConsumeContext(message));
+
+        staff.AvatarUrl.Should().Be("https://cdn.example.com/new.png");
+        customer.AvatarUrl.Should().Be("https://cdn.example.com/new.png");
     }
 
     #endregion
