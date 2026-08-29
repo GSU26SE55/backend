@@ -26,7 +26,8 @@ namespace BatteryService.Api.Controllers;
 /// <list type="bullet">
 ///   <item><description><b>ApiKey + scope <c>EnvironmentalIngest</c></b>: batch ingest.</description></item>
 ///   <item><description><b>Admin/Manager/Staff/Customer</b>: đọc readings.</description></item>
-///   <item><description><b>Admin/Manager</b>: upsert + đọc threshold config.</description></item>
+///   <item><description><b>Admin/Manager</b>: upsert threshold config per-site.</description></item>
+///   <item><description><b>Admin/Manager/Staff</b>: đọc threshold config theo site — cần ngưỡng để biết dòng nào vượt giới hạn.</description></item>
 /// </list>
 /// </remarks>
 [ApiController]
@@ -144,6 +145,8 @@ public class AmbientReadingsController : ControllerBase
     [HttpPut("threshold-configs")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    // Nguong ambient theo site: Admin va Manager deu dat duoc — khac voi ThresholdConfig
+    // theo BatteryType (chi Admin), vi nguong moi truong gan voi van hanh tung site.
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> UpsertThreshold([FromBody] UpsertAmbientThresholdConfigCommand cmd, CancellationToken ct)
     {
@@ -170,7 +173,6 @@ public class AmbientReadingsController : ControllerBase
     /// <response code="200">Trả config (200 với <c>Data: null</c> nếu site chưa cấu hình).</response>
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin/Manager/Staff.</response>
-    /// <response code="404">Site chưa được cấu hình threshold (handler trả 404 nếu null).</response>
     // Staff ĐỌC được (không sửa — upsert vẫn Admin/Manager). Staff đã đọc được
     // `readings/history` và ngưỡng theo battery type (ThresholdConfigsController:
     // "Admin,Manager,Staff"); thiếu ngưỡng ambient thì họ xem được số đo môi trường
@@ -181,7 +183,6 @@ public class AmbientReadingsController : ControllerBase
     [ProducesResponseType(typeof(CommonResponse<AmbientThresholdConfigDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetThresholdBySite(Guid siteId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetAmbientThresholdBySiteQuery { SiteId = siteId }, ct);

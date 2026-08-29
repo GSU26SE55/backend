@@ -81,6 +81,7 @@ public sealed class MockUnitOfWorkBuilder
 
         Seed(BatteryTypes, Array.Empty<BatteryType>());
         Seed(BatteryAssets, Array.Empty<BatteryAsset>());
+        Seed(MaintenanceCycles, Array.Empty<MaintenanceCycle>());
         Seed(Sites, Array.Empty<Site>());
         Seed(CustomerAccounts, Array.Empty<CustomerAccount>());
         Seed(ThresholdConfigs, Array.Empty<ThresholdConfig>());
@@ -114,6 +115,7 @@ public sealed class MockUnitOfWorkBuilder
 
     public MockUnitOfWorkBuilder WithBatteryTypes(params BatteryType[] data) { Seed(BatteryTypes, data); return this; }
     public MockUnitOfWorkBuilder WithBatteryAssets(params BatteryAsset[] data) { Seed(BatteryAssets, data); return this; }
+    public MockUnitOfWorkBuilder WithMaintenanceCycles(params MaintenanceCycle[] data) { Seed(MaintenanceCycles, data); return this; }
     public MockUnitOfWorkBuilder WithSites(params Site[] data) { Seed(Sites, data); return this; }
     public MockUnitOfWorkBuilder WithCustomerAccounts(params CustomerAccount[] data) { Seed(CustomerAccounts, data); return this; }
     public MockUnitOfWorkBuilder WithThresholdConfigs(params ThresholdConfig[] data) { Seed(ThresholdConfigs, data); return this; }

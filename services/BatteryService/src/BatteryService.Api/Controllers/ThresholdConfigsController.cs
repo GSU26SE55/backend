@@ -83,6 +83,8 @@ public class ThresholdConfigsController : ControllerBase
     /// - Filter theo <c>BatteryTypeId</c> + <c>!IsDeleted</c>.
     /// - Nếu <c>!includeInactive</c>, thêm filter <c>IsActive = true</c>.
     /// - Sort <c>EffectiveFromUtc</c> giảm dần, lấy <c>FirstOrDefault</c>.
+    /// - Chưa cấu hình → <b>200</b> với <c>data = null</c> (không phải 404): đây là query thành công
+    ///   trả về tập rỗng. Client phân biệt "chưa cấu hình" (null) với lỗi thật (403/500).
     ///
     /// Use case:
     /// - AnomalyDetector tải threshold trước khi đánh giá reading.
@@ -92,16 +94,14 @@ public class ThresholdConfigsController : ControllerBase
     /// <param name="includeInactive">Có bao gồm config inactive không.</param>
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <returns><see cref="CommonResponse{T}"/> chứa <see cref="ThresholdConfigDto"/>.</returns>
-    /// <response code="200">Trả về config.</response>
+    /// <response code="200">Trả về config, hoặc <c>data = null</c> nếu BatteryType chưa có config nào.</response>
     /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="403">Không có role Admin/Manager/Staff.</response>
-    /// <response code="404">BatteryType chưa có config nào (hoặc đều inactive khi không cho includeInactive).</response>
     [HttpGet("by-type/{batteryTypeId:guid}")]
     [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(CommonResponse<ThresholdConfigDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(CommonResponse<ThresholdConfigDto>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetByBatteryType(Guid batteryTypeId, [FromQuery] bool includeInactive, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetThresholdConfigByBatteryTypeQuery

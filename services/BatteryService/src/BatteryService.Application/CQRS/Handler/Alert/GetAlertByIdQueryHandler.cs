@@ -39,6 +39,8 @@ public class GetAlertByIdQueryHandler : IRequestHandler<GetAlertByIdQuery, Commo
             .AsNoTracking()
             .Include(alert => alert.BatteryAsset)
             .Include(alert => alert.Site)
+            // Alert cấp thiết bị lấy định danh từ đây thay vì serial pin.
+            .Include(alert => alert.IotDevice)
             .Where(alert => alert.Id == request.Id && !alert.IsDeleted);
 
         // 404 thay vì 403: không tiết lộ rằng alert của tenant khác có tồn tại.

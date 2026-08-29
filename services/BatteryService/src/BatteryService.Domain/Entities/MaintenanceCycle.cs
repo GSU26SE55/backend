@@ -33,6 +33,24 @@ public class MaintenanceCycle : AuditableEntity
     /// <summary>SoH (%) tại mốc này — dùng để so sánh sức khoẻ giữa các kỳ.</summary>
     public decimal? SohPercentAtCycle { get; set; }
 
+    /// <summary>
+    /// Ticket bảo trì mở cho kỳ này, hoặc <c>null</c> khi chưa nhận được phản hồi.
+    /// </summary>
+    /// <remarks>
+    /// Điền BẤT ĐỒNG BỘ, không phải lúc ghi mốc: dòng này được ghi trước, rồi
+    /// <c>MaintenanceCycleDueEvent</c> mới bay sang TicketService — lúc INSERT thì ticket
+    /// chưa tồn tại. TicketService tạo ticket xong phát ngược
+    /// <c>PeriodicMaintenanceTicketRaisedEvent</c> và consumer bên này mới cập nhật cột.
+    ///
+    /// Vì vậy <c>null</c> có ba nghĩa khác nhau, đừng coi là "hỏng": kỳ vừa ghi và event
+    /// chưa về; kỳ ghi từ trước khi có cột này (chưa backfill); hoặc TicketService đã bỏ
+    /// qua vì ticket cho kỳ đó đã tồn tại.
+    ///
+    /// Cố ý KHÔNG đặt khoá ngoại: ticket nằm ở service khác, ràng buộc chéo database sẽ
+    /// khoá hai service vào nhau.
+    /// </remarks>
+    public Guid? TicketId { get; set; }
+
     // ── Ảnh chụp tình trạng pin trong kỳ vừa qua ─────────────────────────────
     //
     // Tổng hợp từ sensor_readings và alerts trong khoảng [kỳ trước, kỳ này], chụp một lần

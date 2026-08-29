@@ -31,6 +31,10 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
 
     public async Task<CommonResponse<PaginationResponse<TicketDTO>>> Handle(TicketGetListQuery request, CancellationToken cancellationToken)
     {
+        // Role đọc từ JWT, KHÔNG nhận qua query param: endpoint này mở cho cả Manager lẫn Admin,
+        // nên một tham số kiểu ?isAdmin=true sẽ để Manager tự nâng quyền xem hàng chờ triage.
+        var isAdmin = string.Equals(_currentUserService.Role, "Admin", StringComparison.OrdinalIgnoreCase);
+
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
             .Include(t => t.SlaTimer)
@@ -49,10 +53,14 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
 
         if (request.Status.HasValue)
             query = query.Where(t => t.Status == request.Status.Value);
-        else
+        else if (!isAdmin)
             // Open = awaiting Manager triage/assignment — that's the Queue's job (ManagerQueueQuery).
-            // Hide it from the default "Tickets" list so the two views don't overlap; Manager can
-            // still filter Status=Open explicitly to look it up.
+            // Hide it from Manager's default "Tickets" list so the two views don't overlap; Manager
+            // can still filter Status=Open explicitly to look it up.
+            //
+            // Admin is exempt: this endpoint is Admin's ONLY ticket list — there is no Admin Queue
+            // page and no /admin/tickets/queue route — so the same filter left Admin unable to see
+            // an Open ticket anywhere in the system, with an unfiltered list reporting 0 tickets.
             query = query.Where(t => t.Status != TicketStatusEnum.Open);
 
         if (request.Priority.HasValue)

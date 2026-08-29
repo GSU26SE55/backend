@@ -32,12 +32,18 @@ public class GetThresholdConfigByBatteryTypeQueryHandler : IRequestHandler<GetTh
             .OrderByDescending(config => config.EffectiveFromUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
+        // Chua cau hinh nguong KHONG phai loi: day la mot query thanh cong tra ve tap rong.
+        // Tra 404 khien client coi la error -> React Query retry + backoff, va modal
+        // "Configure thresholds" (case pho bien nhat: cau hinh lan dau) phai cho vo ich
+        // truoc khi hien form trong. Tra 200 voi Data = null de client phan biet
+        // "chua cau hinh" (null) voi loi that su (403/500).
         if (entity is null)
         {
             return new CommonResponse<ThresholdConfigDto>
             {
-                IsSuccess = false,
-                StatusCode = 404,
+                IsSuccess = true,
+                StatusCode = 200,
+                Data = null,
                 Message = "Threshold configuration not found for this battery type."
             };
         }

@@ -44,6 +44,8 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             .AsNoTracking()
             .Include(alert => alert.BatteryAsset)
             .Include(alert => alert.Site)
+            // Màn hình "Device alerts" hiển thị mã/tên thiết bị thay cho serial pin.
+            .Include(alert => alert.IotDevice)
             .Where(alert => !alert.IsDeleted);
 
         // Alert có thể gắn asset HOẶC site (cả hai đều nullable) — phải phủ cả hai đường.
@@ -72,6 +74,27 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
         // alert pin. Chỉ áp dụng khi client không tự chỉ định AnomalyType.
         if (request.ExcludeEnvironmentalIncidents && !request.AnomalyType.HasValue)
             query = query.Where(alert => alert.AnomalyType != Domain.Enums.AnomalyTypeEnum.EnvironmentalIncident);
+
+        // Alert cấp thiết bị IoT gắn IotDeviceId chứ không gắn pin — màn hình "Device alerts"
+        // lấy đúng hai loại này, "Battery alerts" loại chúng ra, nên hai danh sách rời nhau và
+        // không màn nào còn dòng trống serial. Lọc ở BE (không phải client) để totalItems và
+        // phân trang khớp với những gì hiển thị. Cùng khuôn với ExcludeEnvironmentalIncidents:
+        // chỉ áp dụng khi client không tự chỉ định AnomalyType.
+        if (!request.AnomalyType.HasValue)
+        {
+            if (request.IotOnly)
+            {
+                query = query.Where(alert =>
+                    alert.AnomalyType == Domain.Enums.AnomalyTypeEnum.DeviceOffline
+                    || alert.AnomalyType == Domain.Enums.AnomalyTypeEnum.IotDataIntegrityViolation);
+            }
+            else if (request.ExcludeIotDeviceAlerts)
+            {
+                query = query.Where(alert =>
+                    alert.AnomalyType != Domain.Enums.AnomalyTypeEnum.DeviceOffline
+                    && alert.AnomalyType != Domain.Enums.AnomalyTypeEnum.IotDataIntegrityViolation);
+            }
+        }
 
         if (request.From.HasValue)
         {
@@ -103,12 +126,24 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             .Select(x => new AlertDto
             {
                 Id = x.alert.Id.ToString(),
-                BatteryAssetId = x.alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
+                BatteryAssetId = x.alert.BatteryAssetId.HasValue
+                    ? x.alert.BatteryAssetId.Value.ToString()
+                    : string.Empty,
                 IotDeviceId = x.alert.IotDeviceId.HasValue ? x.alert.IotDeviceId.Value.ToString() : null,
                 // Sprint Bonus NS-21 (#661) — null cho alert cấp pin, GUID cho alert cấp site.
                 SiteId = x.alert.SiteId.HasValue ? x.alert.SiteId.Value.ToString() : null,
                 // Alert cấp site (ambient/env) không có BatteryAsset → serial rỗng thay vì null.
-                BatterySerialNumber = x.alert.BatteryAsset.SerialNumber ?? string.Empty,
+                BatterySerialNumber = x.alert.BatteryAsset != null
+                    ? x.alert.BatteryAsset.SerialNumber ?? string.Empty
+                    : string.Empty,
+                // Alert cấp thiết bị không có BatteryAsset → hai cột dưới là thứ duy nhất định
+                // danh được sự cố. Rỗng cho alert pin/site, giống quy ước của BatterySerialNumber.
+                // Navigation nullable (alert pin/site không gắn device) — EF dịch cả cụm sang
+                // SQL LEFT JOIN nên null-safe ở runtime, nhưng dùng `?.` để compiler khỏi cảnh
+                // báo CS8602 và ý định đọc ra rõ.
+                IotDeviceCode = x.alert.IotDevice != null ? x.alert.IotDevice.DeviceCode : string.Empty,
+                IotDeviceName = x.alert.IotDevice != null ? x.alert.IotDevice.DisplayName : string.Empty,
+                SiteName = x.alert.Site != null ? x.alert.Site.Name : string.Empty,
                 CustomerName = x.account != null ? x.account.FullName : string.Empty,
                 AnomalyType = x.alert.AnomalyType,
                 Severity = x.alert.Severity,

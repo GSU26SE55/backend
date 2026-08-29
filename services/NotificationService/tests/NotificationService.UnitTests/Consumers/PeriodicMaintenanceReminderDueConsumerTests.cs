@@ -63,7 +63,8 @@ public class PeriodicMaintenanceReminderDueConsumerTests
         var customerId = Guid.NewGuid();
         var message = Message(customerId, PeriodicMaintenanceReminderStage.CustomerFirstReminder);
         var (harness, written, _) =
-            await ConsumerTestHarness.StartAsync<PeriodicMaintenanceReminderDueConsumer>();
+            await ConsumerTestHarness.StartAsync<PeriodicMaintenanceReminderDueConsumer>(
+                cache: ConsumerTestHarness.ClaimOnceCache());
         try
         {
             await harness.Bus.Publish(message);

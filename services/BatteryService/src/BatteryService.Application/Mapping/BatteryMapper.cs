@@ -121,10 +121,15 @@ public static class BatteryMapper
         {
             CustomerName = customerName,
             Id = alert.Id.ToString(),
-            BatteryAssetId = alert.BatteryAssetId.ToString(), // Guid? null → "" (alert cấp site)
+            BatteryAssetId = alert.BatteryAssetId?.ToString() ?? string.Empty,
             IotDeviceId = alert.IotDeviceId?.ToString(),
             SiteId = alert.SiteId?.ToString(),                // Sprint Bonus NS-21 (#661)
             BatterySerialNumber = alert.BatteryAsset?.SerialNumber ?? string.Empty,
+            // Alert cấp thiết bị không có BatteryAsset — ba cột này là thứ định danh nó.
+            // Rỗng khi navigation không được Include, cùng quy ước với BatterySerialNumber.
+            IotDeviceCode = alert.IotDevice?.DeviceCode ?? string.Empty,
+            IotDeviceName = alert.IotDevice?.DisplayName ?? string.Empty,
+            SiteName = alert.Site?.Name ?? string.Empty,
             AnomalyType = alert.AnomalyType,
             Severity = alert.Severity,
             ThresholdValue = alert.ThresholdValue,

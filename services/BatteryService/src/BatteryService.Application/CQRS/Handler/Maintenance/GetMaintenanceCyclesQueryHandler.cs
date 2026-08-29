@@ -30,6 +30,8 @@ public class GetMaintenanceCyclesQueryHandler
                 DueAtUtc = cycle.DueAtUtc,
                 RecordedAtUtc = cycle.RecordedAtUtc,
                 SohPercentAtCycle = cycle.SohPercentAtCycle,
+                // Nối bất đồng bộ nên có thể còn trống — FE ẩn liên kết khi null.
+                TicketId = cycle.TicketId.HasValue ? cycle.TicketId.Value.ToString() : null,
                 AvgTemperatureCelsius = cycle.AvgTemperatureCelsius,
                 MaxTemperatureCelsius = cycle.MaxTemperatureCelsius,
                 MinVoltage = cycle.MinVoltage,

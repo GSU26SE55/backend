@@ -31,6 +31,23 @@ public class GetAlertsQuery : PaginationRequest, IRequest<CommonResponse<Paginat
     /// </summary>
     public bool ExcludeEnvironmentalIncidents { get; set; }
 
+    /// <summary>
+    /// Chỉ lấy alert cấp thiết bị IoT (<c>DeviceOffline</c>, <c>IotDataIntegrityViolation</c>) —
+    /// màn hình "Device alerts" của FE bật cờ này. Hai loại đó gắn <c>IotDeviceId</c> chứ không
+    /// gắn pin, nên hiện chung với alert pin thì cột serial rỗng và người đọc không biết sự cố
+    /// thuộc về gateway hay về pin. Bị bỏ qua khi <c>AnomalyType</c> được truyền.
+    /// Mặc định false — giữ nguyên payload cũ cho các consumer hiện tại.
+    /// </summary>
+    public bool IotOnly { get; set; }
+
+    /// <summary>
+    /// Loại trừ alert cấp thiết bị IoT (<c>DeviceOffline</c>, <c>IotDataIntegrityViolation</c>) —
+    /// mặt đối của <see cref="IotOnly"/>, dùng bởi màn hình "Battery alerts" để hai danh sách
+    /// không chồng nhau. Bị bỏ qua khi <c>AnomalyType</c> được truyền.
+    /// Mặc định false — giữ nguyên payload cũ cho các consumer hiện tại.
+    /// </summary>
+    public bool ExcludeIotDeviceAlerts { get; set; }
+
     /// <summary>Filter timestamp bắt đầu (UTC inclusive).</summary>
     public DateTime? From { get; set; }
 
