@@ -45,7 +45,7 @@ public class ChatSuggestCommandHandlerTests
         Status = TicketStatusEnum.Open,
         BatteryAssetId = Guid.NewGuid(),
         CustomerId = Guid.NewGuid(),
-        Origin = TicketOriginEnum.CreatedByStaff,
+        Origin = TicketOriginEnum.ManualByCustomer,
         Chats = chats ?? new List<TicketChat>(),
     };
 
