@@ -12,6 +12,8 @@ namespace SharedContracts.Events;
 /// <b>tuyệt đối không ép kiểu thẳng</b> <c>(AccountStatusEnum)evt.NewStatus</c> — phải map tường
 /// minh. TicketService đã trả giá cho lỗi này: Locked(2) của Auth rơi trúng Active(2) của Ticket,
 /// khoá tài khoản xong bên kia vẫn coi là hợp lệ để giao ticket, không log không exception.</para>
+/// <para><c>AvatarUrl</c> là optional để giữ tương thích với publisher cũ. Khi null, consumer phải
+/// giữ nguyên giá trị đang lưu thay vì hiểu thành lệnh xoá avatar.</para>
 /// </summary>
 public record AccountStatusChangedEvent(
     Guid AccountId,
@@ -22,5 +24,6 @@ public record AccountStatusChangedEvent(
     string Role = "",
     string FullName = "",
     string? PhoneNumber = null,
-    bool IsActive = false
+    bool IsActive = false,
+    string? AvatarUrl = null
 ) : IntegrationEvent;

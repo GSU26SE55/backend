@@ -1,6 +1,7 @@
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Interfaces.Repositories;
+using AuthService.Application.Mapping;
 using AuthService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +49,7 @@ public class AccountResyncCommandHandler : IRequestHandler<AccountResyncCommand,
         var query = _unitOfWork.Accounts.GetAllAsync()
             .IgnoreQueryFilters()
             .Include(a => a.Role)
+            .Include(a => a.Profile)
             .Include(a => a.StaffProfile!)
                 .ThenInclude(profile => profile.Skills)
             .AsSplitQuery();
@@ -100,7 +102,9 @@ public class AccountResyncCommandHandler : IRequestHandler<AccountResyncCommand,
                     .Select(skill => skill.SkillCode)
                     .Distinct(StringComparer.Ordinal)
                     .OrderBy(code => code, StringComparer.Ordinal)
-                    .ToList() ?? new List<string>()), cancellationToken);
+                    .ToList() ?? new List<string>(),
+                HasAvatarSnapshot: true,
+                AvatarUrl: AccountProfileMapper.ResolveDisplayAvatarUrl(account.Profile)), cancellationToken);
 
             if (++pending >= BatchSize)
             {

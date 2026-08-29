@@ -28,12 +28,23 @@ public class ChatReadersQueryHandler : IRequestHandler<ChatReadersQuery, ChatRea
         if (ticket == null)
             return new ChatReadersResponse { IsSuccess = false, StatusCode = 404, Message = "Ticket not found." };
 
-        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles))
+        // Phải xét participant y hệt các handler chat khác: staff là participant (không phải
+        // PrimaryHandler) xem được chính tin nhắn đó nhưng lại bị 403 ở đây.
+        var activeParticipants = await _uow.TicketParticipants.GetAllAsync()
+            .AsNoTracking()
+            .Where(p => p.TicketId == request.TicketId && p.RemovedAt == null && !p.IsDeleted)
+            .Select(p => new { p.UserId, p.CanViewInternal })
+            .ToListAsync(ct);
+
+        if (!TicketQueryHelper.CanAccessTicket(ticket.CustomerId, ticket.PrimaryHandlerStaffId, request.ActorUserId, request.ActorRoles, activeParticipants.Select(p => p.UserId).ToList()))
             return new ChatReadersResponse { IsSuccess = false, StatusCode = 403, Message = "You do not have permission to access this ticket." };
+
+        var participantCanViewInternal = activeParticipants.Any(p => p.UserId == request.ActorUserId && p.CanViewInternal);
+        var canViewInternalChats = TicketQueryHelper.CanViewInternalChats(request.ActorRoles, participantCanViewInternal);
 
         var chat = await _uow.TicketChats.GetByIdAsync(request.ChatId);
         if (chat == null || chat.IsDeleted || chat.TicketId != request.TicketId
-            || (chat.IsInternal && !TicketQueryHelper.CanViewInternalChats(request.ActorRoles)))
+            || (chat.IsInternal && !canViewInternalChats))
         {
             return new ChatReadersResponse { IsSuccess = false, StatusCode = 404, Message = "Comment not found." };
         }
@@ -46,25 +57,36 @@ public class ChatReadersQueryHandler : IRequestHandler<ChatReadersQuery, ChatRea
 
         // Resolve tên hiển thị — cùng cách TicketParticipantsQueryHandler làm.
         var readerUserIds = reads.Select(r => r.UserId).Distinct().ToList();
-        var customerNames = await _uow.CustomerAccounts.GetAllAsync()
+        var customers = await _uow.CustomerAccounts.GetAllAsync()
             .AsNoTracking()
             .Where(a => readerUserIds.Contains(a.AccountId) && !a.IsDeleted)
-            .ToDictionaryAsync(a => a.AccountId, a => a.FullName, ct);
-        var staffNames = await _uow.StaffAccounts.GetAllAsync()
+            .Select(a => new { a.AccountId, a.FullName, a.AvatarUrl })
+            .ToListAsync(ct);
+        var staffs = await _uow.StaffAccounts.GetAllAsync()
             .AsNoTracking()
             .Where(a => readerUserIds.Contains(a.AccountId) && !a.IsDeleted)
-            .ToDictionaryAsync(a => a.AccountId, a => a.FullName, ct);
+            .Select(a => new { a.AccountId, a.FullName, a.AvatarUrl })
+            .ToListAsync(ct);
+
+        var customerById = customers.ToDictionary(a => a.AccountId);
+        var staffById = staffs.ToDictionary(a => a.AccountId);
 
         var readers = reads
-            .Select(r => new ChatReaderDTO
+            .Select(r =>
             {
-                ChatId = r.ChatId.ToString(),
-                UserId = r.UserId.ToString(),
-                DisplayName = r.UserRole == ActorRoleEnum.Customer
-                    ? customerNames.GetValueOrDefault(r.UserId, r.UserId.ToString())
-                    : staffNames.GetValueOrDefault(r.UserId, r.UserId.ToString()),
-                Role = r.UserRole,
-                ReadAt = r.ReadAt
+                var account = r.UserRole == ActorRoleEnum.Customer
+                    ? customerById.GetValueOrDefault(r.UserId)
+                    : staffById.GetValueOrDefault(r.UserId);
+
+                return new ChatReaderDTO
+                {
+                    ChatId = r.ChatId.ToString(),
+                    UserId = r.UserId.ToString(),
+                    DisplayName = account?.FullName ?? r.UserId.ToString(),
+                    AvatarUrl = account?.AvatarUrl,
+                    Role = r.UserRole,
+                    ReadAt = r.ReadAt
+                };
             })
             .ToList();
 

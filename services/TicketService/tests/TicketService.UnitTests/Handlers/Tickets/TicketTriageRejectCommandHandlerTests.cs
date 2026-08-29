@@ -4,6 +4,7 @@ using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
 using TicketService.Application.IntegrationEvents;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
 using TicketService.Domain.Entities;
@@ -17,6 +18,7 @@ public class TicketTriageRejectCommandHandlerTests
     private readonly Mock<IActivityLogger> _logger = new();
     private readonly Mock<IIntegrationEventOutboxWriter> _outboxWriter = new();
     private readonly Mock<ITicketStateMachine> _stateMachine = new();
+    private readonly Mock<ITicketActivationService> _slaTransitions = new();
 
     [Fact]
     public async Task Handle_ValidRequest_RejectsTicket()
@@ -54,7 +56,7 @@ public class TicketTriageRejectCommandHandlerTests
             })
             .ReturnsAsync(new TransitionResult { IsAllowed = true });
 
-        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object);
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, _slaTransitions.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -72,6 +74,11 @@ public class TicketTriageRejectCommandHandlerTests
             It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(ticketId, managerId, ActorRoleEnum.Manager, "Manager Test", ActivityActionEnum.Rejected, null, "ClosedRejected", "Invalid ticket description"), Times.Once);
+
+        // ClosedRejected là trạng thái kết thúc → đồng hồ SLA phải dừng. Nếu không,
+        // SlaTimerBackgroundService (chỉ lọc Status == Running) vẫn đếm ngược ticket đã đóng rồi
+        // đánh Breached và kích hoạt escalation.
+        _slaTransitions.Verify(x => x.StopSlaAsync(ticket, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -110,7 +117,7 @@ public class TicketTriageRejectCommandHandlerTests
             })
             .ReturnsAsync(new TransitionResult { IsAllowed = true });
 
-        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object);
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, _slaTransitions.Object);
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -129,7 +136,7 @@ public class TicketTriageRejectCommandHandlerTests
     {
         // Arrange
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build();
-        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object);
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, _slaTransitions.Object);
         var command = new TicketTriageRejectCommand { TicketId = Guid.NewGuid(), Reason = "Test" };
 
         // Act
@@ -151,7 +158,7 @@ public class TicketTriageRejectCommandHandlerTests
         _stateMachine.Setup(x => x.CanTransition(ticket, TicketStatusEnum.ClosedRejected, It.IsAny<ActorRoleEnum>(), It.IsAny<Guid>()))
             .Returns(new TransitionResult { IsAllowed = false, Reason = "Invalid status" });
 
-        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object);
+        var handler = new TicketTriageRejectCommandHandler(uow.Object, _stateMachine.Object, _logger.Object, _outboxWriter.Object, _slaTransitions.Object);
         var command = new TicketTriageRejectCommand { TicketId = ticketId, Reason = "Test", ManagerId = Guid.NewGuid() };
 
         // Act
@@ -161,5 +168,8 @@ public class TicketTriageRejectCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.StatusCode.Should().Be(403);
         result.Message.Should().Be("Invalid status");
+
+        // Reject bị chặn → ticket vẫn đang được xử lý, nên đồng hồ SLA phải tiếp tục chạy.
+        _slaTransitions.Verify(x => x.StopSlaAsync(It.IsAny<Ticket>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

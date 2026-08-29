@@ -1587,7 +1587,7 @@ services/TicketService/
 | `ImpactScope` | `ImpactScopeEnum?` | nullable until ASSIGNED | **B3** — 1=SingleAsset, 2=BatteryGroup, 3=Site, 4=MultiSite. Manager gán lúc triage |
 | `UrgencyLevel` | `UrgencyLevelEnum?` | nullable until ASSIGNED | **B3** — 1=Low, 2=Medium, 3=High. Manager gán lúc triage |
 | `Status` | `TicketStatusEnum` | NOT NULL default `NEW` | xem §2.4 |
-| `Origin` | `TicketOriginEnum` | NOT NULL | 1=ManualByCustomer, 2=AutoFromAlert, 3=CreatedByStaff |
+| `Origin` | `TicketOriginEnum` | NOT NULL | 1=ManualByCustomer, 2=AutoFromAlert, 3=reserved (legacy CreatedByStaff đã gộp về 1), 4=System |
 | `OriginAlertId` | `Guid?` | nullable, **unique filtered index** `WHERE origin_alert_id IS NOT NULL AND is_deleted = false` (Sprint 5B `AddAlertTicketSagaFoundation`) | Lưu Alert **đầu tiên** tạo Ticket. Reuse cho Alert mới KHÔNG ghi đè — quan hệ many-alerts-to-one-ticket nằm ở `Alert.TicketId` (xem §53.6, §53.8) |
 | `ReopenCount` | `int` | NOT NULL default 0 | BR-07 escalate khi ≥ 2 |
 | `ResolutionSummary` | `string(2000)?` | nullable | Staff điền khi mark RESOLVED |

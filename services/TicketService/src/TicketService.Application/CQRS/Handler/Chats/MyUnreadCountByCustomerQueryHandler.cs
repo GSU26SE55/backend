@@ -57,8 +57,11 @@ public class MyUnreadCountByCustomerQueryHandler
             }
             else
             {
+                // MỌI assignment role, không riêng PrimaryHandler: ChatMarkAsRead cho co-handler
+                // truy cập và mark-read được, TicketUnreadCountQuery cũng đếm ticket đó. Bó hẹp ở
+                // đây khiến tổng badge nhỏ hơn tổng các badge từng ticket cộng lại.
                 directIds = _uow.TicketAssignments.GetAllAsync().AsNoTracking()
-                    .Where(a => a.StaffId == actorUserId && a.Role == AssignmentRoleEnum.PrimaryHandler && !a.IsDeleted)
+                    .Where(a => a.StaffId == actorUserId && !a.IsDeleted)
                     .Select(a => a.TicketId);
             }
 
@@ -80,7 +83,16 @@ public class MyUnreadCountByCustomerQueryHandler
             .Where(c => ticketIdsQuery.Contains(c.TicketId) && !c.IsDeleted && c.AuthorUserId != actorUserId);
 
         if (!canViewInternal)
-            chatsBase = chatsBase.Where(c => !c.IsInternal);
+        {
+            // Không loại thẳng mọi tin internal: participant được cấp CanViewInternal vẫn THẤY tin
+            // internal ở list chat và mark-read được chúng. Loại ở đây thì tổng badge hụt so với
+            // TicketUnreadCountQuery — vốn đã xét cờ này per-ticket.
+            var internalVisibleTicketIds = _uow.TicketParticipants.GetAllAsync().AsNoTracking()
+                .Where(p => p.UserId == actorUserId && p.RemovedAt == null && !p.IsDeleted && p.CanViewInternal)
+                .Select(p => p.TicketId);
+
+            chatsBase = chatsBase.Where(c => !c.IsInternal || internalVisibleTicketIds.Contains(c.TicketId));
+        }
 
         var unreadChats = chatsBase.Where(c => !readChatIds.Contains(c.Id));
 

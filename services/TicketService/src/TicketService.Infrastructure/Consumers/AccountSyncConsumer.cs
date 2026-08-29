@@ -178,6 +178,10 @@ public class TicketAccountStatusChangedConsumer : IConsumer<AccountStatusChanged
                     staff.FullName = @event.FullName.Trim();
                 if (!string.IsNullOrWhiteSpace(@event.Role))
                     staff.Role = @event.Role.Trim();
+                // Publisher cũ không có AvatarUrl. Null nghĩa là "không có snapshot avatar",
+                // không phải lệnh xoá; profile event mới là nguồn authoritative cho phép xoá.
+                if (@event.AvatarUrl is not null)
+                    staff.AvatarUrl = Normalize(@event.AvatarUrl);
                 // Compatibility with events produced before Role was added to the contract: update
                 // every existing projection. New events carry the canonical role, allowing us to
                 // keep only the current-role projection active.
@@ -197,6 +201,8 @@ public class TicketAccountStatusChangedConsumer : IConsumer<AccountStatusChanged
                 if (!string.IsNullOrWhiteSpace(@event.FullName))
                     customer.FullName = @event.FullName.Trim();
                 customer.PhoneNumber = Normalize(@event.PhoneNumber);
+                if (@event.AvatarUrl is not null)
+                    customer.AvatarUrl = Normalize(@event.AvatarUrl);
                 customer.Status = !hasCanonicalRole || isCustomerRole
                     ? status
                     : AccountStatusEnum.Inactive;
@@ -238,6 +244,7 @@ public class TicketAccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdat
             {
                 staff.Email = @event.Email.Trim().ToLowerInvariant();
                 staff.FullName = @event.FullName.Trim();
+                staff.AvatarUrl = Normalize(@event.AvatarUrl);
                 if (!string.IsNullOrWhiteSpace(@event.Role))
                 {
                     staff.Role = @event.Role.Trim();
@@ -257,6 +264,7 @@ public class TicketAccountProfileUpdatedConsumer : IConsumer<AccountProfileUpdat
                 customer.Email = @event.Email.Trim().ToLowerInvariant();
                 customer.FullName = @event.FullName.Trim();
                 customer.PhoneNumber = Normalize(@event.PhoneNumber);
+                customer.AvatarUrl = Normalize(@event.AvatarUrl);
                 if (!string.IsNullOrWhiteSpace(@event.Role))
                     customer.Status = @event.Role.Equals("Customer", StringComparison.OrdinalIgnoreCase)
                         ? AuthAccountStatusMapper.FromAuthStatus(@event.AccountStatus)

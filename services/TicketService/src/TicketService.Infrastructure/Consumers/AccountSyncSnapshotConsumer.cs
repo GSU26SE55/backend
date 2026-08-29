@@ -73,6 +73,7 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
             var isCustomerRole = IsCustomerRole(evt.Role);
             var normalizedEmail = evt.Email.Trim().ToLowerInvariant();
             var normalizedEmployeeCode = Normalize(evt.EmployeeCode);
+            var normalizedAvatarUrl = Normalize(evt.AvatarUrl);
 
             // Dữ liệu dev/production cũ có thể chứa seed/read-model với AccountId lỗi thời nhưng
             // cùng email hoặc employee code. Chỉ tìm alias cho snapshot account còn sống; snapshot
@@ -200,6 +201,7 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
                             AccountId = evt.AccountId,
                             Email = normalizedEmail,
                             FullName = evt.FullName.Trim(),
+                            AvatarUrl = evt.HasAvatarSnapshot ? normalizedAvatarUrl : null,
                             Role = evt.Role.Trim(),
                             Status = status,
                             IsDeleted = false,
@@ -214,6 +216,8 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
                     {
                         staff.Email = normalizedEmail;
                         staff.FullName = evt.FullName.Trim();
+                        if (evt.HasAvatarSnapshot)
+                            staff.AvatarUrl = normalizedAvatarUrl;
                         staff.Role = evt.Role.Trim();
                         staff.Status = status;
                         staff.IsDeleted = false;
@@ -247,6 +251,7 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
                             Email = normalizedEmail,
                             FullName = evt.FullName.Trim(),
                             PhoneNumber = Normalize(evt.PhoneNumber),
+                            AvatarUrl = evt.HasAvatarSnapshot ? normalizedAvatarUrl : null,
                             Status = status,
                             IsDeleted = false,
                             DeletedAt = null,
@@ -260,6 +265,8 @@ public class TicketAccountSyncSnapshotConsumer : IConsumer<AccountSyncSnapshotEv
                         customer.Email = normalizedEmail;
                         customer.FullName = evt.FullName.Trim();
                         customer.PhoneNumber = Normalize(evt.PhoneNumber);
+                        if (evt.HasAvatarSnapshot)
+                            customer.AvatarUrl = normalizedAvatarUrl;
                         customer.Status = status;
                         customer.IsDeleted = false;
                         customer.DeletedAt = null;

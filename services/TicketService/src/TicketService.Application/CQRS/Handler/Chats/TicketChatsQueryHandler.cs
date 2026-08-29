@@ -204,9 +204,15 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
     }
 
     /// <summary>
-    /// Set <see cref="TicketChatDTO.IsRead"/> cho actor hiện tại. Tin của chính actor luôn
-    /// là "đã đọc" — BE không ghi read-receipt cho tác giả, thiếu bước này thì mọi tin mình
-    /// vừa gửi đều hiện dưới mốc "chưa đọc".
+    /// Điền trạng thái đọc PER-USER cho actor hiện tại:
+    /// <list type="bullet">
+    /// <item><see cref="TicketChatDTO.IsRead"/> — "TÔI đã đọc tin này chưa" (vẽ mốc "chưa đọc").
+    /// Tin của chính actor luôn là đã đọc: BE không ghi read-receipt cho tác giả, thiếu bước này
+    /// thì mọi tin mình vừa gửi đều hiện dưới mốc "chưa đọc".</item>
+    /// <item><see cref="TicketChatDTO.ReadReceipts"/> — "AI đã đọc tin của tôi" (tick "đã xem").
+    /// Chỉ nạp cho tin do chính actor gửi.</item>
+    /// </list>
+    /// Cả hai đều là state riêng từng user nên PHẢI điền sau khi ghi cache trang (cache dùng chung).
     /// </summary>
     private async Task FillIsReadAsync(
         List<TicketChatDTO> items, Guid? actorUserId, CancellationToken ct)
@@ -227,6 +233,29 @@ public class TicketChatsQueryHandler : IRequestHandler<TicketChatsQuery, CommonR
         {
             item.IsRead = item.AuthorUserId == actorId
                 || (Guid.TryParse(item.Id, out var id) && readIds.Contains(id));
+        }
+
+        // "Đã xem" kiểu Messenger: chỉ tin do CHÍNH actor gửi mới cần biết ai đã đọc.
+        var ownChatIds = items
+            .Where(i => i.AuthorUserId == actorId && !i.IsDeleted)
+            .Select(i => Guid.TryParse(i.Id, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .ToList();
+
+        if (ownChatIds.Count == 0)
+            return;
+
+        var receiptsByChat = await ChatChildDataLoader.LoadReadReceiptsAsync(_unitOfWork, ownChatIds, ct);
+
+        foreach (var item in items)
+        {
+            if (item.AuthorUserId != actorId || !Guid.TryParse(item.Id, out var id))
+                continue;
+            if (!receiptsByChat.TryGetValue(id, out var receipts))
+                continue;
+
+            item.ReadReceipts = receipts;
+            item.ReadCount = receipts.Count;
         }
     }
 }

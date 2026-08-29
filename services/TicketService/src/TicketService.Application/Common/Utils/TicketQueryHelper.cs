@@ -223,6 +223,38 @@ public static class TicketQueryHelper
         _ => query
     };
 
+    /// <summary>
+    /// Lọc theo nguồn tạo. Thứ tự điều kiện phải KHỚP với thứ tự ưu tiên FE dùng để gắn nhãn,
+    /// nếu không một ticket sẽ hiện nhãn này mà lại lọt vào bộ lọc kia.
+    ///
+    /// Origin = System bị hai luồng dùng chung (sự cố môi trường, bảo trì định kỳ) cộng thêm
+    /// cascade risk, nên AiPredicted phải loại trừ tường minh hai nhóm kia — không có cột nào
+    /// đánh dấu riêng cascade risk.
+    /// </summary>
+    public static IQueryable<Ticket> FilterBySource(IQueryable<Ticket> query, TicketSourceFilterEnum? source) => source switch
+    {
+        TicketSourceFilterEnum.Customer => query.Where(t =>
+            t.Origin == TicketOriginEnum.ManualByCustomer),
+
+        // AI dự đoán: alert bất thường do AI module chấm, hoặc điểm cascade risk cao
+        // (System nhưng không phải sự cố môi trường / bảo trì định kỳ).
+        TicketSourceFilterEnum.AiPredicted => query.Where(t =>
+            t.Origin == TicketOriginEnum.AutoFromAlert
+            || (t.Origin == TicketOriginEnum.System
+                && t.EnvironmentalIncidentId == null
+                && t.PeriodicMaintenanceDueAtUtc == null)),
+
+        // Xét trước Origin: ticket sự cố môi trường luôn có IncidentId, và đây là dấu hiệu
+        // duy nhất tách nó khỏi luồng System còn lại.
+        TicketSourceFilterEnum.Environmental => query.Where(t =>
+            t.EnvironmentalIncidentId != null),
+
+        TicketSourceFilterEnum.PeriodicMaintenance => query.Where(t =>
+            t.PeriodicMaintenanceDueAtUtc != null),
+
+        _ => query
+    };
+
     private static bool HasAnyRole(IReadOnlyCollection<string> roles, params string[] check)
         => check.Any(r => HasRole(roles, r));
 

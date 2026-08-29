@@ -31,6 +31,10 @@ public class StaffAccountConfiguration : IEntityTypeConfiguration<StaffAccount>
             .HasColumnName("employee_code")
             .HasMaxLength(50);
 
+        builder.Property(e => e.AvatarUrl)
+            .HasColumnName("avatar_url")
+            .HasMaxLength(1024);
+
         builder.Property(e => e.Status)
             .HasColumnName("status")
             .HasConversion<int>();

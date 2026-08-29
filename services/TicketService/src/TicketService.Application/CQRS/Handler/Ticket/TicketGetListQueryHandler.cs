@@ -74,6 +74,8 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
 
         query = TicketQueryHelper.FilterBySla(query, request.Sla);
 
+        query = TicketQueryHelper.FilterBySource(query, request.Source);
+
         // SortDir (mới) thắng nếu có; nếu không dùng IsDescending (legacy) để giữ tương thích ngược.
         var descending = string.IsNullOrWhiteSpace(request.SortDir)
             ? request.IsDescending

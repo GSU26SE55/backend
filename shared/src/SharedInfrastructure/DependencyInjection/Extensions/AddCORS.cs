@@ -33,6 +33,14 @@ public static class AddCORS
     /// <summary>Khoá config chứa mảng origin được phép.</summary>
     public const string ConfigKey = "Cors:AllowedOrigins";
 
+    /// <summary>
+    /// Response header client ĐƯỢC PHÉP đọc. AllowAnyHeader() chỉ áp cho header của REQUEST —
+    /// header trả về mà không khai ở đây thì trình duyệt chặn, JS đọc ra null.
+    /// X-Mark-Read-Incomplete: auto mark-read khi GET chat bị rớt (hàng đợi đầy) — client phải
+    /// gọi lại POST mark-read, nếu không unread kẹt ở số cũ.
+    /// </summary>
+    private static readonly string[] ExposedHeaders = { "X-Mark-Read-Incomplete" };
+
     public static IServiceCollection AddCorsExtentions(
         this IServiceCollection service,
         IConfiguration? configuration = null,
@@ -68,6 +76,7 @@ public static class AddCORS
                     policy.WithOrigins(origins)
                           .AllowAnyMethod()
                           .AllowAnyHeader()
+                          .WithExposedHeaders(ExposedHeaders)
                           .AllowCredentials();
                 }
                 else
@@ -80,6 +89,7 @@ public static class AddCORS
                     policy.SetIsOriginAllowed(_ => true)
                           .AllowAnyMethod()
                           .AllowAnyHeader()
+                          .WithExposedHeaders(ExposedHeaders)
                           .AllowCredentials();
                 }
             });
