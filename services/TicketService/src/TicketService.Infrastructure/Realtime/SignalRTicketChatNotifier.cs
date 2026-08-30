@@ -59,6 +59,26 @@ public class SignalRTicketChatNotifier : ITicketChatRealtimeNotifier
         }, cancellationToken);
     }
 
+    public Task NotifyChatPinChangedAsync(
+        Guid ticketId,
+        Guid chatId,
+        bool isPinned,
+        bool isInternal,
+        string byUserDisplayName,
+        CancellationToken cancellationToken = default)
+    {
+        var group = isInternal
+            ? TicketChatHub.InternalGroup(ticketId)
+            : TicketChatHub.PublicGroup(ticketId);
+
+        return _hubContext.Clients.Group(group).SendAsync("ChatPinChanged", new
+        {
+            chatId = chatId.ToString(),
+            isPinned,
+            byUserDisplayName
+        }, cancellationToken);
+    }
+
     public Task NotifyReactionChangedAsync(Guid ticketId, Guid chatId, bool isInternal, TicketChatReactionsAggregateDTO reactions, CancellationToken cancellationToken = default)
     {
         var group = isInternal

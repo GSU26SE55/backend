@@ -36,8 +36,9 @@ public static class AddCORS
     /// <summary>
     /// Response header client ĐƯỢC PHÉP đọc. AllowAnyHeader() chỉ áp cho header của REQUEST —
     /// header trả về mà không khai ở đây thì trình duyệt chặn, JS đọc ra null.
-    /// X-Mark-Read-Incomplete: auto mark-read khi GET chat bị rớt (hàng đợi đầy) — client phải
-    /// gọi lại POST mark-read, nếu không unread kẹt ở số cũ.
+    /// X-Mark-Read-Incomplete: giữ lại cho tương thích. Auto mark-read trong GET /chats đã bị
+    /// bỏ (nó đánh dấu đã đọc cả tin người dùng chưa nhìn), nên header này hiện không còn được
+    /// set; khai báo vẫn để đây phòng khi cần báo mark-read dở dang qua header lần nữa.
     /// </summary>
     private static readonly string[] ExposedHeaders = { "X-Mark-Read-Incomplete" };
 
