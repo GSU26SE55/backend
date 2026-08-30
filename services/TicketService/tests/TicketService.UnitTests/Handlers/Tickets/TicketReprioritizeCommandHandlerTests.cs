@@ -137,7 +137,7 @@ public class TicketReprioritizeCommandHandlerTests
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: new[] { ticket }, slaTimerSeed: new[] { timer });
         var calculator = new Mock<ISlaCalculator>();
         var newDueAt = startedAt.AddHours(24);
-        calculator.Setup(x => x.CalculateDueDate(startedAt, TicketPriorityEnum.P2High)).Returns(newDueAt);
+        calculator.Setup(x => x.CalculateResponseDueDate(startedAt, TicketPriorityEnum.P2High)).Returns(newDueAt);
         var handler = CreateHandler(uow.Object, calculator.Object, new Mock<IActivityLogger>().Object);
 
         // SingleAsset × High → P2.

@@ -22,6 +22,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-27
+    private readonly ISlaCalculator _slaCalculator;
 
     public TicketAutoCreateFromAlertCommandHandler(
         ITicketUnitOfWork uow,
@@ -29,7 +30,8 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         IPriorityCalculator priorityCalculator,
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
-        IPublisher publisher)
+        IPublisher publisher,
+        ISlaCalculator slaCalculator)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
@@ -37,6 +39,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         _activityLogger = activityLogger;
         _outboxWriter = producer;
         _publisher = publisher;
+        _slaCalculator = slaCalculator;
     }
 
     public async Task<TicketActionResponse> Handle(TicketAutoCreateFromAlertCommand request, CancellationToken ct)
@@ -68,6 +71,20 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         };
 
         await _uow.Tickets.AddAsync(ticket);
+
+        var nowUtc = DateTime.UtcNow;
+        var responseDueAt = _slaCalculator.CalculateResponseDueDate(nowUtc, priority);
+        var slaTimer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Priority = priority,
+            Status = SlaTimerStatusEnum.Running,
+            StartedAt = nowUtc,
+            OriginalDueAt = responseDueAt,
+            DueAt = responseDueAt
+        };
+        await _uow.SlaTimers.AddAsync(slaTimer);
 
         if (request.BatteryAssetId != Guid.Empty)
         {

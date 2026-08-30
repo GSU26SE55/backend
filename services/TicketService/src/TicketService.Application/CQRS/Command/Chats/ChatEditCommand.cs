@@ -1,8 +1,8 @@
 using System.Text.Json.Serialization;
 using MediatR;
-using TicketService.Application.Common.Helpers;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using TicketService.Application.Common.Helpers;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 

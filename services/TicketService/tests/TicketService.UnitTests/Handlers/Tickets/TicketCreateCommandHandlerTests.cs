@@ -40,12 +40,19 @@ public class TicketCreateCommandHandlerTests
         };
 
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-2605-0001");
-        var (uow, tickets, _, _, _, _, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(customerSeed: customers);
+        var (uow, tickets, _, _, _, slaTimers, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(customerSeed: customers);
 
         var batteryLookup = new Mock<IBatteryLookupClient>();
         batteryLookup.Setup(x => x.GetSerialAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync("BAT-001");
 
-        var handler = new TicketCreateCommandHandler(uow.Object, _codeGen.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>(), batteryLookup.Object);
+        var handler = new TicketCreateCommandHandler(
+            uow.Object,
+            _codeGen.Object,
+            _logger.Object,
+            _outboxWriter.Object,
+            Moq.Mock.Of<MediatR.IPublisher>(),
+            batteryLookup.Object,
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -58,10 +65,13 @@ public class TicketCreateCommandHandlerTests
         result.Data.Id.Should().NotBeNullOrEmpty();
 
         tickets.Verify(x => x.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Once);
+        slaTimers.Verify(x => x.AddAsync(It.Is<SlaTimer>(t =>
+            t.Status == SlaTimerStatusEnum.Running &&
+            t.Priority == TicketPriorityEnum.P1Critical &&
+            t.DueAt > t.StartedAt)), Times.Once);
         _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         participants.Verify(x => x.AddAsync(It.Is<TicketParticipant>(p =>
             p.UserId == customerId && p.ParticipantType == ParticipantTypeEnum.Owner)), Times.Once);
-        _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(It.IsAny<Guid>(), customerId, ActorRoleEnum.Customer, "Customer", ActivityActionEnum.Created, null, null, null), Times.Once);
     }

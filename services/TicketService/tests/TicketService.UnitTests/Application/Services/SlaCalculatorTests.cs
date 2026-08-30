@@ -12,9 +12,9 @@ public class SlaCalculatorTests
     private readonly SlaCalculator _sut = new();
 
     [Theory]
-    [InlineData(TicketPriorityEnum.P1Critical, 1)]
+    [InlineData(TicketPriorityEnum.P1Critical, 14)]
     [InlineData(TicketPriorityEnum.P2High, 3)]
-    [InlineData(TicketPriorityEnum.P3Normal, 7)]
+    [InlineData(TicketPriorityEnum.P3Normal, 2)]
     public void GetSlaWorkingDays_ShouldReturnDayBudget(
         TicketPriorityEnum priority,
         int expectedDays)
@@ -23,9 +23,9 @@ public class SlaCalculatorTests
     }
 
     [Theory]
-    [InlineData(TicketPriorityEnum.P1Critical, 10)]
+    [InlineData(TicketPriorityEnum.P1Critical, 140)]
     [InlineData(TicketPriorityEnum.P2High, 30)]
-    [InlineData(TicketPriorityEnum.P3Normal, 70)]
+    [InlineData(TicketPriorityEnum.P3Normal, 20)]
     public void GetSlaHours_ShouldDeriveFromWorkingDayBudget(
         TicketPriorityEnum priority,
         int expectedHours)
@@ -34,14 +34,26 @@ public class SlaCalculatorTests
     }
 
     [Theory]
-    [InlineData(TicketPriorityEnum.P1Critical, 600)]
+    [InlineData(TicketPriorityEnum.P1Critical, 8400)]
     [InlineData(TicketPriorityEnum.P2High, 1800)]
-    [InlineData(TicketPriorityEnum.P3Normal, 4200)]
+    [InlineData(TicketPriorityEnum.P3Normal, 1200)]
     public void GetSlaMinutes_ShouldReturnWorkingMinuteBudget(
         TicketPriorityEnum priority,
         int expectedMinutes)
     {
         _sut.GetSlaMinutes(priority).Should().Be(expectedMinutes);
+    }
+
+    [Theory]
+    [InlineData(TicketPriorityEnum.P1Critical, 4)]
+    [InlineData(TicketPriorityEnum.P2High, 24)]
+    [InlineData(TicketPriorityEnum.P3Normal, 72)]
+    public void CalculateResponseDueDate_ShouldAddContinuousCalendarHours(
+        TicketPriorityEnum priority,
+        int expectedHours)
+    {
+        var startedAt = Utc(2026, 8, 17, 22);
+        _sut.CalculateResponseDueDate(startedAt, priority).Should().Be(startedAt.AddHours(expectedHours));
     }
 
     [Theory]
@@ -75,14 +87,14 @@ public class SlaCalculatorTests
     }
 
     [Fact]
-    public void CalculateDueDate_P1StartingFridayAt1600_ShouldBeOneCalendarDayLater()
+    public void CalculateDueDate_P1StartingFridayAt1600_ShouldBe14CalendarDaysLater()
     {
         var friday1600Local = Utc(2026, 8, 21, 9);
 
-        // 1 ngày làm việc, mà working days = cả 7 ngày ⇒ deadline rơi đúng cùng giờ,
-        // 1 ngày lịch sau: 22/08/2026 16:00 local.
+        // 14 ngày làm việc, mà working days = cả 7 ngày ⇒ deadline rơi đúng cùng giờ,
+        // 14 ngày lịch sau: 04/09/2026 16:00 local.
         _sut.CalculateDueDate(friday1600Local, TicketPriorityEnum.P1Critical)
-            .Should().Be(Utc(2026, 8, 22, 9));
+            .Should().Be(Utc(2026, 9, 4, 9));
     }
 
     [Fact]
@@ -95,30 +107,27 @@ public class SlaCalculatorTests
     }
 
     [Fact]
-    public void CalculateDueDate_P3_ShouldConsumeExactly4200WorkingMinutes()
+    public void CalculateDueDate_P3_ShouldConsumeExactly1200WorkingMinutes()
     {
         var monday0700Local = Utc(2026, 8, 17, 0);
         var dueAt = _sut.CalculateDueDate(monday0700Local, TicketPriorityEnum.P3Normal);
 
-        dueAt.Should().Be(Utc(2026, 8, 23, 10));
-        _sut.GetWorkingMinutesBetween(monday0700Local, dueAt).Should().Be(4200);
+        dueAt.Should().Be(Utc(2026, 8, 18, 10));
+        _sut.GetWorkingMinutesBetween(monday0700Local, dueAt).Should().Be(1200);
     }
 
     /// <summary>
-    /// Priority càng khẩn thì hạn càng ngắn. Chốt chặn cho lỗi GH-1242: bản đầu đổi budget từ giờ
-    /// sang ngày nhưng đảo ngược thang (P1=14 ngày, P3=2 ngày), khiến ticket nghiêm trọng nhất lại
-    /// được hạn dài gấp 7 lần ticket nhẹ nhất — và <c>EscalationBackgroundService</c> nâng P3→P2→P1
-    /// khi breach hoá ra lại nới hạn thay vì siết.
+    /// Resolution SLA budget phản ánh độ phức tạp sửa chữa: P1 đại tu lớn (14 ngày) > P2 xử lý cell (3 ngày) > P3 bảo trì (2 ngày).
     /// </summary>
     [Fact]
-    public void SlaBudget_ShouldShrinkAsPriorityBecomesMoreUrgent()
+    public void SlaBudget_ShouldReflectRepairComplexityOrder()
     {
         var p1 = _sut.GetSlaMinutes(TicketPriorityEnum.P1Critical);
         var p2 = _sut.GetSlaMinutes(TicketPriorityEnum.P2High);
         var p3 = _sut.GetSlaMinutes(TicketPriorityEnum.P3Normal);
 
-        p1.Should().BeLessThan(p2);
-        p2.Should().BeLessThan(p3);
+        p1.Should().BeGreaterThan(p2);
+        p2.Should().BeGreaterThan(p3);
     }
 
     [Fact]
@@ -137,7 +146,7 @@ public class SlaCalculatorTests
         var startedAt = Utc(2026, 8, 17, 2).AddTicks(1);
         var dueAt = _sut.CalculateDueDate(startedAt, TicketPriorityEnum.P1Critical);
 
-        _sut.GetWorkingMinutesBetween(startedAt, dueAt).Should().Be(600);
+        _sut.GetWorkingMinutesBetween(startedAt, dueAt).Should().Be(8400);
     }
 
     [Fact]
@@ -148,14 +157,14 @@ public class SlaCalculatorTests
             Priority = TicketPriorityEnum.P3Normal,
             Status = SlaTimerStatusEnum.Running,
             StartedAt = Utc(2026, 8, 21, 9),
-            DueAt = Utc(2026, 8, 27, 2, 30)
+            DueAt = Utc(2026, 8, 23, 9)
         };
 
         var fridayClose = _sut.GetRemainingPercent(timer, Utc(2026, 8, 21, 10));
         var saturdayBeforeOpening = _sut.GetRemainingPercent(timer, Utc(2026, 8, 21, 23, 59));
 
-        fridayClose.Should().Be(75);
-        saturdayBeforeOpening.Should().Be(75);
+        fridayClose.Should().Be(95);
+        saturdayBeforeOpening.Should().Be(95);
     }
 
     [Fact]
@@ -180,9 +189,9 @@ public class SlaCalculatorTests
 
         calculator.NormalizeToNextWorkingInstant(Utc(2026, 8, 22, 0))
             .Should().Be(Utc(2026, 8, 23, 0));
-        // Không có ngày nghỉ thì hạn là 22/08; nghỉ 22/08 đẩy thêm đúng 1 ngày.
+        // Không có ngày nghỉ thì hạn là 04/09; nghỉ 22/08 đẩy thêm đúng 1 ngày.
         calculator.CalculateDueDate(Utc(2026, 8, 21, 9), TicketPriorityEnum.P1Critical)
-            .Should().Be(Utc(2026, 8, 23, 9));
+            .Should().Be(Utc(2026, 9, 5, 9));
     }
 
     [Theory]

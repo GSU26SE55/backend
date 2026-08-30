@@ -79,9 +79,8 @@ public class EnvironmentalIncidentConsumersTests
         created.IsIncident.Should().BeTrue();
         created.Origin.Should().Be(TicketOriginEnum.System);
         timer.Should().NotBeNull();
-        new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
-            .GetWorkingMinutesBetween(timer!.StartedAt, timer.DueAt)
-            .Should().Be(600, "P1 = 1 ngày làm việc");
+        timer!.Status.Should().Be(SlaTimerStatusEnum.Running);
+        timer.DueAt.Should().Be(timer.StartedAt.AddHours(4), "P1 Response SLA = 4 giờ liên tục");
         _outboxWriter.Verify(p => p.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -68,6 +68,7 @@ public class TicketTriageRejectCommandHandlerTests
         ticket.Reason.Should().Be("Invalid ticket description");
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.ClosedRejected, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        _slaTransitions.Verify(x => x.StopSlaAsync(ticket, It.IsAny<CancellationToken>()), Times.Once);
         _outboxWriter.Verify(x => x.WriteAsync(
             It.Is<TicketStatusChangedIntegrationEvent>(e =>
             e.OldStatus == TicketStatusEnum.Open && e.NewStatus == TicketStatusEnum.ClosedRejected),

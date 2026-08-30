@@ -165,19 +165,22 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
         IReadOnlyList<SensorReadingDto> items,
         CancellationToken cancellationToken)
     {
-        if (items.Count == 0) return;
+        if (items.Count == 0)
+            return;
 
         var batteryTypeId = await _unitOfWork.BatteryAssets.GetAllAsync()
             .AsNoTracking()
             .Where(asset => asset.Id == batteryAssetId && !asset.IsDeleted)
             .Select(asset => (Guid?)asset.BatteryTypeId)
             .FirstOrDefaultAsync(cancellationToken);
-        if (batteryTypeId is null) return;
+        if (batteryTypeId is null)
+            return;
 
         var threshold = await _unitOfWork.ThresholdConfigs.GetAllAsync()
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.BatteryTypeId == batteryTypeId.Value && !t.IsDeleted, cancellationToken);
-        if (threshold is null) return;
+        if (threshold is null)
+            return;
 
         foreach (var item in items)
         {

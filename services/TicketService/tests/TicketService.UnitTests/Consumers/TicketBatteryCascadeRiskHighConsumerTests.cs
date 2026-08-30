@@ -130,9 +130,7 @@ public class BatteryCascadeRiskHighConsumerTests
         created.Code.Should().Be("TKT-AUTO-001");
         timer.Should().NotBeNull("ticket P1 mới cần SlaTimer chạy ngay (NS-12 dependency)");
         timer!.Status.Should().Be(SlaTimerStatusEnum.Running);
-        new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
-            .GetWorkingMinutesBetween(timer.StartedAt, timer.DueAt)
-            .Should().Be(600, "P1 = 1 ngày làm việc");
+        timer.DueAt.Should().Be(timer.StartedAt.AddHours(4), "P1 Response SLA = 4 giờ liên tục");
         _outboxWriter.Verify(p => p.WriteAsync(It.IsAny<SharedContracts.Events.TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
         _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -192,10 +190,9 @@ public class BatteryCascadeRiskHighConsumerTests
     }
 
     [Fact]
-    public async Task UpgradeToP1_RecomputesSlaTimerDueAt_AndResetsWarning()
+    public async Task UpgradeToP1_OpenTicket_RecomputesResponseSlaTimerDueAt_AndResetsWarning()
     {
-        // Sprint Bonus NS-12 (#656, R1) — cascade nâng P1 phải tính lại DueAt theo budget P1 từ mốc StartedAt
-        // (không đổi thì deadline vẫn của priority cũ) + reset WarningSentAt để re-đánh giá 80%.
+        // Khi ticket ở Open, nâng P1 phải tính lại Response DueAt (+4h) từ mốc StartedAt
         var assetId = Guid.NewGuid();
         var ticketId = Guid.NewGuid();
         var startedAt = new DateTime(2026, 7, 8, 9, 0, 0, DateTimeKind.Utc);
@@ -225,12 +222,48 @@ public class BatteryCascadeRiskHighConsumerTests
 
         await Build().Consume(Ctx(Event(assetId, ticketId)));
 
-        timer.DueAt.Should().Be(
-            new TicketService.Infrastructure.Implements.Utils.SlaCalculator()
-                .CalculateDueDate(startedAt, TicketPriorityEnum.P1Critical),
-            "P1 = budget 14 ngày làm việc từ mốc StartedAt");
+        timer.DueAt.Should().Be(startedAt.AddHours(4), "P1 Response SLA = 4 giờ calendar từ StartedAt");
         timer.Priority.Should().Be(TicketPriorityEnum.P1Critical);
         timer.WarningSentAt.Should().BeNull("reset để background service re-đánh giá 80% theo deadline mới");
+        _slaTimerRepo.Verify(r => r.UpdateAsync(timer), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpgradeToP1_InProgressTicket_RecomputesResolutionSlaTimerDueAt()
+    {
+        // Khi ticket ở InProgress, nâng P1 phải tính lại Resolution DueAt (14 working days) từ mốc StartedAt
+        var assetId = Guid.NewGuid();
+        var ticketId = Guid.NewGuid();
+        var startedAt = new DateTime(2026, 7, 8, 0, 0, 0, DateTimeKind.Utc);
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "T-INP",
+            Title = "t",
+            Description = "d",
+            BatteryAssetId = assetId,
+            Status = TicketStatusEnum.InProgress,
+            Priority = TicketPriorityEnum.P3Normal
+        };
+        var timer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            Priority = TicketPriorityEnum.P3Normal,
+            StartedAt = startedAt,
+            DueAt = _slaCalculator.CalculateDueDate(startedAt, TicketPriorityEnum.P3Normal),
+            OriginalDueAt = _slaCalculator.CalculateDueDate(startedAt, TicketPriorityEnum.P3Normal),
+            Status = SlaTimerStatusEnum.Running
+        };
+        _ticketRepo.Setup(r => r.GetAllAsync()).Returns(new List<Ticket> { ticket }.AsQueryable().BuildMock());
+        _slaTimerRepo.Setup(r => r.GetAllAsync()).Returns(new List<SlaTimer> { timer }.AsQueryable().BuildMock());
+
+        await Build().Consume(Ctx(Event(assetId, ticketId)));
+
+        timer.DueAt.Should().Be(
+            _slaCalculator.CalculateDueDate(startedAt, TicketPriorityEnum.P1Critical),
+            "P1 = budget 14 ngày làm việc từ mốc StartedAt");
+        timer.Priority.Should().Be(TicketPriorityEnum.P1Critical);
         _slaTimerRepo.Verify(r => r.UpdateAsync(timer), Times.Once);
     }
 

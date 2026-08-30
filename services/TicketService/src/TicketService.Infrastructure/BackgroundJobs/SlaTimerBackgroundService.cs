@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using TicketService.Application.Common.Utils;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
@@ -59,7 +60,8 @@ public class SlaTimerBackgroundService : BackgroundService
                 .Where(timer => !timer.IsDeleted
                                 && timer.Status == SlaTimerStatusEnum.Running
                                 && !timer.Ticket.IsDeleted
-                                && timer.Ticket.Status == TicketStatusEnum.InProgress
+                                && !TicketStatusGroups.Terminal.Contains(timer.Ticket.Status)
+                                && timer.Ticket.Status != TicketStatusEnum.Completed
                                 && timer.Ticket.Priority != TicketPriorityEnum.Urgent)
                 .OrderBy(timer => timer.DueAt)
                 .Select(timer => timer.Id)
@@ -89,7 +91,8 @@ public class SlaTimerBackgroundService : BackgroundService
             if (timer is null
                 || timer.Status != SlaTimerStatusEnum.Running
                 || timer.Ticket.IsDeleted
-                || timer.Ticket.Status != TicketStatusEnum.InProgress
+                || TicketStatusGroups.Terminal.Contains(timer.Ticket.Status)
+                || timer.Ticket.Status == TicketStatusEnum.Completed
                 || timer.Ticket.Priority == TicketPriorityEnum.Urgent)
             {
                 if (transaction is not null)
@@ -110,8 +113,31 @@ public class SlaTimerBackgroundService : BackgroundService
                     Code = timer.Ticket.Code
                 }, ct);
             }
+            else if (timer.Ticket.Status == TicketStatusEnum.Open)
+            {
+                // Stage 1 (Open): 24/7 calendar clock. Warning sent at >=80% without IsWorkingTime gate. StaffId = null.
+                var totalSeconds = (timer.DueAt - timer.StartedAt).TotalSeconds;
+                var elapsedSeconds = (nowUtc - timer.StartedAt).TotalSeconds;
+                var consumedPercent = totalSeconds > 0
+                    ? Math.Clamp(elapsedSeconds / totalSeconds * 100d, 0d, 100d)
+                    : 100d;
+
+                if (timer.WarningSentAt is null && consumedPercent >= WarningThresholdPercent)
+                {
+                    timer.WarningSentAt = nowUtc;
+                    await outbox.WriteAsync(new SlaWarningEvent
+                    {
+                        TicketId = timer.TicketId,
+                        WarningAt = nowUtc,
+                        Percentage = Math.Round(consumedPercent, 2, MidpointRounding.AwayFromZero),
+                        Code = timer.Ticket.Code,
+                        StaffId = null
+                    }, ct);
+                }
+            }
             else
             {
+                // Stage 2 (InProgress / Request / ReAssign / Pending): Working-hours clock
                 var remainingPercent = slaCalculator.GetRemainingPercent(timer, nowUtc);
                 var consumedPercent = 100d - remainingPercent;
                 var shouldSendInitialWarning = timer.WarningSentAt is null
@@ -128,7 +154,7 @@ public class SlaTimerBackgroundService : BackgroundService
                     {
                         TicketId = timer.TicketId,
                         WarningAt = nowUtc,
-                        Percentage = consumedPercent,
+                        Percentage = Math.Round(consumedPercent, 2, MidpointRounding.AwayFromZero),
                         Code = timer.Ticket.Code,
                         StaffId = timer.Ticket.Assignments
                             .FirstOrDefault(x => !x.IsDeleted

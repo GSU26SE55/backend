@@ -3,9 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TicketService.Application.DTOs.Response.Chats;
+using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
-using TicketService.Application.DTOs.Response.Chats;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 

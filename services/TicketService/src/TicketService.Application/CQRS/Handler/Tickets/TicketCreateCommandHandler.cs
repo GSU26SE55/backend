@@ -24,6 +24,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
     private readonly IBatteryLookupClient _batteryLookup;
+    private readonly ISlaCalculator _slaCalculator;
 
     public TicketCreateCommandHandler(
         ITicketUnitOfWork uow,
@@ -31,7 +32,8 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
         IPublisher publisher,
-        IBatteryLookupClient batteryLookup)
+        IBatteryLookupClient batteryLookup,
+        ISlaCalculator slaCalculator)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
@@ -39,6 +41,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         _outboxWriter = producer;
         _publisher = publisher;
         _batteryLookup = batteryLookup;
+        _slaCalculator = slaCalculator;
     }
 
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
@@ -131,6 +134,21 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             CanViewInternal = false,
             AddedByUserId = request.CustomerId,
             AddedAt = DateTime.UtcNow
+        });
+
+        // Stage 1: Khởi tạo Response SLA Timer khi tạo ticket ở Open
+        var nowUtc = DateTime.UtcNow;
+        var priority = ticket.Priority ?? TicketPriorityEnum.P1Critical;
+        var responseDueAt = _slaCalculator.CalculateResponseDueDate(nowUtc, priority);
+        await _uow.SlaTimers.AddAsync(new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Priority = priority,
+            StartedAt = nowUtc,
+            DueAt = responseDueAt,
+            OriginalDueAt = responseDueAt,
+            Status = SlaTimerStatusEnum.Running
         });
 
         await _outboxWriter.WriteAsync(

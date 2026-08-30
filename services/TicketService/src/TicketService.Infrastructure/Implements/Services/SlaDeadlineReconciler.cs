@@ -33,6 +33,13 @@ public sealed class SlaDeadlineReconciler : ISlaDeadlineReconciler
                             && x.ResumedAt.HasValue)
                 .ToListAsync(cancellationToken);
 
+        var ticketIds = timers.Select(x => x.TicketId).Distinct().ToList();
+        var tickets = ticketIds.Count == 0
+            ? new Dictionary<Guid, TicketStatusEnum>()
+            : await _unitOfWork.Tickets.GetAllAsync()
+                .Where(x => !x.IsDeleted && ticketIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.Status, cancellationToken);
+
         var pausedMinutesByTimer = new Dictionary<Guid, int>();
         foreach (var pauseEvent in completedPauseEvents)
         {
@@ -48,9 +55,19 @@ public sealed class SlaDeadlineReconciler : ISlaDeadlineReconciler
 
         foreach (var timer in timers)
         {
-            timer.TotalPausedMinutes = pausedMinutesByTimer.GetValueOrDefault(timer.Id);
-            timer.OriginalDueAt = _slaCalculator.CalculateDueDate(timer.StartedAt, timer.Priority);
-            timer.DueAt = _slaCalculator.AddWorkingMinutes(timer.OriginalDueAt, timer.TotalPausedMinutes);
+            var isStage1Open = tickets.TryGetValue(timer.TicketId, out var status) && status == TicketStatusEnum.Open;
+            if (isStage1Open)
+            {
+                timer.TotalPausedMinutes = 0;
+                timer.OriginalDueAt = _slaCalculator.CalculateResponseDueDate(timer.StartedAt, timer.Priority);
+                timer.DueAt = timer.OriginalDueAt;
+            }
+            else
+            {
+                timer.TotalPausedMinutes = pausedMinutesByTimer.GetValueOrDefault(timer.Id);
+                timer.OriginalDueAt = _slaCalculator.CalculateDueDate(timer.StartedAt, timer.Priority);
+                timer.DueAt = _slaCalculator.AddWorkingMinutes(timer.OriginalDueAt, timer.TotalPausedMinutes);
+            }
             _unitOfWork.SlaTimers.UpdateAsync(timer);
         }
     }

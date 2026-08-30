@@ -59,12 +59,6 @@ public class TicketTriageRejectCommandHandler : IRequestHandler<TicketTriageReje
             Payload = new Dictionary<string, object?> { { "Reason", request.Reason } }
         }, ct);
 
-        // ClosedRejected là trạng thái KẾT THÚC: không còn ai xử lý ticket nữa, nên đồng hồ SLA
-        // phải dừng. Thiếu dòng này, timer ở nguyên Running và SlaTimerBackgroundService — vốn chỉ
-        // lọc theo Status == Running chứ không xét trạng thái ticket — vẫn đếm ngược rồi đánh
-        // Breached, bắn SlaBreachedEvent và kích hoạt escalation cho một ticket đã đóng, đồng thời
-        // làm sai báo cáo SLA. TicketMergeCommandHandler và TicketDeclareIncidentCommandHandler đã
-        // dừng timer ở các luồng kết thúc tương ứng của chúng.
         await _slaTransitions.StopSlaAsync(ticket, ct);
 
         await _activityLogger.LogAsync(

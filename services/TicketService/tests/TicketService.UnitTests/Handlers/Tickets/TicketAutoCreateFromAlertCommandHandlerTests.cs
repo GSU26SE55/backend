@@ -40,9 +40,16 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
         _codeGen.Setup(x => x.GenerateAsync()).ReturnsAsync("TKT-AUTO-001");
         _priorityCalc.Setup(x => x.Calculate(expectedImpact, expectedUrgency)).Returns(expectedPriority);
 
-        var (uow, tickets, _, _, _, _, _) = MockTicketUnitOfWork.Build();
+        var (uow, tickets, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build();
 
-        var handler = new TicketAutoCreateFromAlertCommandHandler(uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object, _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new TicketAutoCreateFromAlertCommandHandler(
+            uow.Object,
+            _codeGen.Object,
+            _priorityCalc.Object,
+            _logger.Object,
+            _outboxWriter.Object,
+            Moq.Mock.Of<MediatR.IPublisher>(),
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator());
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -58,6 +65,11 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
             t.UrgencyLevel == expectedUrgency &&
             t.Priority == expectedPriority)), Times.Once);
 
+        slaTimers.Verify(x => x.AddAsync(It.Is<SlaTimer>(t =>
+            t.Status == SlaTimerStatusEnum.Running &&
+            t.Priority == expectedPriority &&
+            t.DueAt > t.StartedAt)), Times.Once);
+
         _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -71,8 +83,13 @@ public class TicketAutoCreateFromAlertCommandHandlerTests
             .Returns(TicketPriorityEnum.P3Normal);
 
         return new TicketAutoCreateFromAlertCommandHandler(
-            uow.Object, _codeGen.Object, _priorityCalc.Object, _logger.Object,
-            _outboxWriter.Object, Moq.Mock.Of<MediatR.IPublisher>());
+            uow.Object,
+            _codeGen.Object,
+            _priorityCalc.Object,
+            _logger.Object,
+            _outboxWriter.Object,
+            Moq.Mock.Of<MediatR.IPublisher>(),
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator());
     }
 
     private static TicketAutoCreateFromAlertCommand BaseCommand() => new()

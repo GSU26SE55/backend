@@ -71,8 +71,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
 
         var priority = MapSeverityToPriority(evt.Severity);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(now);
-        var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, priority);
+        var dueAt = _slaCalculator.CalculateResponseDueDate(now, priority);
         var code = await _codeGenerator.GenerateAsync();
 
         var ticket = new Ticket
@@ -100,7 +99,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
             Priority = priority,
-            StartedAt = effectiveStartedAt,
+            StartedAt = now,
             DueAt = dueAt,
             OriginalDueAt = dueAt,
             Status = SlaTimerStatusEnum.Running

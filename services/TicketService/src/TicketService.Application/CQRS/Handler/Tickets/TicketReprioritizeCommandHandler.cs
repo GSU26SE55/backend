@@ -93,14 +93,13 @@ public class TicketReprioritizeCommandHandler : IRequestHandler<TicketReprioriti
             var timer = await _uow.SlaTimers.GetAllAsync()
                 .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, token);
 
-            // Ở Open thì đồng hồ SLA chưa chạy — §3.8: nó bắt đầu đếm khi phiếu được phân
-            // công cho nhân viên. Nếu timer đã tồn tại (tạo sẵn lúc triage) thì chỉ đồng bộ
-            // Priority + hạn gốc theo mức mới; KHÔNG cộng TotalPausedMinutes và KHÔNG kiểm
-            // tra breach — chưa đếm thì chưa thể trễ, tính breach ở đây sẽ ra breach ảo.
+            // Khi đổi mức ưu tiên ở Open (Stage 1), tính lại hạn chót Response SLA (24/7 calendar) theo priority mới.
             if (timer is not null)
             {
                 timer.Priority = priority;
-                timer.OriginalDueAt = _slaCalculator.CalculateDueDate(timer.StartedAt, priority);
+                timer.OriginalDueAt = ticket.Status == TicketStatusEnum.Open
+                    ? _slaCalculator.CalculateResponseDueDate(timer.StartedAt, priority)
+                    : _slaCalculator.CalculateDueDate(timer.StartedAt, priority);
                 timer.DueAt = timer.OriginalDueAt;
                 _uow.SlaTimers.UpdateAsync(timer);
             }

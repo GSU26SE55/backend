@@ -66,7 +66,7 @@ public static class TicketQueryHelper
             ActiveIncidentEpisodeId = t.ActiveIncidentEpisodeId?.ToString(),
             CreatedAt = t.CreatedAt,
             UpdatedAt = t.UpdatedAt,
-            SlaTimer = canViewSlaTimer ? MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc) : null,
+            SlaTimer = canViewSlaTimer ? MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc, t.Status) : null,
             ExpectedCompletionAtUtc = t.SlaTimer?.DueAt,
             HasUnreadChat = hasUnreadChat,
             DetectedAt = t.DetectedAt,
@@ -83,10 +83,13 @@ public static class TicketQueryHelper
     internal static SlaTimerDTO? MapToSlaTimerDTO(
         SlaTimer? sla,
         ISlaCalculator slaCalculator,
-        DateTime atUtc)
+        DateTime atUtc,
+        TicketStatusEnum ticketStatus = TicketStatusEnum.Open)
     {
         if (sla is null)
             return null;
+
+        var isStoppedOrTerminal = sla.Status == SlaTimerStatusEnum.Stopped || TicketStatusGroups.Terminal.Contains(ticketStatus);
         return new SlaTimerDTO
         {
             Id = sla.Id.ToString(),
@@ -99,10 +102,10 @@ public static class TicketQueryHelper
             WarningSentAt = sla.WarningSentAt,
             BreachAt = sla.BreachAt,
             Status = sla.Status,
-            RemainingPercent = ComputeRemainingPercent(slaCalculator, sla, atUtc),
+            RemainingPercent = isStoppedOrTerminal ? 0d : ComputeRemainingPercent(slaCalculator, sla, atUtc),
             SlaWorkingDays = slaCalculator.GetSlaWorkingDays(sla.Priority),
             SlaWorkingHours = slaCalculator.GetSlaHours(sla.Priority),
-            RemainingWorkingMinutes = ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc)
+            RemainingWorkingMinutes = isStoppedOrTerminal ? 0 : ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc)
         };
     }
 

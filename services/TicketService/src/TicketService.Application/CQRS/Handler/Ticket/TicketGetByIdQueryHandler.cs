@@ -142,7 +142,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             // GH-1242 — SLA là chỉ số nội bộ: Customer chỉ nhận ExpectedCompletionAtUtc,
             // không thấy BreachAt/WarningSentAt/RemainingPercent.
             SlaTimer = canViewSlaTimer
-                ? TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer, _slaCalculator, DateTime.UtcNow)
+                ? TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer, _slaCalculator, DateTime.UtcNow, ticket.Status)
                 : null,
             ExpectedCompletionAtUtc = ticket.SlaTimer?.DueAt,
             Activities = ticket.Activities
