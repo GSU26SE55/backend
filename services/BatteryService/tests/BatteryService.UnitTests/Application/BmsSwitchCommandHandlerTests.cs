@@ -76,9 +76,10 @@ public class BmsSwitchCommandHandlerTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // "all" đã rời danh sách này khi firmware nhận mapping all=3 — xem
+    // AllTarget_IsAcceptedAndSentToTheDevice ngay bên dưới.
     [Theory]
     [InlineData("both")]
-    [InlineData("all")]
     [InlineData("")]
     [InlineData("CHARGE_MOSFET")]
     public async Task UnsupportedTarget_IsRejectedBeforeReachingDevice(string target)
@@ -100,6 +101,82 @@ public class BmsSwitchCommandHandlerTests
             }, CancellationToken.None);
 
         result.StatusCode.Should().Be(400);
+        mqtt.Verify(publisher => publisher.PublishCommandAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AllTarget_IsAcceptedAndSentToTheDevice()
+    {
+        var customerId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var asset = Asset(customerId, siteId);
+        var device = Device(siteId);
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(asset)
+            .WithIotDevices(device);
+        var mqtt = new Mock<IMqttBridgePublisher>();
+
+        var result = await Handler(builder, TestBatteryCurrentUserService.Customer(customerId), mqtt.Object)
+            .Handle(new SetBmsSwitchCommand
+            {
+                BatteryAssetId = asset.Id,
+                Target = "all",
+                Enable = false
+            }, CancellationToken.None);
+
+        result.StatusCode.Should().Be(202);
+        // Gửi nguyên "all" xuống thiết bị, KHÔNG tách thành hai lệnh: firmware map all=3 và ghi
+        // cả hai MOSFET trong một lượt, nên tách ra sẽ thành hai lần áp dụng có thể lệch nhau.
+        mqtt.Verify(publisher => publisher.PublishCommandAsync(
+            device.DeviceCode,
+            It.Is<string>(payload => payload.Contains("\"target\":\"all\"")
+                                     && payload.Contains("\"enable\":false")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    // "all" phủ cả hai MOSFET nên phải xung đột với lệnh charge/discharge đang chờ ack, theo cả
+    // hai chiều. Thiếu vế này thì hai lệnh trái chiều cùng xuống thiết bị và trạng thái cuối phụ
+    // thuộc cái nào tới trước.
+    [InlineData("all", "charge")]
+    [InlineData("all", "discharge")]
+    [InlineData("charge", "all")]
+    [InlineData("discharge", "all")]
+    [InlineData("all", "all")]
+    public async Task AllTarget_ConflictsWithAnyPendingCommandOnEitherMosfet(
+        string pendingTarget,
+        string requestedTarget)
+    {
+        var customerId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var asset = Asset(customerId, siteId);
+        var device = Device(siteId);
+        var pending = new IotDeviceCommand
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            BatteryAssetId = asset.Id,
+            CmdId = "pending-all",
+            Type = "set_bms_switch",
+            ParamsJson = $"{{\"serial\":\"BAT-001\",\"target\":\"{pendingTarget}\",\"enable\":true}}",
+            Status = IotDeviceCommandStatusEnum.Pending
+        };
+        var builder = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(asset)
+            .WithIotDevices(device)
+            .WithIotDeviceCommands(pending);
+        var mqtt = new Mock<IMqttBridgePublisher>();
+
+        var result = await Handler(builder, TestBatteryCurrentUserService.Customer(customerId), mqtt.Object)
+            .Handle(new SetBmsSwitchCommand
+            {
+                BatteryAssetId = asset.Id,
+                Target = requestedTarget,
+                Enable = false
+            }, CancellationToken.None);
+
+        result.StatusCode.Should().Be(409);
         mqtt.Verify(publisher => publisher.PublishCommandAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }

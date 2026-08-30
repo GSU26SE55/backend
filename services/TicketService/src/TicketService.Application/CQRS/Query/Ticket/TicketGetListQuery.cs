@@ -21,6 +21,16 @@ public class TicketGetListQuery : PaginationRequest, IRequest<CommonResponse<Pag
     public Guid? BatteryAssetId { get; set; }
 
     /// <summary>
+    /// Lọc ticket được auto-tạo từ một sự cố môi trường cụ thể.
+    ///
+    /// Quan hệ chỉ tồn tại một chiều: Ticket giữ EnvironmentalIncidentId, còn EnvironmentalIncident
+    /// (thuộc BatteryService) KHÔNG biết ticket nào — cố tình, vì service này không được giữ khoá
+    /// ngoại sang service kia. Vì vậy màn "Alert details" của sự cố môi trường muốn hiện link tới
+    /// ticket thì phải tra ngược qua đây.
+    /// </summary>
+    public Guid? EnvironmentalIncidentId { get; set; }
+
+    /// <summary>
     /// Bỏ bộ lọc ẩn ticket Open mặc định của Manager, trả về MỌI trạng thái trong một lần gọi.
     /// </summary>
     /// <remarks>

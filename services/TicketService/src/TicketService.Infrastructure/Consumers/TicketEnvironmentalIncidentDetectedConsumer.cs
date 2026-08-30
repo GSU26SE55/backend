@@ -84,6 +84,9 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
             Category = TicketCategoryEnum.Repair,
             CustomerId = evt.CustomerId,
             BatteryAssetId = Guid.Empty, // site-level — không gắn pin cụ thể
+            // Ticket này KHÔNG có pin nào, nên SiteId là đường duy nhất để gom nó với các
+            // ticket pin cùng cabinet.
+            SiteId = evt.SiteId,
             EnvironmentalIncidentId = evt.IncidentId,
             Status = TicketStatusEnum.Open,
             Origin = TicketOriginEnum.System,

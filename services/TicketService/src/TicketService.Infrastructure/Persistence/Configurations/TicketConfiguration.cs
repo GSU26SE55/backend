@@ -162,6 +162,12 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.MergedIntoTicketId)
             .HasColumnName("merged_into_ticket_id");
 
+        builder.Property(e => e.ParentTicketId)
+            .HasColumnName("parent_ticket_id");
+
+        builder.Property(e => e.SiteId)
+            .HasColumnName("site_id");
+
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
 
@@ -184,6 +190,10 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(e => e.Category);
         builder.HasIndex(e => e.Priority);
         builder.HasIndex(e => e.MergedIntoTicketId);
+        // Lấy ticket con của một ticket cha, và gom ticket theo site — cả hai đều là truy vấn
+        // theo cột đơn nên index đơn là đủ.
+        builder.HasIndex(e => e.ParentTicketId);
+        builder.HasIndex(e => e.SiteId);
         builder.HasIndex(e => new { e.Status, e.ScheduledStartAtUtc })
             .HasDatabaseName("ix_tickets_due_activation")
             .HasFilter("is_deleted = false AND status = 2 AND scheduled_start_at_utc IS NOT NULL");

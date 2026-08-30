@@ -8,6 +8,24 @@ namespace TicketService.Application.Common.Utils;
 
 public static class TicketQueryHelper
 {
+    /// <summary>
+    /// Thứ tự nghiêm trọng của Priority để ORDER BY: Urgent → P1 → P2 → P3 → chưa gán.
+    ///
+    /// KHÔNG sort thẳng theo <c>t.Priority</c>: enum đánh số P1Critical=1..Urgent=4, nên
+    /// ORDER BY trên giá trị enum đẩy Urgent — mức nghiêm trọng NHẤT — xuống cuối bảng.
+    /// Ticket chưa triage (Priority null) xếp sau cùng, khớp NULLS LAST của Postgres.
+    ///
+    /// Là Expression để EF Core dịch được sang SQL (sort chạy trước phân trang, trên toàn bộ
+    /// dataset). Dùng chung cho hàng chờ (ManagerQueueQueryHandler) và danh sách ticket
+    /// (TicketGetListQueryHandler) để hai nơi không lệch thứ tự.
+    /// </summary>
+    internal static readonly System.Linq.Expressions.Expression<Func<Ticket, int>> PriorityRank =
+        t => t.Priority == TicketPriorityEnum.Urgent ? 0
+           : t.Priority == TicketPriorityEnum.P1Critical ? 1
+           : t.Priority == TicketPriorityEnum.P2High ? 2
+           : t.Priority == TicketPriorityEnum.P3Normal ? 3
+           : 4;
+
     /// <param name="t">Entity Ticket nguồn.</param>
     /// <param name="slaCalculator">Business clock dùng để tính SLA còn lại.</param>
     /// <param name="atUtc">Thời điểm UTC dùng cho phép tính SLA.</param>
@@ -77,6 +95,8 @@ public static class TicketQueryHelper
             SuspectedDuplicateOfTicketId = t.SuspectedDuplicateOfTicketId?.ToString(),
             DuplicateReason = t.DuplicateReason,
             MergedIntoTicketId = t.MergedIntoTicketId?.ToString(),
+            SiteId = t.SiteId?.ToString(),
+            ParentTicketId = t.ParentTicketId?.ToString(),
             CloseReason = t.CloseReason
         };
 

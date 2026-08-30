@@ -94,7 +94,9 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
             AiBlocked: ai?.Blocked,
             AiEnriched: ai?.Enriched,
             AiLlmProvider: ai?.LlmProvider,
-            AiPrescriptionId: ai?.PrescriptionId
+            AiPrescriptionId: ai?.PrescriptionId,
+            // Saga đã hydrate SiteId từ event V2 — forward xuống để ticket lưu được site.
+            SiteId: saga.SiteId
         );
 
         await publishEndpoint.Publish(command);

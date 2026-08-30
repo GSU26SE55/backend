@@ -139,6 +139,8 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             SuspectedDuplicateOfTicketId = ticket.SuspectedDuplicateOfTicketId?.ToString(),
             DuplicateReason = ticket.DuplicateReason,
             MergedIntoTicketId = ticket.MergedIntoTicketId?.ToString(),
+            SiteId = ticket.SiteId?.ToString(),
+            ParentTicketId = ticket.ParentTicketId?.ToString(),
             // GH-1242 — SLA là chỉ số nội bộ: Customer chỉ nhận ExpectedCompletionAtUtc,
             // không thấy BreachAt/WarningSentAt/RemainingPercent.
             SlaTimer = canViewSlaTimer

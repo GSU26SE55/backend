@@ -57,13 +57,18 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             return Fail(403, "The customer account is locked or disabled.");
 
         var batterySerialNumbers = new Dictionary<Guid, string>();
+        // Site của ticket lấy từ pin đầu tiên tra được. Ticket nhiều pin trên thực tế đều cùng một
+        // cabinet, nên site đầu tiên là đủ; nếu lookup không trả site thì để null chứ không chặn
+        // tạo ticket — SiteId chỉ dùng để gom ticket, không phải dữ liệu bắt buộc.
+        Guid? siteId = null;
         foreach (var batteryAssetId in request.BatteryAssetIds)
         {
-            var serialNumber = await _batteryLookup.GetSerialAsync(batteryAssetId, ct);
-            if (string.IsNullOrWhiteSpace(serialNumber))
+            var snapshot = await _batteryLookup.GetSnapshotAsync(batteryAssetId, ct);
+            if (string.IsNullOrWhiteSpace(snapshot.SerialNumber))
                 return Fail(403, "The selected battery does not exist or you do not have access to it.");
 
-            batterySerialNumbers[batteryAssetId] = serialNumber;
+            batterySerialNumbers[batteryAssetId] = snapshot.SerialNumber;
+            siteId ??= snapshot.SiteId;
         }
 
         var code = await _codeGenerator.GenerateAsync();
@@ -83,6 +88,8 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             CustomerId = request.CustomerId,
             BatteryAssetId = primaryBatteryAssetId,
             BatterySerialNumber = batterySerialNumber,
+            // Cho phép gom ticket này với ticket environmental cùng cabinet.
+            SiteId = siteId,
             Status = TicketStatusEnum.Open,
             Priority = TicketPriorityEnum.P1Critical,
             Origin = TicketOriginEnum.ManualByCustomer,

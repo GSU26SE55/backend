@@ -64,6 +64,14 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             // cảnh báo (lúc phát hiện)" và cột Serial giống ticket do Customer tạo.
             DetectedAt = request.DetectedAt,
             BatterySerialNumber = request.BatterySerialNumber,
+            // Site đi kèm event chứ KHÔNG gọi ngược BatteryService: handler này chạy từ
+            // MassTransit consumer, không có HTTP context nên IBatteryLookupClient không forward
+            // được JWT và sẽ luôn trả null. BatteryAnomalyDetectedV2Event vốn đã mang SiteId,
+            // saga hydrate rồi forward qua CreateTicketFromAlertCommand — cùng khuôn
+            // denormalize snapshot như BatterySerialNumber.
+            //
+            // Null khi alert đến từ event V1 (không có SiteId); khi đó ticket không gom theo site.
+            SiteId = request.SiteId,
             ImpactScope = impact,
             UrgencyLevel = urgency,
             Priority = priority,

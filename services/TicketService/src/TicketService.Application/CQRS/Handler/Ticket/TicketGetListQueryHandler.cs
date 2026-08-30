@@ -77,6 +77,9 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
         if (request.BatteryAssetId.HasValue)
             query = query.Where(t => t.BatteryAssetId == request.BatteryAssetId.Value);
 
+        if (request.EnvironmentalIncidentId.HasValue)
+            query = query.Where(t => t.EnvironmentalIncidentId == request.EnvironmentalIncidentId.Value);
+
         query = TicketQueryHelper.FilterBySla(query, request.Sla);
 
         query = TicketQueryHelper.FilterBySource(query, request.Source);
@@ -93,7 +96,11 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
             "title" => descending ? query.OrderByDescending(t => t.Title) : query.OrderBy(t => t.Title),
             "category" => descending ? query.OrderByDescending(t => t.Category) : query.OrderBy(t => t.Category),
             "status" => descending ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status),
-            "priority" => descending ? query.OrderByDescending(t => t.Priority) : query.OrderBy(t => t.Priority),
+            // Rank chứ không phải giá trị enum: Urgent=4 nên OrderBy(t.Priority) đẩy ticket
+            // nghiêm trọng nhất xuống cuối. Xem TicketQueryHelper.PriorityRank.
+            "priority" => descending
+                ? query.OrderByDescending(TicketQueryHelper.PriorityRank)
+                : query.OrderBy(TicketQueryHelper.PriorityRank),
             _ => descending ? query.OrderByDescending(t => t.CreatedAt) : query.OrderBy(t => t.CreatedAt),
         };
         query = ordered.ThenBy(t => t.Id); // tie-breaker cố định — pagination ổn định

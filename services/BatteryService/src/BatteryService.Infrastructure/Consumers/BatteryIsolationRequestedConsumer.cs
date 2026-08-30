@@ -1,6 +1,9 @@
 using BatteryService.Application.CQRS.Command.BatteryAsset;
+using BatteryService.Application.Interfaces;
+using BatteryService.Domain.Enums;
 using MassTransit;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 
@@ -12,7 +15,14 @@ namespace BatteryService.Infrastructure.Consumers;
 /// hành động vật lý: NGẮT MOSFET XẢ của mọi pin gắn với ticket qua gateway của site.
 ///
 /// Chỉ ngắt xả, KHÔNG ngắt sạc — cắt luôn sạc thì pin không hồi được và cũng không cần thiết cho
-/// việc cô lập tải. Bật lại là thao tác thủ công có chủ ý trên trang battery detail.
+/// việc cô lập tải. Bật lại là thao tác thủ công có chủ ý qua
+/// <c>POST /environmental-incidents/{id}/bms-restore</c>, chỉ mở khi incident đã Resolved.
+///
+/// Ticket môi trường (khói/gas/ngập) KHÔNG gắn pin nào — sự cố nằm ở tủ chứ không ở một pack cụ
+/// thể — nên <c>BatteryAssetIds</c> rỗng là hình dạng ĐÚNG của nó, không phải dữ liệu thiếu. Khi
+/// đó pin được suy ra từ site của incident: cả site mất điện là phản ứng đúng cho sự cố môi
+/// trường. Trước đây nhánh này chỉ log "nothing to cut" rồi thoát, tức là loại ticket cần ngắt
+/// khẩn cấp nhất lại là loại duy nhất không ngắt được gì.
 ///
 /// Idempotent theo hai lớp: handler trả 409 khi đã có lệnh cùng target đang chờ ack (redelivery
 /// không đẻ lệnh trùng), và lệnh lặp lại chỉ ghi đè cùng một trạng thái MOSFET.
@@ -20,32 +30,35 @@ namespace BatteryService.Infrastructure.Consumers;
 public class BatteryIsolationRequestedConsumer : IConsumer<BatteryIsolationRequestedEvent>
 {
     private readonly IMediator _mediator;
+    private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly ILogger<BatteryIsolationRequestedConsumer> _logger;
 
     public BatteryIsolationRequestedConsumer(
         IMediator mediator,
+        IBatteryUnitOfWork unitOfWork,
         ILogger<BatteryIsolationRequestedConsumer> logger)
     {
         _mediator = mediator;
+        _unitOfWork = unitOfWork;
         _logger = logger;
     }
 
     public async Task Consume(ConsumeContext<BatteryIsolationRequestedEvent> context)
     {
         var msg = context.Message;
-        if (msg.BatteryAssetIds is null || msg.BatteryAssetIds.Count == 0)
+
+        var assetIds = msg.BatteryAssetIds?.Distinct().ToList() ?? [];
+        if (assetIds.Count == 0)
         {
-            _logger.LogWarning(
-                "Isolation requested for ticket {TicketId} but no battery asset is attached — nothing to cut.",
-                msg.TicketId);
-            return;
+            assetIds = await ResolveSiteAssetsAsync(msg, context.CancellationToken);
+            if (assetIds.Count == 0) return;
         }
 
         // Gom lỗi hạ tầng lại, cắt hết pin còn cắt được rồi mới ném: một site mất gateway không
         // được phép chặn việc ngắt xả những pin còn lại của cùng sự cố.
         var transportFailures = new List<string>();
 
-        foreach (var assetId in msg.BatteryAssetIds.Distinct())
+        foreach (var assetId in assetIds)
         {
             var result = await _mediator.Send(new SetBmsSwitchCommand
             {
@@ -92,5 +105,59 @@ public class BatteryIsolationRequestedConsumer : IConsumer<BatteryIsolationReque
                 $"Battery isolation for ticket {msg.TicketId} could not reach the MQTT bridge: "
                 + string.Join("; ", transportFailures));
         }
+    }
+
+    /// <summary>
+    /// Pin của một sự cố môi trường: mọi pack Active đứng trên site của incident.
+    /// </summary>
+    /// <remarks>
+    /// Chỉ lấy <see cref="BatteryStatusEnum.Active"/>. Pin Inactive/Decommissioned không có BMS
+    /// sống để trả lời, nên đưa vào chỉ tạo ra lệnh chắc chắn timeout — nhiễu log đúng lúc vận
+    /// hành cần đọc log nhất.
+    ///
+    /// Không phân trang: đây là toàn bộ site, và một danh sách bị cắt trang sẽ báo cáo ngắt
+    /// thành công trong khi vẫn còn pin đang cấp điện — đúng kiểu hỏng mà một điều khiển an toàn
+    /// không được phép có.
+    /// </remarks>
+    private async Task<List<Guid>> ResolveSiteAssetsAsync(
+        BatteryIsolationRequestedEvent msg,
+        CancellationToken ct)
+    {
+        var incident = await _unitOfWork.EnvironmentalIncidents.GetAllAsync()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == msg.IncidentEpisodeId && !x.IsDeleted, ct);
+
+        if (incident is null)
+        {
+            _logger.LogWarning(
+                "Isolation requested for ticket {TicketId} with no battery attached, and incident "
+                + "{EpisodeId} was not found — nothing to cut.",
+                msg.TicketId, msg.IncidentEpisodeId);
+            return [];
+        }
+
+        var assetIds = await _unitOfWork.BatteryAssets.GetAllAsync()
+            .AsNoTracking()
+            .Where(asset => !asset.IsDeleted
+                            && asset.SiteId == incident.SiteId
+                            && asset.Status == BatteryStatusEnum.Active)
+            .Select(asset => asset.Id)
+            .ToListAsync(ct);
+
+        if (assetIds.Count == 0)
+        {
+            _logger.LogWarning(
+                "Incident {EpisodeId} (ticket {TicketId}): site {SiteId} has no active battery — "
+                + "nothing to cut.",
+                msg.IncidentEpisodeId, msg.TicketId, incident.SiteId);
+            return [];
+        }
+
+        _logger.LogWarning(
+            "Incident {EpisodeId} (ticket {TicketId}): environmental ticket carries no battery — "
+            + "cutting discharge on all {Count} active batteries at site {SiteId}.",
+            msg.IncidentEpisodeId, msg.TicketId, assetIds.Count, incident.SiteId);
+
+        return assetIds;
     }
 }

@@ -41,5 +41,16 @@ public record CreateTicketFromAlertCommand(
     bool? AiBlocked = null,
     bool? AiEnriched = null,
     string? AiLlmProvider = null,
-    string? AiPrescriptionId = null
+    string? AiPrescriptionId = null,
+    /// <summary>
+    /// Site của pin, forward từ <c>BatteryAnomalyDetectedV2Event.SiteId</c>.
+    ///
+    /// Ticket cần SiteId để gom được với ticket environmental cùng cabinet. Không lấy được bằng
+    /// cách gọi ngược BatteryService: handler tạo ticket chạy trong consumer, không có HTTP
+    /// context nên không forward được JWT — nên site phải đi kèm event, đúng khuôn
+    /// <c>AssetSerialNumber</c> ở trên (denormalize snapshot lúc tạo).
+    ///
+    /// Null với V1 event (không mang SiteId) và với command cũ đã publish trước thay đổi này.
+    /// </summary>
+    Guid? SiteId = null
 ) : IntegrationEvent;

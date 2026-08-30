@@ -43,7 +43,9 @@ public class TicketCreateCommandHandlerTests
         var (uow, tickets, _, _, _, slaTimers, _, _, _, _, _, _, _, participants) = MockTicketUnitOfWork.BuildExtended(customerSeed: customers);
 
         var batteryLookup = new Mock<IBatteryLookupClient>();
-        batteryLookup.Setup(x => x.GetSerialAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync("BAT-001");
+        // Handler nay dùng GetSnapshotAsync (serial + SiteId trong cùng 1 lần gọi).
+        batteryLookup.Setup(x => x.GetSnapshotAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BatteryLookupResult("BAT-001", Guid.NewGuid()));
 
         var handler = new TicketCreateCommandHandler(
             uow.Object,

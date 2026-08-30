@@ -82,7 +82,11 @@ public class ChatAddCommandHandlerTests
             Id = ticketId,
             Code = "TKT-001",
             Title = "Test Ticket",
-            Description = "Test Description"
+            Description = "Test Description",
+            // Chat is blocked while the ticket is still Open (not yet assigned) — see
+            // ChatClosedStateHelper. These tests exercise chat behaviour, not triage, so they
+            // start from an assigned state.
+            Status = TicketStatusEnum.InProgress
         };
 
         var (uow, _, _, _, _, _, _, chats, attachments, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -154,7 +158,11 @@ public class ChatAddCommandHandlerTests
             Id = ticketId,
             Code = "TKT-001",
             Title = "Test Ticket",
-            Description = "Test Description"
+            Description = "Test Description",
+            // Chat is blocked while the ticket is still Open (not yet assigned) — see
+            // ChatClosedStateHelper. These tests exercise chat behaviour, not triage, so they
+            // start from an assigned state.
+            Status = TicketStatusEnum.InProgress
         };
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -182,6 +190,78 @@ public class ChatAddCommandHandlerTests
         chats.Verify(x => x.AddAsync(It.Is<TicketChat>(c =>
             c.BodyFormat == ChatBodyFormatEnum.Markdown &&
             c.BodyHtml == "<p><strong>bold</strong></p>")), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_TicketOpen_ReturnsBadRequest()
+    {
+        // Open = created but not triaged, so no one is assigned yet. A message sent then has no
+        // specific recipient and raises no notification for the right person, so it is blocked
+        // rather than left to go unanswered.
+        var ticketId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description",
+            Status = TicketStatusEnum.Open
+        };
+
+        var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket }
+        );
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff User",
+            Body = "This is a comment",
+            UserPermissions = PublicCreatePermission
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        chats.Verify(x => x.AddAsync(It.IsAny<TicketChat>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_TicketPending_AllowsChat()
+    {
+        // Pending = already assigned with a schedule, so both sides need to talk before the
+        // visit. Deliberately NOT blocked, unlike Open.
+        var ticketId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "Test Ticket",
+            Description = "Test Description",
+            Status = TicketStatusEnum.Pending
+        };
+
+        var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { ticket }
+        );
+
+        var command = new ChatAddCommand
+        {
+            TicketId = ticketId,
+            UserId = Guid.NewGuid(),
+            UserRole = ActorRoleEnum.Staff,
+            UserDisplayName = "Staff User",
+            Body = "This is a comment",
+            UserPermissions = PublicCreatePermission
+        };
+
+        var result = await CreateHandler(uow).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        chats.Verify(x => x.AddAsync(It.IsAny<TicketChat>()), Times.Once);
     }
 
     [Fact]
@@ -302,7 +382,11 @@ public class ChatAddCommandHandlerTests
             Id = ticketId,
             Code = "TKT-001",
             Title = "Test Ticket",
-            Description = "Test Description"
+            Description = "Test Description",
+            // Chat is blocked while the ticket is still Open (not yet assigned) — see
+            // ChatClosedStateHelper. These tests exercise chat behaviour, not triage, so they
+            // start from an assigned state.
+            Status = TicketStatusEnum.InProgress
         };
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -338,7 +422,11 @@ public class ChatAddCommandHandlerTests
             Id = ticketId,
             Code = "TKT-001",
             Title = "Test Ticket",
-            Description = "Test Description"
+            Description = "Test Description",
+            // Chat is blocked while the ticket is still Open (not yet assigned) — see
+            // ChatClosedStateHelper. These tests exercise chat behaviour, not triage, so they
+            // start from an assigned state.
+            Status = TicketStatusEnum.InProgress
         };
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -374,7 +462,11 @@ public class ChatAddCommandHandlerTests
             Id = ticketId,
             Code = "TKT-001",
             Title = "Test Ticket",
-            Description = "Test Description"
+            Description = "Test Description",
+            // Chat is blocked while the ticket is still Open (not yet assigned) — see
+            // ChatClosedStateHelper. These tests exercise chat behaviour, not triage, so they
+            // start from an assigned state.
+            Status = TicketStatusEnum.InProgress
         };
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -417,7 +509,11 @@ public class ChatAddCommandHandlerTests
             Id = ticketId,
             Code = "TKT-001",
             Title = "Test Ticket",
-            Description = "Test Description"
+            Description = "Test Description",
+            // Chat is blocked while the ticket is still Open (not yet assigned) — see
+            // ChatClosedStateHelper. These tests exercise chat behaviour, not triage, so they
+            // start from an assigned state.
+            Status = TicketStatusEnum.InProgress
         };
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -522,7 +618,11 @@ public class ChatAddCommandHandlerTests
             Id = ticketId,
             Code = "TKT-001",
             Title = "Test Ticket",
-            Description = "Test Description"
+            Description = "Test Description",
+            // Chat is blocked while the ticket is still Open (not yet assigned) — see
+            // ChatClosedStateHelper. These tests exercise chat behaviour, not triage, so they
+            // start from an assigned state.
+            Status = TicketStatusEnum.InProgress
         };
         var participant = new TicketParticipant
         {
@@ -579,7 +679,11 @@ public class ChatAddCommandHandlerTests
             Id = ticketId,
             Code = "TKT-001",
             Title = "Test Ticket",
-            Description = "Test Description"
+            Description = "Test Description",
+            // Chat is blocked while the ticket is still Open (not yet assigned) — see
+            // ChatClosedStateHelper. These tests exercise chat behaviour, not triage, so they
+            // start from an assigned state.
+            Status = TicketStatusEnum.InProgress
         };
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
@@ -617,7 +721,11 @@ public class ChatAddCommandHandlerTests
         var ticketId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
-        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+        var ticket = new Ticket
+        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+            // Chat is blocked while the ticket is still Open (not yet assigned).
+            Status = TicketStatusEnum.InProgress
+        };
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
         var mentionsRepo = uow.SetupMentions(new List<TicketChatMention>());
@@ -663,7 +771,11 @@ public class ChatAddCommandHandlerTests
     public async Task Handle_GroupMentionResolves0Users_ChatStillSucceeds()
     {
         var ticketId = Guid.NewGuid();
-        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+        var ticket = new Ticket
+        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+            // Chat is blocked while the ticket is still Open (not yet assigned).
+            Status = TicketStatusEnum.InProgress
+        };
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { ticket });
         var mentionsRepo = uow.SetupMentions(new List<TicketChatMention>());
@@ -697,7 +809,11 @@ public class ChatAddCommandHandlerTests
         var ticketId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         var sharedUserId = Guid.NewGuid();
-        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+        var ticket = new Ticket
+        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+            // Chat is blocked while the ticket is still Open (not yet assigned).
+            Status = TicketStatusEnum.InProgress
+        };
         var participant = new TicketParticipant
         {
             Id = Guid.NewGuid(),
@@ -811,7 +927,11 @@ public class ChatAddCommandHandlerTests
     {
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+        var ticket = new Ticket
+        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+            // Chat is blocked while the ticket is still Open (not yet assigned).
+            Status = TicketStatusEnum.InProgress
+        };
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket });
@@ -841,7 +961,11 @@ public class ChatAddCommandHandlerTests
     {
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        var ticket = new Ticket { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D" };
+        var ticket = new Ticket
+        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+            // Chat is blocked while the ticket is still Open (not yet assigned).
+            Status = TicketStatusEnum.InProgress
+        };
 
         var (uow, _, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket });
