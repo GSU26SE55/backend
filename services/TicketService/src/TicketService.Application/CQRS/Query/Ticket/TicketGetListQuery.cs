@@ -21,6 +21,21 @@ public class TicketGetListQuery : PaginationRequest, IRequest<CommonResponse<Pag
     public Guid? BatteryAssetId { get; set; }
 
     /// <summary>
+    /// Bỏ bộ lọc ẩn ticket Open mặc định của Manager, trả về MỌI trạng thái trong một lần gọi.
+    /// </summary>
+    /// <remarks>
+    /// Dành cho màn so sánh trước khi gộp ticket (Manager chọn ticket đích): ở đó Manager cần
+    /// nhìn thấy cả ticket Open — ticket do AI gợi ý là trùng lặp thường vẫn đang chờ triage.
+    /// Trước khi có cờ này, FE phải gọi endpoint hai lần (một lần mặc định, một lần Status=Open)
+    /// rồi tự nối kết quả, khiến phân trang và sắp xếp sai vì mỗi lần lấy riêng một trang 100 bản ghi.
+    ///
+    /// <para>KHÔNG phải là cờ nâng quyền: Open vốn đã đọc được qua <c>Status=Open</c>, cờ này chỉ
+    /// gộp hai lượt gọi đó làm một. Bỏ qua khi <see cref="Status"/> được set (lọc tường minh
+    /// luôn thắng) và không có tác dụng với Admin vì Admin không bị lọc sẵn.</para>
+    /// </remarks>
+    public bool IncludeOpen { get; set; }
+
+    /// <summary>
     /// Lọc theo tình trạng SLA: Paused | Warning | Breached.
     /// Độc lập với <see cref="Status"/> — cả ba đều là ticket đang xử lý, chỉ khác đồng hồ SLA.
     /// </summary>

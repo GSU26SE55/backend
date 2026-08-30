@@ -53,7 +53,7 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
 
         if (request.Status.HasValue)
             query = query.Where(t => t.Status == request.Status.Value);
-        else if (!isAdmin)
+        else if (!isAdmin && !request.IncludeOpen)
             // Open = awaiting Manager triage/assignment — that's the Queue's job (ManagerQueueQuery).
             // Hide it from Manager's default "Tickets" list so the two views don't overlap; Manager
             // can still filter Status=Open explicitly to look it up.
@@ -61,6 +61,11 @@ public class TicketGetListQueryHandler : IRequestHandler<TicketGetListQuery, Com
             // Admin is exempt: this endpoint is Admin's ONLY ticket list — there is no Admin Queue
             // page and no /admin/tickets/queue route — so the same filter left Admin unable to see
             // an Open ticket anywhere in the system, with an unfiltered list reporting 0 tickets.
+            //
+            // IncludeOpen bỏ bộ lọc này khi màn hình cần đủ mọi trạng thái trong MỘT lượt gọi
+            // (so sánh trước khi gộp ticket). Không nới quyền: Manager vốn đã đọc được ticket
+            // Open qua Status=Open, cờ này chỉ thay thế việc gọi hai lần rồi nối kết quả —
+            // cách cũ làm phân trang và sắp xếp sai vì mỗi lượt lấy riêng một trang.
             query = query.Where(t => t.Status != TicketStatusEnum.Open);
 
         if (request.Priority.HasValue)
