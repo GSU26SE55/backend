@@ -352,15 +352,15 @@ public class BmsSwitchCommandHandlerTests
 
     private static IotDeviceCommand PendingSwitch(
         IotDevice device, BatteryAsset asset, string target, bool enable) => new()
-    {
-        Id = Guid.NewGuid(),
-        IotDeviceId = device.Id,
-        BatteryAssetId = asset.Id,
-        CmdId = $"pending-{target}",
-        Type = "set_bms_switch",
-        ParamsJson = $"{{\"serial\":\"BAT-001\",\"target\":\"{target}\",\"enable\":{(enable ? "true" : "false")}}}",
-        Status = IotDeviceCommandStatusEnum.Pending
-    };
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            BatteryAssetId = asset.Id,
+            CmdId = $"pending-{target}",
+            Type = "set_bms_switch",
+            ParamsJson = $"{{\"serial\":\"BAT-001\",\"target\":\"{target}\",\"enable\":{(enable ? "true" : "false")}}}",
+            Status = IotDeviceCommandStatusEnum.Pending
+        };
 
     [Fact]
     public async Task AutomaticDischargeCut_SupersedesPendingEnableCommand()
@@ -579,16 +579,16 @@ public class BmsSwitchStateQueryHandlerTests
         string? resultJson,
         IotDeviceCommandStatusEnum status,
         int secondsAgo) => new()
-    {
-        Id = Guid.NewGuid(),
-        IotDeviceId = device.Id,
-        BatteryAssetId = asset.Id,
-        CmdId = cmdId,
-        Type = "set_bms_switch",
-        ParamsJson = "{\"target\":\"all\",\"enable\":false}",
-        ResultJson = resultJson,
-        Status = status,
-        CreatedAt = DateTime.UtcNow.AddSeconds(-secondsAgo),
-        AckedAt = DateTime.UtcNow.AddSeconds(-secondsAgo + 1)
-    };
+        {
+            Id = Guid.NewGuid(),
+            IotDeviceId = device.Id,
+            BatteryAssetId = asset.Id,
+            CmdId = cmdId,
+            Type = "set_bms_switch",
+            ParamsJson = "{\"target\":\"all\",\"enable\":false}",
+            ResultJson = resultJson,
+            Status = status,
+            CreatedAt = DateTime.UtcNow.AddSeconds(-secondsAgo),
+            AckedAt = DateTime.UtcNow.AddSeconds(-secondsAgo + 1)
+        };
 }

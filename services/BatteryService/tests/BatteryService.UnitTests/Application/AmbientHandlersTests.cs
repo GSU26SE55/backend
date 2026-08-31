@@ -1,12 +1,12 @@
-﻿using BatteryService.Application.Anomaly;
+using BatteryService.Application.Anomaly;
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.CQRS.Handler.Ambient;
 using BatteryService.Application.CQRS.Query.Ambient;
 using BatteryService.Application.Interfaces;
-using Microsoft.Extensions.Options;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using FluentAssertions;
+using Microsoft.Extensions.Options;
 using MockQueryable.Moq;
 using Moq;
 using SharedContracts.Events;

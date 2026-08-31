@@ -51,7 +51,8 @@ public class BatteryIsolationRequestedConsumer : IConsumer<BatteryIsolationReque
         if (assetIds.Count == 0)
         {
             assetIds = await ResolveSiteAssetsAsync(msg, context.CancellationToken);
-            if (assetIds.Count == 0) return;
+            if (assetIds.Count == 0)
+                return;
         }
 
         // Gom lỗi hạ tầng lại, cắt hết pin còn cắt được rồi mới ném: một site mất gateway không

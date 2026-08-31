@@ -16,8 +16,8 @@ namespace BatteryService.Api.Controllers;
 ///
 /// Cấu trúc ngưỡng:
 /// <list type="bullet">
-///   <item><description><b>Voltage</b>: <c>VoltageMin</c>, <c>VoltageMax</c> (V) - vượt khoảng này → anomaly Overvoltage/Undervoltage.</description></item>
-///   <item><description><b>Temperature</b>: <c>TemperatureMin</c>, <c>TemperatureMax</c> (°C) - vượt → Overheat.</description></item>
+///   <item><description><b>Voltage</b>: <c>VoltageMin</c> là Warning, <c>VoltageMax</c> là Critical (V) - đạt mốc → Overvoltage.</description></item>
+///   <item><description><b>Temperature</b>: <c>TemperatureMin</c> là Warning, <c>TemperatureMax</c> là Critical (°C) - đạt mốc → Overheat.</description></item>
 ///   <item><description><b>SOC</b>: <c>SocWarningThreshold</c> &gt; <c>SocCriticalThreshold</c> (%) - SOC dưới warning → LowSoc warning; dưới critical → LowSoc critical.</description></item>
 ///   <item><description><b>Current</b>: <c>CurrentMaxCharge</c>, <c>CurrentMaxDischarge</c> (A, tùy chọn) - vượt → AbnormalCharging / RapidDischarge.</description></item>
 /// </list>

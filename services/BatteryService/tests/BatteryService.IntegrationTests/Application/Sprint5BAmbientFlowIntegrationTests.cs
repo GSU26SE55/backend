@@ -1,4 +1,4 @@
-﻿using BatteryService.Application.Anomaly;
+using BatteryService.Application.Anomaly;
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.CQRS.Command.EnvironmentalIncident;
 using BatteryService.Application.CQRS.Handler.Ambient;

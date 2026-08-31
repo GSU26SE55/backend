@@ -6,7 +6,6 @@ using Moq;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
 using Testcontainers.PostgreSql;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
 
@@ -43,20 +42,25 @@ public class PR1277MigrationTests : IAsyncLifetime
         await migrator.MigrateAsync(PreviousMigrationId);
 
         var ticketId = Guid.NewGuid();
-        db.Tickets.Add(new Ticket
-        {
-            Id = ticketId,
-            Code = $"MIG-{ticketId:N}"[..20],
-            BatteryAssetId = Guid.NewGuid(),
-            CustomerId = Guid.NewGuid(),
-            Title = "Legacy staff-created ticket",
-            Description = "Migration verification",
-            Category = TicketCategoryEnum.Other,
-            Status = TicketStatusEnum.Pending,
-            Origin = (TicketOriginEnum)3,
-            CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        var code = $"MIG-{ticketId:N}"[..20];
+        var batteryAssetId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var createdAt = DateTime.UtcNow;
+
+        // The database is intentionally stopped at an old checkpoint. Seed with
+        // that checkpoint's schema instead of asking today's EF model to insert
+        // columns which do not exist yet (for example parent_ticket_id/site_id).
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO tickets
+                (id, code, battery_asset_id, customer_id, title, description,
+                 category, status, origin, ai_verify_status, is_deleted,
+                 is_incident, reopen_count, created_at)
+            VALUES
+                ({ticketId}, {code}, {batteryAssetId}, {customerId},
+                 {"Legacy staff-created ticket"}, {"Migration verification"},
+                 {(int)TicketCategoryEnum.Other}, {(int)TicketStatusEnum.Pending},
+                 {3}, {0}, {false}, {false}, {0}, {createdAt});
+            """);
 
         await migrator.MigrateAsync(OriginMigrationId);
         db.ChangeTracker.Clear();

@@ -182,9 +182,11 @@ public class SetBmsSwitchCommandHandler
     /// </summary>
     private static bool TargetsOverlap(string? pendingTarget, string requestedTarget)
     {
-        if (string.IsNullOrWhiteSpace(pendingTarget)) return false;
+        if (string.IsNullOrWhiteSpace(pendingTarget))
+            return false;
         var pending = pendingTarget.Trim().ToLowerInvariant();
-        if (pending == TargetAll || requestedTarget == TargetAll) return true;
+        if (pending == TargetAll || requestedTarget == TargetAll)
+            return true;
         return pending == requestedTarget;
     }
 

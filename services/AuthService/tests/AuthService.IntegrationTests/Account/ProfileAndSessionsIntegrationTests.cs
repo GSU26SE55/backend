@@ -67,7 +67,7 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
         using (var db = _factory.CreateDbContext())
         {
             var acc = await db.Users.FirstAsync(a => a.Email == "updatephone@example.com");
-            acc.PhoneNumber = "0900111";
+            acc.PhoneNumber = "0900000111";
             acc.PhoneConfirmed = true;
             await db.SaveChangesAsync();
         }
@@ -75,14 +75,14 @@ public class ProfileAndSessionsIntegrationTests : IAsyncLifetime
         var resp = await _client.PutAsJsonAsync("/api/auth/me/profile", new
         {
             FullName = "Updated Name",
-            PhoneNumber = "0900222"
+            PhoneNumber = "0900000222"
         });
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var db2 = _factory.CreateDbContext();
         var acc2 = await db2.Users.FirstAsync(a => a.Email == "updatephone@example.com");
         // #AUTH-39: PhoneNormalizer convert 09xx → +849xx (E.164).
-        acc2.PhoneNumber.Should().Be("+84900222");
+        acc2.PhoneNumber.Should().Be("+84900000222");
         acc2.PhoneConfirmed.Should().BeFalse();
         acc2.FullName.Should().Be("Updated Name");
     }
