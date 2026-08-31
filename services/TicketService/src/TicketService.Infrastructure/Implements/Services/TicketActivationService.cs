@@ -56,6 +56,7 @@ public class TicketActivationService : ITicketActivationService
             ticket.Priority is null || !AssignmentRoleHelper.ValidatePrimaryHandlerTier(ticket.Priority.Value, staff.SkillTier))
             return new(false, "The PrimaryHandler is no longer active, available, or tier-qualified.");
 
+        var fromStatus = ticket.Status;  // capture BEFORE state machine changes ticket.Status
         ticket.PrimaryHandlerStaffId = request.PrimaryHandlerStaffId;
         var transition = await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.InProgress, new TransitionContext
         {
@@ -66,7 +67,7 @@ public class TicketActivationService : ITicketActivationService
         if (!transition.IsAllowed)
             return new(false, transition.Reason);
 
-        await ApplySlaAsync(ticket, request.NowUtc, resumesHeldCycle, ct);
+        await ApplySlaAsync(ticket, request.NowUtc, fromStatus, resumesHeldCycle, ct);
         await _activityLogger.LogAsync(ticket.Id, request.ActorUserId, request.ActorRole,
             request.ActorDisplayName, ActivityActionEnum.StatusChanged,
             oldValue: "Scheduled", newValue: nameof(TicketStatusEnum.InProgress),
@@ -91,7 +92,7 @@ public class TicketActivationService : ITicketActivationService
     }
 
     public Task StartCorrectionSlaAsync(Ticket ticket, DateTime nowUtc, CancellationToken ct)
-        => ApplySlaAsync(ticket, nowUtc, resumesHeldCycle: false, ct);
+        => ApplySlaAsync(ticket, nowUtc, ticket.Status, resumesHeldCycle: false, ct);
 
     public async Task StopSlaAsync(Ticket ticket, CancellationToken ct)
     {
@@ -105,10 +106,17 @@ public class TicketActivationService : ITicketActivationService
         _uow.SlaTimers.UpdateAsync(timer);
     }
 
-    private async Task ApplySlaAsync(Ticket ticket, DateTime nowUtc, bool resumesHeldCycle, CancellationToken ct)
+    private async Task ApplySlaAsync(
+        Ticket ticket,
+        DateTime nowUtc,
+        TicketStatusEnum fromStatus,
+        bool resumesHeldCycle,
+        CancellationToken ct)
     {
         var timer = await _uow.SlaTimers.GetAllAsync()
             .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, ct);
+
+        // Urgent: always stop SLA clock
         if (ticket.Priority == TicketPriorityEnum.Urgent)
         {
             if (timer is not null)
@@ -121,6 +129,8 @@ public class TicketActivationService : ITicketActivationService
         }
 
         var priority = ticket.Priority!.Value;
+
+        // Nhánh 1 — Resume a held-and-paused cycle (Pending/Held → InProgress)
         if (resumesHeldCycle &&
             timer?.Status == SlaTimerStatusEnum.Paused && timer.Priority == priority)
         {
@@ -128,6 +138,22 @@ public class TicketActivationService : ITicketActivationService
             return;
         }
 
+        // Nhánh 2 — Post-breach reassignment (ReAssign or already InProgress via correction):
+        // preserve the contractual clock — OriginalDueAt, BreachAt, DueAt must not be reset.
+        if (fromStatus is TicketStatusEnum.ReAssign or TicketStatusEnum.InProgress)
+        {
+            if (timer is null)
+                return;  // no existing timer — nothing to preserve, skip
+            timer.Priority = priority;
+            if (timer.Status != SlaTimerStatusEnum.Breached)
+                timer.Status = SlaTimerStatusEnum.Running;
+            // DueAt, OriginalDueAt, BreachAt, TotalPausedMinutes, PauseEpisodesCount, WarningSentAt
+            // are intentionally left unchanged — SPE O&M v4.0 § Record Control
+            _uow.SlaTimers.UpdateAsync(timer);
+            return;
+        }
+
+        // Nhánh 3 — Fresh activation (Open/Pending → InProgress): full reset or new timer
         var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(nowUtc);
         var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, priority);
         if (timer is null)
