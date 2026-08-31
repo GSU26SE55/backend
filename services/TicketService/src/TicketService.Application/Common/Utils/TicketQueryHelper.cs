@@ -110,6 +110,12 @@ public static class TicketQueryHelper
             return null;
 
         var isStoppedOrTerminal = sla.Status == SlaTimerStatusEnum.Stopped || TicketStatusGroups.Terminal.Contains(ticketStatus);
+        // Stage 1 (Open) response SLA runs 24/7 and never consults the calendar — asking for an
+        // extension there would just count non-working days that had no effect on its DueAt.
+        var isStage1Open = ticketStatus == TicketStatusEnum.Open;
+        (int Minutes, IReadOnlyList<DateOnly> NonWorkingDays) calendarExtension = isStage1Open
+            ? (0, [])
+            : slaCalculator.GetCalendarExtension(sla.StartedAt, sla.DueAt);
         return new SlaTimerDTO
         {
             Id = sla.Id.ToString(),
@@ -125,7 +131,11 @@ public static class TicketQueryHelper
             RemainingPercent = isStoppedOrTerminal ? 0d : ComputeRemainingPercent(slaCalculator, sla, atUtc),
             SlaWorkingDays = slaCalculator.GetSlaWorkingDays(sla.Priority),
             SlaWorkingHours = slaCalculator.GetSlaHours(sla.Priority),
-            RemainingWorkingMinutes = isStoppedOrTerminal ? 0 : ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc)
+            RemainingWorkingMinutes = isStoppedOrTerminal ? 0 : ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc),
+            CalendarExtensionMinutes = calendarExtension.Minutes,
+            CalendarExtensionDays = calendarExtension.NonWorkingDays is null
+                ? []
+                : [.. calendarExtension.NonWorkingDays]
         };
     }
 

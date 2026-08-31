@@ -188,6 +188,26 @@ public class SlaCalculator : ISlaCalculator
         return now >= nextOpeningUtc && IsWorkingTime(now);
     }
 
+    public (int Minutes, IReadOnlyList<DateOnly> NonWorkingDays) GetCalendarExtension(DateTime startedAtUtc, DateTime dueAtUtc)
+    {
+        var start = EnsureUtc(startedAtUtc);
+        var due = EnsureUtc(dueAtUtc);
+        if (_calendarProvider is null || due <= start)
+            return (0, []);
+
+        var firstDate = ToLocal(start).Date;
+        var lastDate = ToLocal(due).Date;
+        var nonWorkingDays = new List<DateOnly>();
+
+        for (var date = firstDate; date <= lastDate; date = date.AddDays(1))
+        {
+            if (_workingDays.Contains(date.DayOfWeek) && _calendarProvider.IsNonWorkingDate(DateOnly.FromDateTime(date)))
+                nonWorkingDays.Add(DateOnly.FromDateTime(date));
+        }
+
+        return (checked(nonWorkingDays.Count * _workingMinutesPerDay), nonWorkingDays);
+    }
+
     private bool IsWorkingLocal(DateTime local) =>
         IsWorkingDate(local.Date)
         && local.TimeOfDay >= _start

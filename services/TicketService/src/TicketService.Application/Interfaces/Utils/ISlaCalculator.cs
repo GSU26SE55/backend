@@ -31,4 +31,12 @@ public interface ISlaCalculator
     bool ShouldSendNextSessionReminder(DateTime warningSentAtUtc, DateTime atUtc);
 
     DateTime CalculateDueDate(DateTime startedAt, TicketPriorityEnum priority);
+
+    /// <summary>
+    /// Số phút làm việc mà lịch nghỉ SLA (<c>SlaNonWorkingPeriod</c>) đã cộng thêm vào
+    /// <paramref name="dueAtUtc"/>, cùng danh sách chính các ngày (local date) bị loại khỏi
+    /// <c>[startedAtUtc, dueAtUtc]</c>. Trả về 0 phút + danh sách rỗng khi không ngày nào
+    /// trong khoảng đó bị lịch loại trừ.
+    /// </summary>
+    (int Minutes, IReadOnlyList<DateOnly> NonWorkingDays) GetCalendarExtension(DateTime startedAtUtc, DateTime dueAtUtc);
 }

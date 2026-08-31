@@ -149,12 +149,12 @@ public class AdminAccountsController : ControllerBase
     /// <returns>Thông tin chi tiết account.</returns>
     /// <response code="200">Lấy chi tiết tài khoản thành công.</response>
     /// <response code="401">Chưa đăng nhập.</response>
-    /// <response code="403">Không có role Admin hoặc Manager.</response>
+    /// <response code="403">Không có role Admin, Manager hoặc Staff.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AccountResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)

@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using SharedContracts.Common.Requests;
 using SharedContracts.Common.Responses;
 using TicketService.Application.CQRS.Command.SLAs;
 using TicketService.Application.CQRS.Query.SLAs;
@@ -32,7 +33,18 @@ public sealed class GetSlaNonWorkingPeriodsQueryHandler
             query = query.Where(x => x.StartDate <= request.To.Value);
 
         var total = await query.CountAsync(cancellationToken);
-        var entities = await query.OrderBy(x => x.StartDate)
+
+        var descending = SortHelper.IsDescending(request.SortDir);
+        // Whitelist switch-case: startDate (default) | endDate | reason | createdAt.
+        var ordered = (request.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "enddate" => descending ? query.OrderByDescending(x => x.EndDate) : query.OrderBy(x => x.EndDate),
+            "reason" => descending ? query.OrderByDescending(x => x.Reason) : query.OrderBy(x => x.Reason),
+            "createdat" => descending ? query.OrderByDescending(x => x.CreatedAt) : query.OrderBy(x => x.CreatedAt),
+            _ => descending ? query.OrderByDescending(x => x.StartDate) : query.OrderBy(x => x.StartDate),
+        };
+
+        var entities = await ordered
             .ThenBy(x => x.EndDate)
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
