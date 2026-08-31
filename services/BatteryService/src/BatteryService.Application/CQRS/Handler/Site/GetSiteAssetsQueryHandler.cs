@@ -80,8 +80,8 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
             .ToListAsync(cancellationToken);
 
         var activeStatuses = new[] { AlertStatusEnum.Open, AlertStatusEnum.Acknowledged };
-        var activeAlertCountByAsset = siteAssetIds.Count == 0
-            ? new Dictionary<Guid, int>()
+        var activeAlertAssetIdSet = siteAssetIds.Count == 0
+            ? new HashSet<Guid>()
             : (await _unitOfWork.Alerts
                 .GetAllAsync()
                 .AsNoTracking()
@@ -90,10 +90,9 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
                     siteAssetIds.Contains(alert.BatteryAssetId.Value) &&
                     !alert.IsDeleted &&
                     activeStatuses.Contains(alert.Status))
-                .GroupBy(alert => alert.BatteryAssetId!.Value)
-                .Select(g => new { AssetId = g.Key, Count = g.Count() })
-                .ToListAsync(cancellationToken))
-                .ToDictionary(x => x.AssetId, x => x.Count);
+                .Select(alert => alert.BatteryAssetId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken)).ToHashSet();
 
         // Join account TRƯỚC khi cắt trang (trước đây join sau `pageQuery`): ToPagedEntityListAsync nhận
         // vào IQueryable ĐÃ chiếu sang DTO rồi mới Skip/Take. Đây là LEFT JOIN theo khoá chính của
@@ -137,7 +136,7 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
                 Status = x.asset.Status,
                 Notes = x.asset.Notes,
                 LastSensorReadingAt = x.asset.LastSensorReadingAt,
-                ActiveAlertCount = activeAlertCountByAsset.GetValueOrDefault(x.asset.Id),
+                ActiveAlertCount = activeAlertAssetIdSet.Contains(x.asset.Id) ? 1 : 0,
                 CascadeRiskScore = x.asset.CascadeRiskScore,
                 CascadeRiskLevel = CascadeRiskDto.ToLevel(x.asset.CascadeRiskScore),
                 CreatedAt = x.asset.CreatedAt

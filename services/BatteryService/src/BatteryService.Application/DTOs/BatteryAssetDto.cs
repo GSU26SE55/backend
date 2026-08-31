@@ -55,7 +55,11 @@ public class BatteryAssetDto
     /// <summary>Timestamp reading gần nhất cho asset.</summary>
     public DateTime? LastSensorReadingAt { get; set; }
 
-    /// <summary>Số alert đang ở trạng thái Open hoặc Acknowledged.</summary>
+    /// <summary>
+    /// 1 nếu asset có alert đang ở trạng thái Open hoặc Acknowledged, ngược lại 0. Cùng logic
+    /// AssetsWithActiveAlerts của SiteDashboardDto — không phải tổng số alert record — để hai
+    /// con số khớp nhau trên UI.
+    /// </summary>
     public int ActiveAlertCount { get; set; }
 
     /// <summary>Điểm rủi ro lan truyền cascade — cùng field với CascadeRiskDto.</summary>
