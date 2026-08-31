@@ -1,12 +1,15 @@
+﻿using BatteryService.Application.Anomaly;
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.CQRS.Handler.Ambient;
 using BatteryService.Application.CQRS.Query.Ambient;
 using BatteryService.Application.Interfaces;
+using Microsoft.Extensions.Options;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using FluentAssertions;
 using MockQueryable.Moq;
 using Moq;
+using SharedContracts.Events;
 using SharedKernels.Interfaces;
 
 namespace BatteryService.UnitTests.Application;
@@ -16,6 +19,10 @@ namespace BatteryService.UnitTests.Application;
 /// </summary>
 public class AmbientHandlersTests
 {
+    /// <summary>Mặc định engine (dedup 30') — ambient dùng chung cấu hình với anomaly battery.</summary>
+    private static IOptions<AnomalyEngineOptions> AmbientEngineOptions()
+        => Options.Create(new AnomalyEngineOptions());
+
     /// <summary>
     /// GH-806 — <paramref name="siteIds"/> là các site CÓ THẬT trong DB giả lập.
     /// Handler ingest giờ kiểm site tồn tại trước khi ghi (site lạ ⇒ 404 thay vì lỗi khoá ngoại 500),
@@ -55,13 +62,34 @@ public class AmbientHandlersTests
         List<AmbientThresholdConfig> thresholds, List<Alert>? existingAlerts = null,
         params Guid[] siteIds)
     {
+        var (uow, alertsAdded, _) = BuildUowWithAlertsAndOutbox(thresholds, existingAlerts, siteIds);
+        return (uow, alertsAdded);
+    }
+
+    /// <summary>
+    /// Alert ambient Critical giờ ghi kèm outbox event khởi tạo AlertTicketSaga, nên mock PHẢI có
+    /// <c>OutboxMessages</c> — thiếu nó thì handler ném NullReference ở đúng nhánh ta muốn kiểm.
+    /// </summary>
+    private static (Mock<IBatteryUnitOfWork> uow, List<Alert> alertsAdded, List<OutboxMessage> outbox)
+        BuildUowWithAlertsAndOutbox(
+            List<AmbientThresholdConfig> thresholds, List<Alert>? existingAlerts = null,
+            params Guid[] siteIds)
+    {
         var uow = BuildUow(thresholds: thresholds, siteIds: siteIds);
         var alertsAdded = new List<Alert>();
         var alertsRepo = new Mock<IGenericRepository<Alert>>();
         alertsRepo.Setup(r => r.GetAllAsync()).Returns((existingAlerts ?? new List<Alert>()).AsQueryable().BuildMock());
         alertsRepo.Setup(r => r.AddAsync(It.IsAny<Alert>())).Callback<Alert>(alertsAdded.Add).Returns(Task.CompletedTask);
         uow.SetupGet(u => u.Alerts).Returns(alertsRepo.Object);
-        return (uow, alertsAdded);
+
+        var outbox = new List<OutboxMessage>();
+        var outboxRepo = new Mock<IGenericRepository<OutboxMessage>>();
+        outboxRepo.Setup(r => r.GetAllAsync()).Returns(new List<OutboxMessage>().AsQueryable().BuildMock());
+        outboxRepo.Setup(r => r.AddAsync(It.IsAny<OutboxMessage>()))
+            .Callback<OutboxMessage>(outbox.Add).Returns(Task.CompletedTask);
+        uow.SetupGet(u => u.OutboxMessages).Returns(outboxRepo.Object);
+
+        return (uow, alertsAdded, outbox);
     }
 
     private static AmbientThresholdConfig Config(Guid siteId, bool enabled = true) => new()
@@ -84,7 +112,7 @@ public class AmbientHandlersTests
     {
         var siteId = Guid.NewGuid();
         var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -106,7 +134,7 @@ public class AmbientHandlersTests
     {
         var siteId = Guid.NewGuid();
         var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -124,7 +152,7 @@ public class AmbientHandlersTests
     {
         var siteId = Guid.NewGuid();
         var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId, enabled: false) });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -139,7 +167,7 @@ public class AmbientHandlersTests
     {
         var otherSite = Guid.NewGuid();
         var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig>(), siteIds: otherSite); // không có config
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
 
         var result = await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -151,8 +179,14 @@ public class AmbientHandlersTests
         uow.Verify(u => u.AmbientReadings.AddAsync(It.IsAny<AmbientReading>()), Times.Once, "reading vẫn được lưu");
     }
 
+    /// <summary>
+    /// Đổi hành vi có chủ đích: trước đây lần đọc thứ hai bị BỎ HẲN, nên bảng alert im lặng suốt
+    /// cửa sổ dedup dù cảm biến vẫn báo vượt ngưỡng. Giờ theo đúng cơ chế của battery — vẫn ghi một
+    /// dòng `Merged` trỏ về alert cha để thấy nhịp phần cứng, nhưng KHÔNG mở alert mới và KHÔNG bắn
+    /// event (một sự cố vẫn chỉ một ticket).
+    /// </summary>
     [Fact]
-    public async Task BatchIngest_ExistingOpenAlert_DedupSkips()
+    public async Task BatchIngest_ExistingOpenAlert_MergesInsteadOfOpeningNewAlert()
     {
         var siteId = Guid.NewGuid();
         var existing = new Alert
@@ -166,24 +200,28 @@ public class AmbientHandlersTests
             Status = AlertStatusEnum.Open,
             DedupWindowEndUtc = DateTime.UtcNow.AddMinutes(50)
         };
-        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) }, new List<Alert> { existing });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+        var (uow, alerts, outbox) = BuildUowWithAlertsAndOutbox(
+            new List<AmbientThresholdConfig> { Config(siteId) }, new List<Alert> { existing }, siteId);
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
             Items = new List<AmbientReadingItem> { new() { SiteId = siteId, Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 50m } }
         }, default);
 
-        alerts.Should().NotContain(a => a.AnomalyType == AnomalyTypeEnum.HighAmbientTemp,
-            "đã có alert Open cùng site+loại trong cửa sổ → dedup skip");
+        var temp = alerts.Where(a => a.AnomalyType == AnomalyTypeEnum.HighAmbientTemp).ToList();
+        temp.Should().ContainSingle("vẫn ghi lại nhịp phần cứng thay vì im lặng");
+        temp[0].Status.Should().Be(AlertStatusEnum.Merged);
+        temp[0].MergedIntoAlertId.Should().Be(existing.Id);
+        outbox.Should().BeEmpty("gộp vào sự cố đang mở thì không được đẻ thêm ticket");
     }
 
     [Fact]
-    public async Task BatchIngest_MultipleReadingsSameSite_SingleAlertPerType()
+    public async Task BatchIngest_MultipleReadingsSameSite_OpensOneAlertAndMergesTheRest()
     {
         var siteId = Guid.NewGuid();
-        var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+        var (uow, alerts, outbox) = BuildUowWithAlertsAndOutbox(new List<AmbientThresholdConfig> { Config(siteId) });
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -194,7 +232,12 @@ public class AmbientHandlersTests
             }
         }, default);
 
-        alerts.Count(a => a.AnomalyType == AnomalyTypeEnum.HighAmbientTemp).Should().Be(1, "dedup trong batch");
+        var temp = alerts.Where(a => a.AnomalyType == AnomalyTypeEnum.HighAmbientTemp).ToList();
+        temp.Should().HaveCount(2, "mỗi lần đọc vượt ngưỡng đều để lại dấu vết");
+        temp.Count(a => a.Status == AlertStatusEnum.Open).Should().Be(1, "chỉ một sự cố được mở");
+        temp.Count(a => a.Status == AlertStatusEnum.Merged).Should().Be(1);
+        outbox.Count(m => m.Type == nameof(BatteryAnomalyDetectedV2Event)).Should().Be(1,
+            "một sự cố chỉ khởi tạo một saga → một ticket");
     }
 
     // ===== Batch ingest =====
@@ -204,7 +247,7 @@ public class AmbientHandlersTests
     {
         var siteId = Guid.NewGuid();
         var uow = BuildUow(siteIds: siteId);
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object);
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
 
         var result = await handler.Handle(new BatchIngestAmbientReadingsCommand
         {

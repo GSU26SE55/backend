@@ -44,6 +44,13 @@ public class BatchIngestAmbientReadingsCommand : IRequest<CommonResponse<int>>, 
                 response.ListErrors.Add(new Errors { Field = $"Items[{i}].Humidity", Detail = "Humidity must be within [0, 100]." });
             if (x.AmbientTemperature < -90 || x.AmbientTemperature > 90)
                 response.ListErrors.Add(new Errors { Field = $"Items[{i}].AmbientTemperature", Detail = "Temperature must be within [-90, 90]." });
+            if (x.GasConcentration < 0 || x.GasConcentration > 100)
+                response.ListErrors.Add(new Errors { Field = $"Items[{i}].GasConcentration", Detail = "GasConcentration must be within [0, 100]." });
+            // AmbientTemperature nới thành nullable để cho phép báo cáo chỉ-có-gas (MQ-2, không
+            // qua SHT31) — nhưng một item không mang metric nào cả thì vô nghĩa, chặn ở đây.
+            if (!x.AmbientTemperature.HasValue && !x.Humidity.HasValue && !x.SolarIrradiance.HasValue
+                && !x.GasConcentration.HasValue && !x.WaterLeakDetected.HasValue)
+                response.ListErrors.Add(new Errors { Field = $"Items[{i}]", Detail = "At least one metric (temperature, humidity, irradiance, gas, water) is required." });
         }
 
         if (response.ListErrors.Count > 0)
@@ -62,12 +69,16 @@ public class AmbientReadingItem
     public Guid SiteId { get; set; }
     /// <summary>Timestamp của reading (UTC).</summary>
     public DateTime Time { get; set; }
-    /// <summary>Nhiệt độ môi trường (°C).</summary>
-    public decimal AmbientTemperature { get; set; }
+    /// <summary>Nhiệt độ môi trường (°C). Nullable — báo cáo chỉ-có-gas không có giá trị này.</summary>
+    public decimal? AmbientTemperature { get; set; }
     /// <summary>Độ ẩm tương đối (%).</summary>
     public decimal? Humidity { get; set; }
     /// <summary>Bức xạ mặt trời (W/m²).</summary>
     public decimal? SolarIrradiance { get; set; }
+    /// <summary>Nồng độ khí gas quy đổi từ ADC MQ-2 (%).</summary>
+    public decimal? GasConcentration { get; set; }
+    /// <summary>true = ướt, false = khô. Nullable — chỉ cảm biến nước mới gửi.</summary>
+    public bool? WaterLeakDetected { get; set; }
     /// <summary>Nguồn dữ liệu (IotSensor | Manual | External).</summary>
     public AmbientReadingSourceEnum Source { get; set; } = AmbientReadingSourceEnum.IotSensor;
     /// <summary>ID thiết bị nguồn (≤ 64 ký tự).</summary>

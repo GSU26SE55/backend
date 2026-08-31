@@ -88,8 +88,12 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
             // ticket pin cùng cabinet.
             SiteId = evt.SiteId,
             EnvironmentalIncidentId = evt.IncidentId,
+            SiteId = evt.SiteId,
             Status = TicketStatusEnum.Open,
-            Origin = TicketOriginEnum.System,
+            // `AutoFromEnvironment`, không phải `System`: `System` còn dùng chung cho cascade risk
+            // và bảo trì định kỳ, nên phân loại nguồn theo nó phải loại trừ hai nhóm kia bằng field
+            // phụ. Origin riêng cho môi trường đọc thẳng một field là xong.
+            Origin = TicketOriginEnum.AutoFromEnvironment,
             ImpactScope = ImpactScopeEnum.Site,
             UrgencyLevel = priority == TicketPriorityEnum.P1Critical ? UrgencyLevelEnum.High : UrgencyLevelEnum.Medium,
             Priority = priority,

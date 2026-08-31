@@ -165,10 +165,15 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("site_id");
 
-                    b.Property<decimal>("AmbientTemperature")
+                    b.Property<decimal?>("AmbientTemperature")
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)")
                         .HasColumnName("ambient_temperature_celsius");
+
+                    b.Property<decimal?>("GasConcentration")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("gas_concentration_percent");
 
                     b.Property<decimal?>("Humidity")
                         .HasPrecision(5, 2)
@@ -190,6 +195,10 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("source_device_id");
+
+                    b.Property<bool?>("WaterLeakDetected")
+                        .HasColumnType("boolean")
+                        .HasColumnName("water_leak_detected");
 
                     b.HasKey("Time", "SiteId");
 
@@ -242,6 +251,16 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)")
                         .HasColumnName("high_ambient_temp_warning");
+
+                    b.Property<decimal?>("HighGasCritical")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("high_gas_critical");
+
+                    b.Property<decimal?>("HighGasWarning")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("high_gas_warning");
 
                     b.Property<decimal?>("HighHumidityCritical")
                         .HasPrecision(5, 2)
@@ -1943,6 +1962,10 @@ namespace BatteryService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TicketId")
+                        .HasDatabaseName("ix_maintenance_cycles_ticket")
+                        .HasFilter("ticket_id IS NOT NULL");
+
                     b.HasIndex("BatteryAssetId", "CycleNo")
                         .IsUnique()
                         .HasDatabaseName("ux_maintenance_cycles_asset_cycle_no")
@@ -1950,10 +1973,6 @@ namespace BatteryService.Infrastructure.Migrations
 
                     b.HasIndex("BatteryAssetId", "DueAtUtc")
                         .HasDatabaseName("ix_maintenance_cycles_asset_due");
-
-                    b.HasIndex("TicketId")
-                        .HasDatabaseName("ix_maintenance_cycles_ticket")
-                        .HasFilter("ticket_id IS NOT NULL");
 
                     b.ToTable("maintenance_cycles", (string)null);
                 });

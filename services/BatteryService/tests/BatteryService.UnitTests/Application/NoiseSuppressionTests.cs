@@ -36,9 +36,9 @@ public class NoiseSuppressionTests
         {
             Id = Guid.NewGuid(),
             BatteryTypeId = BatteryTypeId,
-            VoltageMin = 10,
-            VoltageMax = 14,
-            TemperatureMin = -10,
+            VoltageMin = 14,
+            VoltageMax = 15,
+            TemperatureMin = 45,
             TemperatureMax = 50,
             SocWarningThreshold = 20,
             SocCriticalThreshold = 10,
@@ -66,7 +66,7 @@ public class NoiseSuppressionTests
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: false))
-            .WithSensorReadings(MakeReading(voltage: 9m)); // < VoltageMin → Undervoltage Critical
+            .WithSensorReadings(MakeReading(voltage: 15.5m)); // > VoltageMax (mốc Critical) → Overvoltage Critical
 
         var sut = new AnomalyDetectionService(builder.Build(), Opts());
         var result = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
@@ -81,7 +81,7 @@ public class NoiseSuppressionTests
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: true, count: 3, hours: 1))
-            .WithSensorReadings(MakeReading(voltage: 9m));
+            .WithSensorReadings(MakeReading(voltage: 15.5m));
 
         var sut = new AnomalyDetectionService(builder.Build(), Opts());
         var result = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
@@ -96,14 +96,14 @@ public class NoiseSuppressionTests
         var now = DateTime.UtcNow;
         var prior = new[]
         {
-            new NoiseBreachEvent { Time = now.AddMinutes(-10), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Undervoltage, ThresholdValue = 10, ActualValue = 9, Unit = "V" },
-            new NoiseBreachEvent { Time = now.AddMinutes(-5),  BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Undervoltage, ThresholdValue = 10, ActualValue = 9, Unit = "V" }
+            new NoiseBreachEvent { Time = now.AddMinutes(-10), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Overvoltage, ThresholdValue = 15, ActualValue = 15.5m, Unit = "V" },
+            new NoiseBreachEvent { Time = now.AddMinutes(-5),  BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Overvoltage, ThresholdValue = 15, ActualValue = 15.5m, Unit = "V" }
         };
 
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: true, count: 3, hours: 1))
-            .WithSensorReadings(MakeReading(voltage: 9m))
+            .WithSensorReadings(MakeReading(voltage: 15.5m))
             .WithNoiseBreachEvents(prior);
 
         var sut = new AnomalyDetectionService(builder.Build(), Opts());
@@ -146,7 +146,7 @@ public class NoiseSuppressionTests
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: true, count: 1, hours: 1))
-            .WithSensorReadings(MakeReading(voltage: 9m));
+            .WithSensorReadings(MakeReading(voltage: 15.5m));
 
         var sut = new AnomalyDetectionService(builder.Build(), Opts());
         var result = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
@@ -163,7 +163,7 @@ public class NoiseSuppressionTests
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1))
-            .WithSensorReadings(MakeReading(voltage: 9m));
+            .WithSensorReadings(MakeReading(voltage: 15.5m));
 
         var sut = new AnomalyDetectionService(builder.Build(), Opts());
         var result = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
@@ -188,13 +188,13 @@ public class NoiseSuppressionTests
 
         for (var tick = 1; tick <= 4; tick++)
         {
-            builder.WithSensorReadings(MakeReading(voltage: 9m)); // thay reading mới mỗi tick
+            builder.WithSensorReadings(MakeReading(voltage: 15.5m)); // thay reading mới mỗi tick
             var r = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
             r.AlertsSuppressed.Should().Be(1, $"tick {tick} chưa đủ tần suất");
             r.AlertsCreated.Should().Be(0, $"tick {tick} chưa đủ tần suất");
         }
 
-        builder.WithSensorReadings(MakeReading(voltage: 9m));
+        builder.WithSensorReadings(MakeReading(voltage: 15.5m));
         var fifth = await sut.ScanRecentReadingsAsync(TimeSpan.FromMinutes(5));
 
         fifth.AlertsCreated.Should().Be(1, "tick 5 đạt ngưỡng NoiseSuppressionCount=5");
@@ -209,7 +209,7 @@ public class NoiseSuppressionTests
     {
         // Sprint Bonus NS-10 (#654, N3) — breach ghi theo reading.Time (phục vụ dedup)
         // + copy SourceType từ reading (B9 — phân biệt breach từ BMS hay IoT).
-        var reading = MakeReading(voltage: 9m);
+        var reading = MakeReading(voltage: 15.5m);
         reading.SourceType = SensorReadingSourceTypeEnum.Bms;
 
         var builder = new MockUnitOfWorkBuilder()
@@ -231,7 +231,7 @@ public class NoiseSuppressionTests
     {
         // Sprint Bonus NS-10 (#654, N3) — lookback overlap 2× khiến cùng 1 reading bị scan
         // ở 2 tick liên tiếp → chỉ được 1 breach (dedup theo assetId+anomalyType+reading.Time).
-        var reading = MakeReading(voltage: 9m);
+        var reading = MakeReading(voltage: 15.5m);
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1))
@@ -255,14 +255,14 @@ public class NoiseSuppressionTests
         var now = DateTime.UtcNow;
         var prior = new[]
         {
-            new NoiseBreachEvent { Time = now.AddMinutes(-10), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Undervoltage, ThresholdValue = 10, ActualValue = 9, Unit = "V" },
-            new NoiseBreachEvent { Time = now.AddMinutes(-5),  BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Undervoltage, ThresholdValue = 10, ActualValue = 9, Unit = "V" }
+            new NoiseBreachEvent { Time = now.AddMinutes(-10), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Overvoltage, ThresholdValue = 15, ActualValue = 15.5m, Unit = "V" },
+            new NoiseBreachEvent { Time = now.AddMinutes(-5),  BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Overvoltage, ThresholdValue = 15, ActualValue = 15.5m, Unit = "V" }
         };
 
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: true, count: 3, hours: 1))
-            .WithSensorReadings(MakeReading(voltage: 9m))
+            .WithSensorReadings(MakeReading(voltage: 15.5m))
             .WithNoiseBreachEvents(prior);
 
         var sut = new AnomalyDetectionService(builder.Build(), Opts());
@@ -283,7 +283,7 @@ public class NoiseSuppressionTests
         {
             Time = DateTime.UtcNow.AddMinutes(-10),
             BatteryAssetId = AssetId,
-            AnomalyType = AnomalyTypeEnum.Undervoltage,
+            AnomalyType = AnomalyTypeEnum.Overvoltage,
             ThresholdValue = 10,
             ActualValue = 9,
             Unit = "V"
@@ -291,7 +291,7 @@ public class NoiseSuppressionTests
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: true, count: 5, hours: 1))
-            .WithSensorReadings(MakeReading(voltage: 9m))
+            .WithSensorReadings(MakeReading(voltage: 15.5m))
             .WithNoiseBreachEvents(prior);
 
         var sut = new AnomalyDetectionService(builder.Build(), Opts());
@@ -307,14 +307,14 @@ public class NoiseSuppressionTests
         var now = DateTime.UtcNow;
         var stale = new[]
         {
-            new NoiseBreachEvent { Time = now.AddHours(-3), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Undervoltage, ThresholdValue = 10, ActualValue = 9, Unit = "V" },
-            new NoiseBreachEvent { Time = now.AddHours(-2), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Undervoltage, ThresholdValue = 10, ActualValue = 9, Unit = "V" }
+            new NoiseBreachEvent { Time = now.AddHours(-3), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Overvoltage, ThresholdValue = 15, ActualValue = 15.5m, Unit = "V" },
+            new NoiseBreachEvent { Time = now.AddHours(-2), BatteryAssetId = AssetId, AnomalyType = AnomalyTypeEnum.Overvoltage, ThresholdValue = 15, ActualValue = 15.5m, Unit = "V" }
         };
 
         var builder = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold(noise: true, count: 3, hours: 1))
-            .WithSensorReadings(MakeReading(voltage: 9m))
+            .WithSensorReadings(MakeReading(voltage: 15.5m))
             .WithNoiseBreachEvents(stale);
 
         var sut = new AnomalyDetectionService(builder.Build(), Opts());

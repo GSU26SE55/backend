@@ -14,6 +14,12 @@ public class TicketAutoCreateFromAlertCommand : IRequest<TicketActionResponse>, 
     public Guid OriginAlertId { get; set; }
     public string AnomalyCategory { get; set; } = string.Empty;
     public Guid BatteryAssetId { get; set; }
+
+    /// <summary>
+    /// Site của alert — bắt buộc với alert cấp site (nhiệt độ / độ ẩm / gas của tủ), nơi
+    /// <see cref="BatteryAssetId"/> là <c>Guid.Empty</c> nên không suy ra site từ pin được.
+    /// </summary>
+    public Guid? SiteId { get; set; }
     /// <summary>
     /// Customer id.
     /// </summary>

@@ -1,4 +1,4 @@
-using BatteryService.Application.Anomaly;
+﻿using BatteryService.Application.Anomaly;
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.CQRS.Command.EnvironmentalIncident;
 using BatteryService.Application.CQRS.Handler.Ambient;
@@ -72,7 +72,7 @@ public class Sprint5BAmbientFlowIntegrationTests
         await using var db = CreateDbContext();
         await SeedSiteAsync(db);
 
-        var ingest = new BatchIngestAmbientReadingsCommandHandler(new UnitOfWork(db));
+        var ingest = new BatchIngestAmbientReadingsCommandHandler(new UnitOfWork(db), Microsoft.Extensions.Options.Options.Create(new BatteryService.Application.Anomaly.AnomalyEngineOptions()));
         var ingestTime = DateTime.UtcNow;
         var ingestResult = await ingest.Handle(new BatchIngestAmbientReadingsCommand
         {

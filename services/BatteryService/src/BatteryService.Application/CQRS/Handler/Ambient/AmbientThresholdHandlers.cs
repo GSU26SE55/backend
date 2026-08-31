@@ -50,6 +50,8 @@ public class UpsertAmbientThresholdConfigCommandHandler
         entity.HighAmbientTempCritical = cmd.HighAmbientTempCritical;
         entity.HighHumidityWarning = cmd.HighHumidityWarning;
         entity.HighHumidityCritical = cmd.HighHumidityCritical;
+        entity.HighGasWarning = cmd.HighGasWarning;
+        entity.HighGasCritical = cmd.HighGasCritical;
         entity.ComboTempThreshold = cmd.ComboTempThreshold;
         entity.ComboHumidityThreshold = cmd.ComboHumidityThreshold;
         entity.Enabled = cmd.Enabled;
@@ -63,6 +65,8 @@ public class UpsertAmbientThresholdConfigCommandHandler
         HighAmbientTempCritical = c.HighAmbientTempCritical,
         HighHumidityWarning = c.HighHumidityWarning,
         HighHumidityCritical = c.HighHumidityCritical,
+        HighGasWarning = c.HighGasWarning,
+        HighGasCritical = c.HighGasCritical,
         ComboTempThreshold = c.ComboTempThreshold,
         ComboHumidityThreshold = c.ComboHumidityThreshold,
         Enabled = c.Enabled,

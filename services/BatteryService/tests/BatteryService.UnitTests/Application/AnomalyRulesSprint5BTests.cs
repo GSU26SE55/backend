@@ -32,11 +32,26 @@ public class AnomalyRulesSprint5BTests
             a.Unit == "mΩ");
     }
 
+    // Đúng BẰNG ngưỡng là đã vi phạm — mọi so sánh ngưỡng trong `Detect` đều bao gồm mốc.
     [Fact]
-    public void Detect_InternalResistance_AtThreshold_ShouldNotRaise()
+    public void Detect_InternalResistance_AtThreshold_ShouldRaise()
     {
         var reading = BaseReading();
         reading.InternalResistanceMilliohm = 40m;
+
+        var threshold = BaseThreshold();
+        threshold.InternalResistanceMaxMilliohm = 40m;
+
+        var result = AnomalyRules.Detect(reading, threshold);
+
+        result.Should().Contain(a => a.Type == AnomalyTypeEnum.HighInternalResistance);
+    }
+
+    [Fact]
+    public void Detect_InternalResistance_BelowThreshold_ShouldNotRaise()
+    {
+        var reading = BaseReading();
+        reading.InternalResistanceMilliohm = 39.99m;
 
         var threshold = BaseThreshold();
         threshold.InternalResistanceMaxMilliohm = 40m;
@@ -225,7 +240,7 @@ public class AnomalyRulesSprint5BTests
         VoltageMin = 2.5m,
         VoltageMax = 4.2m,
         TemperatureMax = 60m,
-        TemperatureMin = -10m,
+        TemperatureMin = 45m,
         SocWarningThreshold = 20m,
         SocCriticalThreshold = 10m,
         EffectiveFromUtc = DateTime.UtcNow,

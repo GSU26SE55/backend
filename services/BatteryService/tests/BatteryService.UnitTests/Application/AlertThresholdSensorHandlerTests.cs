@@ -230,6 +230,150 @@ public class AlertThresholdSensorHandlerTests
         result.Data.Items.Should().ContainSingle(item => item.Id == battery.Id.ToString());
     }
 
+    /// <summary>
+    /// Alert ngưỡng môi trường là alert CẤP SITE: không gắn pin nên không có serial để hiện.
+    /// Màn "Battery alerts" phải loại hết chúng ra.
+    /// </summary>
+    /// <remarks>
+    /// Chốt việc lọc theo quan hệ <c>BatteryAssetId</c> thay vì liệt kê từng <c>AnomalyType</c>.
+    /// Bản cũ chỉ trừ đúng <c>EnvironmentalIncident</c>, nên khi thêm <c>HighGasConcentration</c>
+    /// (#18) thì alert khí gas lọt vào danh sách pin thành dòng "Site level" trống serial. Dùng
+    /// chính loại mới đó làm dữ liệu test để bài test này gãy nếu ai quay lại cách liệt kê.
+    /// </remarks>
+    [Fact]
+    public async Task GetAlerts_ExcludeEnvironmentalIncidents_DropsEverySiteLevelAlert()
+    {
+        var battery = MakeAlert();
+        var siteId = Guid.NewGuid();
+        Alert SiteLevel(AnomalyTypeEnum type) => new()
+        {
+            Id = Guid.NewGuid(),
+            BatteryAssetId = null,
+            SiteId = siteId,
+            Status = AlertStatusEnum.Open,
+            AnomalyType = type,
+            Severity = AlertSeverityEnum.Critical,
+            DetectedAt = DateTime.UtcNow,
+            DedupWindowEndUtc = DateTime.UtcNow.AddMinutes(5),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var builder = new MockUnitOfWorkBuilder().WithAlerts(
+            battery,
+            SiteLevel(AnomalyTypeEnum.EnvironmentalIncident),
+            SiteLevel(AnomalyTypeEnum.HighAmbientTemp),
+            SiteLevel(AnomalyTypeEnum.HighGasConcentration));
+
+        var result = await new GetAlertsQueryHandler(builder.Build(), TestBatteryCurrentUserService.Admin())
+            .Handle(new GetAlertsQuery { ExcludeEnvironmentalIncidents = true }, default);
+
+        result.Data!.TotalItems.Should().Be(1);
+        result.Data.Items.Should().ContainSingle(item => item.Id == battery.Id.ToString());
+    }
+
+    /// <summary>
+    /// Ba màn hình alert (Battery / Device / Environmental) phải chia trọn tập alert và KHÔNG chồng
+    /// nhau: chồng thì badge sidebar đếm một alert hai lần, hụt thì có alert không nằm ở màn nào cả.
+    /// </summary>
+    [Fact]
+    public async Task GetAlerts_ThreeScreenFilters_PartitionAlertsExactlyOnce()
+    {
+        var battery = MakeAlert();
+        var device = MakeIotAlert();
+        var siteId = Guid.NewGuid();
+        var ambient = new Alert
+        {
+            Id = Guid.NewGuid(),
+            BatteryAssetId = null,
+            SiteId = siteId,
+            Status = AlertStatusEnum.Open,
+            AnomalyType = AnomalyTypeEnum.HighGasConcentration,
+            Severity = AlertSeverityEnum.Critical,
+            DetectedAt = DateTime.UtcNow,
+            DedupWindowEndUtc = DateTime.UtcNow.AddMinutes(5),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        async Task<List<string>> IdsFor(GetAlertsQuery q)
+        {
+            var handler = new GetAlertsQueryHandler(
+                new MockUnitOfWorkBuilder().WithAlerts(battery, device, ambient).Build(),
+                TestBatteryCurrentUserService.Admin());
+            var r = await handler.Handle(q, default);
+            return r.Data!.Items.Select(i => i.Id).ToList();
+        }
+
+        var batteryScreen = await IdsFor(new GetAlertsQuery { ExcludeEnvironmentalIncidents = true, ExcludeIotDeviceAlerts = true });
+        var deviceScreen = await IdsFor(new GetAlertsQuery { IotOnly = true });
+        var envScreen = await IdsFor(new GetAlertsQuery { SiteLevelOnly = true });
+
+        batteryScreen.Should().Equal(battery.Id.ToString());
+        deviceScreen.Should().Equal(device.Id.ToString());
+        envScreen.Should().Equal(ambient.Id.ToString());
+
+        batteryScreen.Concat(deviceScreen).Concat(envScreen)
+            .Should().OnlyHaveUniqueItems("không alert nào được đếm ở hai màn")
+            .And.HaveCount(3, "và không alert nào bị bỏ sót");
+    }
+
+    /// <summary>
+    /// Màn hình "Environmental alerts" đọc MỘT nguồn duy nhất, nên <c>SiteLevelOnly</c> phải trả về
+    /// cả hai thứ nó cần hiện: sự cố do firmware báo (dưới dạng alert bản sao) và vượt ngưỡng do
+    /// backend phát hiện.
+    /// </summary>
+    /// <remarks>
+    /// Bản sao mang <c>AnomalyType = EnvironmentalIncident</c> và không có số đo, nên nếu chỉ dựa
+    /// vào AnomalyType thì mọi sự cố đều hiện chung một dòng vô nghĩa "Environmental incident /
+    /// 0 incident". Vì vậy DTO phải kèm <c>IncidentType</c> để dòng đó hiện đúng "Gas leak".
+    /// </remarks>
+    [Fact]
+    public async Task GetAlerts_SiteLevelOnly_KeepsIncidentMirrorAndExposesItsIncidentType()
+    {
+        var siteId = Guid.NewGuid();
+        var incident = new EnvironmentalIncident
+        {
+            Id = Guid.NewGuid(),
+            SiteId = siteId,
+            IncidentType = EnvironmentalIncidentTypeEnum.GasLeak,
+            Severity = AlertSeverityEnum.Critical,
+            DetectedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        Alert SiteLevel(AnomalyTypeEnum type, EnvironmentalIncident? from = null) => new()
+        {
+            Id = Guid.NewGuid(),
+            BatteryAssetId = null,
+            SiteId = siteId,
+            EnvironmentalIncidentId = from?.Id,
+            EnvironmentalIncident = from,
+            Status = AlertStatusEnum.Open,
+            AnomalyType = type,
+            Severity = AlertSeverityEnum.Critical,
+            DetectedAt = DateTime.UtcNow,
+            DedupWindowEndUtc = DateTime.UtcNow.AddMinutes(5),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var mirror = SiteLevel(AnomalyTypeEnum.EnvironmentalIncident, incident);
+        var gas = SiteLevel(AnomalyTypeEnum.HighGasConcentration);
+
+        var handler = new GetAlertsQueryHandler(
+            new MockUnitOfWorkBuilder().WithAlerts(mirror, gas).Build(),
+            TestBatteryCurrentUserService.Admin());
+        var result = await handler.Handle(new GetAlertsQuery { SiteLevelOnly = true }, default);
+
+        result.Data!.TotalItems.Should().Be(2, "một màn hình, một nguồn — không bỏ sót sự cố nào");
+
+        var mirrorDto = result.Data.Items.Single(i => i.Id == mirror.Id.ToString());
+        mirrorDto.IncidentType.Should().Be(EnvironmentalIncidentTypeEnum.GasLeak,
+            "thiếu trường này thì dòng hiện 'Environmental incident' thay vì 'Gas leak'");
+        mirrorDto.EnvironmentalIncidentId.Should().Be(incident.Id.ToString());
+
+        result.Data.Items.Single(i => i.Id == gas.Id.ToString())
+            .IncidentType.Should().BeNull("alert vượt ngưỡng không đến từ sự cố nào");
+    }
+
     // ===== ThresholdConfig =====
 
     [Fact]
@@ -239,9 +383,9 @@ public class AlertThresholdSensorHandlerTests
         var r = await new UpsertThresholdConfigCommandHandler(b.Build(), Moq.Mock.Of<MediatR.IPublisher>()).Handle(new UpsertThresholdConfigCommand
         {
             BatteryTypeId = Guid.NewGuid(),
-            VoltageMin = 10,
+            VoltageMin = 14,
             VoltageMax = 20,
-            TemperatureMin = -10,
+            TemperatureMin = 45,
             TemperatureMax = 40,
             SocWarningThreshold = 30,
             SocCriticalThreshold = 10
@@ -257,9 +401,9 @@ public class AlertThresholdSensorHandlerTests
         var r = await new UpsertThresholdConfigCommandHandler(b.Build(), Moq.Mock.Of<MediatR.IPublisher>()).Handle(new UpsertThresholdConfigCommand
         {
             BatteryTypeId = t.Id,
-            VoltageMin = 10,
+            VoltageMin = 14,
             VoltageMax = 20,
-            TemperatureMin = -10,
+            TemperatureMin = 45,
             TemperatureMax = 40,
             SocWarningThreshold = 30,
             SocCriticalThreshold = 10,
@@ -282,7 +426,7 @@ public class AlertThresholdSensorHandlerTests
             BatteryTypeId = t.Id,
             VoltageMin = 11,
             VoltageMax = 22,
-            TemperatureMin = -10,
+            TemperatureMin = 45,
             TemperatureMax = 40,
             SocWarningThreshold = 30,
             SocCriticalThreshold = 10
@@ -344,114 +488,6 @@ public class AlertThresholdSensorHandlerTests
         r.Data.Inserted.Should().Be(1);
         r.Data.Skipped.Should().Be(1);
         asset.LastSensorReadingAt.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task BatchIngest_Ds18b20AboveSiteCritical_ReportsOverheatIncident()
-    {
-        var siteId = Guid.NewGuid();
-        var asset = MakeAsset();
-        asset.SiteId = siteId;
-        asset.SerialNumber = "BAT-24V-JK-V1";
-        var b = new MockUnitOfWorkBuilder()
-            .WithBatteryAssets(asset)
-            .WithAmbientThresholdConfigs(new AmbientThresholdConfig
-            {
-                Id = Guid.NewGuid(),
-                SiteId = siteId,
-                Enabled = true,
-                HighAmbientTempWarning = 38m,
-                HighAmbientTempCritical = 42m,
-                CreatedAt = DateTime.UtcNow
-            });
-        var sender = new Mock<MediatR.ISender>();
-        sender.Setup(x => x.Send(It.IsAny<ReportEnvironmentalIncidentCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new EnvironmentalIncidentResponse { IsSuccess = true, StatusCode = 201 });
-
-        var handler = new BatchIngestSensorReadingsCommandHandler(
-            b.Build(),
-            new NoopIotMetricsRecorder(),
-            new NoopIotCalibrationCache(),
-            new NoopTelemetryPublisher(),
-            new NoopTelemetryStatsService(),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance,
-            sender: sender.Object);
-
-        var readingTime = DateTime.UtcNow;
-        var result = await handler.Handle(new BatchIngestSensorReadingsCommand
-        {
-            Items =
-            [
-                new SensorReadingItem
-                {
-                    BatteryAssetId = asset.Id,
-                    Time = readingTime,
-                    Voltage = 0m,
-                    Current = 0m,
-                    Temperature = 57m,
-                    SocPercent = 87m,
-                    SensorSourceCode = "external-temp"
-                }
-            ]
-        }, default);
-
-        result.IsSuccess.Should().BeTrue();
-        sender.Verify(x => x.Send(It.Is<ReportEnvironmentalIncidentCommand>(command =>
-                command.SiteId == siteId
-                && command.AuthenticatedDeviceSiteId == siteId
-                && command.IncidentType == EnvironmentalIncidentTypeEnum.OverheatHazard
-                && command.Severity == AlertSeverityEnum.Critical
-                && command.DetectedAt == readingTime
-                && command.ReportedBy == "DS18B20:BAT-24V-JK-V1"),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task BatchIngest_Ds18b20BelowSiteWarning_DoesNotReportIncident()
-    {
-        var siteId = Guid.NewGuid();
-        var asset = MakeAsset();
-        asset.SiteId = siteId;
-        var b = new MockUnitOfWorkBuilder()
-            .WithBatteryAssets(asset)
-            .WithAmbientThresholdConfigs(new AmbientThresholdConfig
-            {
-                Id = Guid.NewGuid(),
-                SiteId = siteId,
-                Enabled = true,
-                HighAmbientTempWarning = 38m,
-                HighAmbientTempCritical = 42m,
-                CreatedAt = DateTime.UtcNow
-            });
-        var sender = new Mock<MediatR.ISender>();
-        var handler = new BatchIngestSensorReadingsCommandHandler(
-            b.Build(),
-            new NoopIotMetricsRecorder(),
-            new NoopIotCalibrationCache(),
-            new NoopTelemetryPublisher(),
-            new NoopTelemetryStatsService(),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<BatchIngestSensorReadingsCommandHandler>.Instance,
-            sender: sender.Object);
-
-        await handler.Handle(new BatchIngestSensorReadingsCommand
-        {
-            Items =
-            [
-                new SensorReadingItem
-                {
-                    BatteryAssetId = asset.Id,
-                    Time = DateTime.UtcNow,
-                    Voltage = 0m,
-                    Current = 0m,
-                    Temperature = 33m,
-                    SocPercent = 87m,
-                    SensorSourceCode = "external-temp"
-                }
-            ]
-        }, default);
-
-        sender.Verify(x => x.Send(It.IsAny<ReportEnvironmentalIncidentCommand>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     [Fact]

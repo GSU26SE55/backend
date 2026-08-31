@@ -75,6 +75,7 @@ public static class TicketQueryHelper
             EnvironmentalIncidentId = t.EnvironmentalIncidentId.HasValue
                 ? t.EnvironmentalIncidentId.Value.ToString()
                 : null,
+            SiteId = t.SiteId.HasValue ? t.SiteId.Value.ToString() : null,
             ScheduledStartAtUtc = t.ScheduledStartAtUtc,
             ScheduleVersion = t.ScheduleVersion,
             PeriodicMaintenanceDueAtUtc = t.PeriodicMaintenanceDueAtUtc,
@@ -269,18 +270,28 @@ public static class TicketQueryHelper
         TicketSourceFilterEnum.Customer => query.Where(t =>
             t.Origin == TicketOriginEnum.ManualByCustomer),
 
-        // AI dự đoán: alert bất thường do AI module chấm, hoặc điểm cascade risk cao
-        // (System nhưng không phải sự cố môi trường / bảo trì định kỳ).
+        // AI dự đoán: alert bất thường của MỘT viên pin do AI module chấm, hoặc điểm cascade
+        // risk cao (System nhưng không phải bảo trì định kỳ).
+        //
+        // Không còn phải loại trừ `ImpactScope == Site` ở đây: sự cố môi trường nay mang
+        // `AutoFromEnvironment` chứ không dùng ké `AutoFromAlert` nữa.
         TicketSourceFilterEnum.AiPredicted => query.Where(t =>
             t.Origin == TicketOriginEnum.AutoFromAlert
             || (t.Origin == TicketOriginEnum.System
+                // Dòng CŨ chưa qua backfill vẫn là `System` + có IncidentId — vẫn phải loại,
+                // cùng lưới an toàn với nhánh Environmental ngay dưới.
                 && t.EnvironmentalIncidentId == null
                 && t.PeriodicMaintenanceDueAtUtc == null)),
 
-        // Xét trước Origin: ticket sự cố môi trường luôn có IncidentId, và đây là dấu hiệu
-        // duy nhất tách nó khỏi luồng System còn lại.
+        // Sự cố môi trường — đọc thẳng origin. Hai đường (thiết bị tự báo qua
+        // EnvironmentalIncident, và backend chấm số đo ambient) nay cùng một origin.
+        //
+        // `EnvironmentalIncidentId != null` giữ lại cho DÒNG CŨ: ticket tạo trước khi có
+        // `AutoFromEnvironment` vẫn mang `System`, migration backfill lo phần còn lại nhưng
+        // điều kiện này là lưới an toàn nếu backfill chưa chạy.
         TicketSourceFilterEnum.Environmental => query.Where(t =>
-            t.EnvironmentalIncidentId != null),
+            t.Origin == TicketOriginEnum.AutoFromEnvironment
+            || t.EnvironmentalIncidentId != null),
 
         TicketSourceFilterEnum.PeriodicMaintenance => query.Where(t =>
             t.PeriodicMaintenanceDueAtUtc != null),

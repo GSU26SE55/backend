@@ -64,7 +64,7 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
             BatteryAssetId = @event.BatteryAssetId,
             CustomerId = @event.CustomerId,
             AnomalyCategory = MapAnomalyTypeToString(@event.AnomalyType),
-            Title = $"[Auto] {@event.AssetSerialNumber} - {MapAnomalyTypeToTitle(@event.AnomalyType)}",
+            Title = BuildTitle(@event.AnomalyType, @event.AssetSerialNumber),
             Description = $"Battery anomaly detected at {@event.DetectedAt}. Value: {@event.ActualValue} {@event.Unit}. Threshold: {@event.ThresholdValue} {@event.Unit}."
         };
 
@@ -77,8 +77,36 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
         {
             1 => "Overheat",
             8 => "SohDegradation",
+            // Nhóm môi trường phải map đúng tên, nếu không rơi vào "GenericAnomaly" và
+            // `IsEnvironmentalAnomaly` bên handler không nhận ra → ticket mất origin môi trường.
+            9 => "HighAmbientTemp",
+            10 => "HighHumidity",
+            11 => "HighTempHumidityCombo",
+            14 => "EnvironmentalIncident",
+            18 => "HighGasConcentration",
             _ => "GenericAnomaly"
         };
+    }
+
+    /// <summary>
+    /// Sự cố MÔI TRƯỜNG của site — cùng danh sách với `SendCreateTicketActivity.IsEnvironmental`
+    /// và `TicketAutoCreateFromAlertCommandHandler.IsEnvironmentalAnomaly`.
+    /// </summary>
+    private static bool IsEnvironmental(int anomalyType) => anomalyType is 9 or 10 or 11 or 14 or 18;
+
+    /// <summary>
+    /// Ticket môi trường KHÔNG đeo mác <c>[Auto]</c> và không lấy khuôn "{serial} - {lỗi}" của
+    /// pin — với alert cấp site thì <c>AssetSerialNumber</c> chứa TÊN SITE, nên câu phải đọc như
+    /// một sự cố của site. Cùng khuôn với đường saga (`SendCreateTicketActivity.BuildTitle`);
+    /// đây là đường V1, chỉ chạy khi tắt cờ saga, nhưng để lệch thì hai đường đẻ ra hai giọng.
+    /// </summary>
+    private static string BuildTitle(int anomalyType, string? assetOrSiteName)
+    {
+        var name = string.IsNullOrWhiteSpace(assetOrSiteName) ? "Battery" : assetOrSiteName;
+        var what = MapAnomalyTypeToTitle(anomalyType);
+        return IsEnvironmental(anomalyType)
+            ? $"Environmental incident at {name} - {what}"
+            : $"[Auto] {name} - {what}";
     }
 
     private static string MapAnomalyTypeToTitle(int anomalyType)
@@ -93,6 +121,11 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
             6 => "Abnormal Charging",
             7 => "Device Offline",
             8 => "SOH Degradation Alert",
+            9 => "High Ambient Temperature",
+            10 => "High Humidity",
+            11 => "High Temperature + Humidity",
+            14 => "Environmental Incident",
+            18 => "High Gas Concentration",
             _ => "Critical Battery Anomaly"
         };
     }
