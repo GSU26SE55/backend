@@ -55,6 +55,15 @@ public class BatteryAssetDto
     /// <summary>Timestamp reading gần nhất cho asset.</summary>
     public DateTime? LastSensorReadingAt { get; set; }
 
+    /// <summary>Số alert đang ở trạng thái Open hoặc Acknowledged.</summary>
+    public int ActiveAlertCount { get; set; }
+
+    /// <summary>Điểm rủi ro lan truyền cascade — cùng field với CascadeRiskDto.</summary>
+    public decimal CascadeRiskScore { get; set; }
+
+    /// <summary>Mức rủi ro suy ra từ CascadeRiskScore (CascadeRiskDto.ToLevel).</summary>
+    public CascadeRiskLevel CascadeRiskLevel { get; set; }
+
     /// <summary>Lần bảo trì định kỳ gần nhất đã hoàn tất. Null = chưa lần nào.</summary>
     public DateTime? LastMaintenanceAtUtc { get; set; }
 
