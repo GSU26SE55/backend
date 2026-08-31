@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Validation;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -9,10 +9,6 @@ namespace AuthService.Application.CQRS.Command.Account;
 
 public class ChangeEmailCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
 {
-    private static readonly Regex EmailRegex = new(
-        @"^[^\s@]+@[^\s@]+\.[^\s@]+$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
     [JsonIgnore]
     public Guid AccountId { get; set; }
     public string NewEmail { get; set; } = string.Empty;
@@ -25,12 +21,7 @@ public class ChangeEmailCommand : IRequest<AccountActionResponse>, IValidatable<
         if (AccountId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "AccountId", Detail = "Invalid AccountId." });
 
-        if (string.IsNullOrWhiteSpace(NewEmail))
-            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "New email is required." });
-        else if (NewEmail.Trim().Length > 256)
-            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "Email must not exceed 256 characters." });
-        else if (!EmailRegex.IsMatch(NewEmail.Trim()))
-            response.ListErrors.Add(new Errors { Field = "NewEmail", Detail = "Invalid email format." });
+        AccountFieldPolicy.AddEmailErrors(response.ListErrors, NewEmail, "NewEmail");
 
         if (string.IsNullOrWhiteSpace(CurrentPassword))
             response.ListErrors.Add(new Errors { Field = "CurrentPassword", Detail = "Current password is required." });

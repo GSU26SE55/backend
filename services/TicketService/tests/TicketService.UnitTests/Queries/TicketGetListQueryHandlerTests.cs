@@ -125,6 +125,52 @@ public class TicketGetListQueryHandlerTests
         result.Data!.Items.Should().ContainSingle().Which.Code.Should().Be("PENDING");
     }
 
+    /// <summary>
+    /// Màn so sánh trước khi gộp ticket cần MỌI trạng thái trong một lượt gọi: ticket do AI gợi ý
+    /// là trùng lặp thường vẫn đang Open chờ triage. Trước khi có cờ này FE phải gọi endpoint hai
+    /// lần rồi tự nối kết quả, khiến phân trang và sắp xếp sai vì mỗi lượt lấy riêng một trang.
+    /// </summary>
+    [Fact]
+    public async Task Handle_ManagerWithIncludeOpen_IncludesOpenTickets()
+    {
+        _mockCurrentUser.Setup(x => x.Role).Returns("Manager");
+        SetupMock([
+            MakeTicket(TicketStatusEnum.Open, code: "OPEN"),
+            MakeTicket(TicketStatusEnum.Pending, code: "PENDING")
+        ]);
+
+        var result = await _handler.Handle(
+            new TicketGetListQuery { PageNumber = 1, PageSize = 10, IncludeOpen = true }, default);
+
+        result.Data!.Items.Select(ticket => ticket.Code)
+            .Should().BeEquivalentTo("OPEN", "PENDING");
+    }
+
+    /// <summary>
+    /// Lọc Status tường minh luôn thắng IncludeOpen — cờ này chỉ bỏ bộ lọc ẩn Open MẶC ĐỊNH,
+    /// nó không được phép nới rộng một truy vấn mà người dùng đã thu hẹp có chủ đích.
+    /// </summary>
+    [Fact]
+    public async Task Handle_IncludeOpenWithExplicitStatus_StatusFilterWins()
+    {
+        _mockCurrentUser.Setup(x => x.Role).Returns("Manager");
+        SetupMock([
+            MakeTicket(TicketStatusEnum.Open, code: "OPEN"),
+            MakeTicket(TicketStatusEnum.Pending, code: "PENDING")
+        ]);
+
+        var result = await _handler.Handle(
+            new TicketGetListQuery
+            {
+                PageNumber = 1,
+                PageSize = 10,
+                IncludeOpen = true,
+                Status = TicketStatusEnum.Pending
+            }, default);
+
+        result.Data!.Items.Should().ContainSingle().Which.Code.Should().Be("PENDING");
+    }
+
     [Fact]
     public async Task Handle_FilterByKeyword_MatchesTitleCaseInsensitive()
     {
@@ -193,8 +239,9 @@ public class TicketGetListQueryHandlerTests
         aiAlert.Origin = TicketOriginEnum.AutoFromAlert;
         var aiCascade = MakeTicket(code: "AI-CASCADE");
         aiCascade.Origin = TicketOriginEnum.System;
+        // Ticket môi trường nay mang origin RIÊNG — không còn dùng ké System/AutoFromAlert.
         var environmental = MakeTicket(code: "ENVIRONMENTAL");
-        environmental.Origin = TicketOriginEnum.System;
+        environmental.Origin = TicketOriginEnum.AutoFromEnvironment;
         environmental.EnvironmentalIncidentId = Guid.NewGuid();
         var periodic = MakeTicket(code: "PERIODIC");
         periodic.Origin = TicketOriginEnum.System;

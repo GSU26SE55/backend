@@ -76,20 +76,20 @@ public class ManagerQueueQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_OrdersByPriorityAscending_P1First()
+    public async Task Handle_OrdersByCreatedAtDescending()
     {
         var now = DateTime.UtcNow;
         SetupMock([
-            MakeTicket(priority: TicketPriorityEnum.P3Normal, code: "P3", createdAt: now),
-            MakeTicket(priority: TicketPriorityEnum.P1Critical, code: "P1", createdAt: now),
-            MakeTicket(priority: TicketPriorityEnum.P2High, code: "P2", createdAt: now)
+            MakeTicket(code: "T1", createdAt: now.AddMinutes(-10)),
+            MakeTicket(code: "T3", createdAt: now),
+            MakeTicket(code: "T2", createdAt: now.AddMinutes(-5))
         ]);
 
         var result = await _handler.Handle(new ManagerQueueQuery { PageNumber = 1, PageSize = 10 }, default);
 
-        result.Data!.Items[0].Code.Should().Be("P1");
-        result.Data.Items[1].Code.Should().Be("P2");
-        result.Data.Items[2].Code.Should().Be("P3");
+        result.Data!.Items[0].Code.Should().Be("T3");
+        result.Data.Items[1].Code.Should().Be("T2");
+        result.Data.Items[2].Code.Should().Be("T1");
     }
 
     [Fact]

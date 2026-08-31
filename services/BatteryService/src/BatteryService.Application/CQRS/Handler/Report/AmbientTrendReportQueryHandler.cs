@@ -29,9 +29,17 @@ public class AmbientTrendReportQueryHandler
             .Select(g => new AmbientTrendPoint
             {
                 Date = g.Key,
-                AvgTemp = Math.Round(g.Average(x => x.AmbientTemperature), 2),
-                MaxTemp = g.Max(x => x.AmbientTemperature),
-                MinTemp = g.Min(x => x.AmbientTemperature),
+                // AmbientTemperature nullable từ khi có báo cáo chỉ-có-gas (MQ-2, không qua SHT31)
+                // — lọc HasValue trước khi Avg/Max/Min, giống HumidityAvg/IrradianceAvg bên dưới.
+                AvgTemp = g.Any(x => x.AmbientTemperature.HasValue)
+                    ? Math.Round(g.Where(x => x.AmbientTemperature.HasValue).Average(x => x.AmbientTemperature!.Value), 2)
+                    : 0m,
+                MaxTemp = g.Any(x => x.AmbientTemperature.HasValue)
+                    ? g.Where(x => x.AmbientTemperature.HasValue).Max(x => x.AmbientTemperature!.Value)
+                    : 0m,
+                MinTemp = g.Any(x => x.AmbientTemperature.HasValue)
+                    ? g.Where(x => x.AmbientTemperature.HasValue).Min(x => x.AmbientTemperature!.Value)
+                    : 0m,
                 HumidityAvg = g.Any(x => x.Humidity.HasValue)
                     ? Math.Round(g.Where(x => x.Humidity.HasValue).Average(x => x.Humidity!.Value), 2)
                     : null,

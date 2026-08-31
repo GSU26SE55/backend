@@ -8,6 +8,7 @@ using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.BackgroundJobs;
@@ -34,7 +35,8 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
             {
                 var ticket = await _uow.Tickets.GetAllAsync()
                     .FirstOrDefaultAsync(x => x.Id == context.Message.TicketId && !x.IsDeleted, ct);
-                if (ticket is null || ticket.Status != TicketStatusEnum.InProgress ||
+                if (ticket is null ||
+                    (ticket.Status != TicketStatusEnum.InProgress && ticket.Status != TicketStatusEnum.Open) ||
                     ticket.Priority is null or TicketPriorityEnum.Urgent ||
                     ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate)
                     return;
@@ -55,19 +57,24 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
                 ticket.Priority = nextPriority;
                 ticket.EscalationReason = EscalationReasonEnum.SlaBreach;
                 ticket.EscalatedAt = context.Message.BreachedAt;
-                await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.ReAssign, new TransitionContext
-                {
-                    ActorUserId = Guid.Empty,
-                    ActorRole = ActorRoleEnum.System,
-                    ActorDisplayName = "System (SLA breach)"
-                }, ct);
 
-                var primary = await _uow.TicketAssignments.GetAllAsync()
-                    .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted && x.Role == AssignmentRoleEnum.PrimaryHandler, ct);
-                if (nextPriority != TicketPriorityEnum.Urgent && primary is not null)
+                TicketAssignment? primary = null;
+                if (ticket.Status == TicketStatusEnum.InProgress)
                 {
-                    primary.Role = AssignmentRoleEnum.PreviousPrimaryHandler;
-                    _uow.TicketAssignments.UpdateAsync(primary);
+                    await _stateMachine.ExecuteAsync(ticket, TicketStatusEnum.ReAssign, new TransitionContext
+                    {
+                        ActorUserId = Guid.Empty,
+                        ActorRole = ActorRoleEnum.System,
+                        ActorDisplayName = "System (SLA breach)"
+                    }, ct);
+
+                    primary = await _uow.TicketAssignments.GetAllAsync()
+                        .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted && x.Role == AssignmentRoleEnum.PrimaryHandler, ct);
+                    if (nextPriority != TicketPriorityEnum.Urgent && primary is not null)
+                    {
+                        primary.Role = AssignmentRoleEnum.PreviousPrimaryHandler;
+                        _uow.TicketAssignments.UpdateAsync(primary);
+                    }
                 }
 
                 if (nextPriority == TicketPriorityEnum.Urgent)
@@ -85,6 +92,7 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
                     { Id = DeterministicEventId.From(ticket.ActiveIncidentEpisodeId.Value, "battery-isolation-requested") }, ct);
                 }
 
+                _uow.Tickets.UpdateAsync(ticket);
                 await _activityLogger.LogAsync(ticket.Id, Guid.Empty, ActorRoleEnum.System, "System",
                     nextPriority == TicketPriorityEnum.Urgent ? ActivityActionEnum.IncidentDeclared : ActivityActionEnum.Escalated,
                     oldPriority.ToString(), nextPriority.ToString(), "SLA breached.");

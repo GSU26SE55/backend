@@ -52,6 +52,23 @@ public class AlertDto
     /// <summary>Loại bất thường (xem AnomalyTypeEnum 1..16).</summary>
     public AnomalyTypeEnum AnomalyType { get; set; }
 
+    /// <summary>
+    /// Id của EnvironmentalIncident sinh ra alert này (null nếu alert không đến từ sự cố).
+    /// FE dùng để mở đúng hộp thoại chi tiết sự cố khi bấm vào dòng.
+    /// </summary>
+    public string? EnvironmentalIncidentId { get; set; }
+
+    /// <summary>
+    /// Loại sự cố môi trường (Smoke | Fire | GasLeak | Flood | Overheat), chỉ có khi alert là bản
+    /// sao của một EnvironmentalIncident.
+    /// </summary>
+    /// <remarks>
+    /// Bản sao đó mang <c>AnomalyType = EnvironmentalIncident</c> và KHÔNG có số đo, nên nếu chỉ
+    /// dựa vào AnomalyType thì mọi sự cố — rò khí, ngập nước, cháy — đều hiện chung một dòng vô
+    /// nghĩa "Environmental incident / 0 incident". Trường này để màn hình hiện đúng "Gas leak".
+    /// </remarks>
+    public EnvironmentalIncidentTypeEnum? IncidentType { get; set; }
+
     /// <summary>Severity của alert (Warning | Critical).</summary>
     public AlertSeverityEnum Severity { get; set; }
 

@@ -1,5 +1,5 @@
-using System.Text.RegularExpressions;
 using AuthService.Application.DTOs.Response.Auth;
+using AuthService.Application.Validation;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -8,12 +8,6 @@ namespace AuthService.Application.CQRS.Command.Auth;
 
 public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
 {
-    private const int EmailMaxLength = 256;
-
-    private static readonly Regex EmailRegex = new(
-        @"^[^\s@]+@[^\s@]+\.[^\s@]+$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
 
@@ -21,36 +15,10 @@ public class LoginCommand : IRequest<LoginResponse>, IValidatable<LoginResponse>
     {
         var response = new LoginResponse();
 
-        if (string.IsNullOrWhiteSpace(Email))
-        {
-            response.ListErrors.Add(new Errors
-            {
-                Field = "Email",
-                Detail = "Email is required."
-            });
-        }
-        else
-        {
-            var trimmed = Email.Trim();
+        AccountFieldPolicy.AddEmailErrors(response.ListErrors, Email);
 
-            if (trimmed.Length > EmailMaxLength)
-            {
-                response.ListErrors.Add(new Errors
-                {
-                    Field = "Email",
-                    Detail = $"Email must not exceed {EmailMaxLength} characters."
-                });
-            }
-            else if (!EmailRegex.IsMatch(trimmed))
-            {
-                response.ListErrors.Add(new Errors
-                {
-                    Field = "Email",
-                    Detail = "Invalid email format."
-                });
-            }
-        }
-
+        // Login chỉ kiểm tra có nhập hay không — độ mạnh là việc của lúc đặt mật khẩu,
+        // áp policy ở đây sẽ tiết lộ luật mật khẩu cho người chưa đăng nhập.
         if (string.IsNullOrWhiteSpace(Password))
         {
             response.ListErrors.Add(new Errors

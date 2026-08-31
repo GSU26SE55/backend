@@ -7,10 +7,13 @@ public interface ISlaCalculator
 {
     DateTime CalculateSlaDueDate(Ticket ticket);
 
-    /// <summary>Số ngày làm việc SLA theo priority (P1=1 ngày · P2=3 ngày · P3=7 ngày).</summary>
+    /// <summary>Hạn chót Response SLA (Giai đoạn 1 - Open): P1=4h, P2=24h, P3=72h (24/7 calendar).</summary>
+    DateTime CalculateResponseDueDate(DateTime startedAt, TicketPriorityEnum priority);
+
+    /// <summary>Số ngày làm việc SLA theo priority (P1=14 ngày · P2=3 ngày · P3=2 ngày).</summary>
     int GetSlaWorkingDays(TicketPriorityEnum priority);
 
-    /// <summary>Số giờ làm việc SLA theo priority — suy ra từ số ngày (P1=10h · P2=30h · P3=70h).</summary>
+    /// <summary>Số giờ làm việc SLA theo priority — suy ra từ số ngày (P1=140h · P2=30h · P3=20h).</summary>
     int GetSlaHours(TicketPriorityEnum priority);
 
     int GetSlaMinutes(TicketPriorityEnum priority);
@@ -28,4 +31,12 @@ public interface ISlaCalculator
     bool ShouldSendNextSessionReminder(DateTime warningSentAtUtc, DateTime atUtc);
 
     DateTime CalculateDueDate(DateTime startedAt, TicketPriorityEnum priority);
+
+    /// <summary>
+    /// Số phút làm việc mà lịch nghỉ SLA (<c>SlaNonWorkingPeriod</c>) đã cộng thêm vào
+    /// <paramref name="dueAtUtc"/>, cùng danh sách chính các ngày (local date) bị loại khỏi
+    /// <c>[startedAtUtc, dueAtUtc]</c>. Trả về 0 phút + danh sách rỗng khi không ngày nào
+    /// trong khoảng đó bị lịch loại trừ.
+    /// </summary>
+    (int Minutes, IReadOnlyList<DateOnly> NonWorkingDays) GetCalendarExtension(DateTime startedAtUtc, DateTime dueAtUtc);
 }

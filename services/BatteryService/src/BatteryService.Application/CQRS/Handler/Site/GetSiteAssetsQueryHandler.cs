@@ -3,6 +3,7 @@ using BatteryService.Application.DTOs;
 using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mapping;
+using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Requests;
@@ -67,6 +68,32 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
             .AsNoTracking()
             .Where(account => !account.IsDeleted);
 
+        // Cùng logic AssetsWithActiveAlerts của GetSiteDashboardQueryHandler — con số alert ở đây
+        // phải khớp con số "Open alerts" trên Site overview phía trên bảng. Lọc theo assetIds
+        // của site (không dùng Alert.SiteId) vì field đó có thể null trên alert cấp asset — chỉ
+        // site-level alert (EnvironmentalIncident) mới chắc chắn populate nó.
+        var siteAssetIds = await _unitOfWork.BatteryAssets
+            .GetAllAsync()
+            .AsNoTracking()
+            .Where(asset => asset.SiteId == request.SiteId && !asset.IsDeleted)
+            .Select(asset => asset.Id)
+            .ToListAsync(cancellationToken);
+
+        var activeStatuses = new[] { AlertStatusEnum.Open, AlertStatusEnum.Acknowledged };
+        var activeAlertAssetIdSet = siteAssetIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await _unitOfWork.Alerts
+                .GetAllAsync()
+                .AsNoTracking()
+                .Where(alert =>
+                    alert.BatteryAssetId != null &&
+                    siteAssetIds.Contains(alert.BatteryAssetId.Value) &&
+                    !alert.IsDeleted &&
+                    activeStatuses.Contains(alert.Status))
+                .Select(alert => alert.BatteryAssetId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken)).ToHashSet();
+
         // Join account TRƯỚC khi cắt trang (trước đây join sau `pageQuery`): ToPagedEntityListAsync nhận
         // vào IQueryable ĐÃ chiếu sang DTO rồi mới Skip/Take. Đây là LEFT JOIN theo khoá chính của
         // account (1:1) nên số dòng — và do đó totalItems — không đổi. Sắp xếp vẫn dựa trên đúng các
@@ -109,6 +136,9 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
                 Status = x.asset.Status,
                 Notes = x.asset.Notes,
                 LastSensorReadingAt = x.asset.LastSensorReadingAt,
+                ActiveAlertCount = activeAlertAssetIdSet.Contains(x.asset.Id) ? 1 : 0,
+                CascadeRiskScore = x.asset.CascadeRiskScore,
+                CascadeRiskLevel = CascadeRiskDto.ToLevel(x.asset.CascadeRiskScore),
                 CreatedAt = x.asset.CreatedAt
             })
             .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);

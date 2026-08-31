@@ -71,8 +71,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
 
         var priority = MapSeverityToPriority(evt.Severity);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(now);
-        var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, priority);
+        var dueAt = _slaCalculator.CalculateResponseDueDate(now, priority);
         var code = await _codeGenerator.GenerateAsync();
 
         var ticket = new Ticket
@@ -85,9 +84,15 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
             Category = TicketCategoryEnum.Repair,
             CustomerId = evt.CustomerId,
             BatteryAssetId = Guid.Empty, // site-level — không gắn pin cụ thể
+            // Ticket này KHÔNG có pin nào, nên SiteId là đường duy nhất để gom nó với các
+            // ticket pin cùng cabinet.
+            SiteId = evt.SiteId,
             EnvironmentalIncidentId = evt.IncidentId,
             Status = TicketStatusEnum.Open,
-            Origin = TicketOriginEnum.System,
+            // `AutoFromEnvironment`, không phải `System`: `System` còn dùng chung cho cascade risk
+            // và bảo trì định kỳ, nên phân loại nguồn theo nó phải loại trừ hai nhóm kia bằng field
+            // phụ. Origin riêng cho môi trường đọc thẳng một field là xong.
+            Origin = TicketOriginEnum.AutoFromEnvironment,
             ImpactScope = ImpactScopeEnum.Site,
             UrgencyLevel = priority == TicketPriorityEnum.P1Critical ? UrgencyLevelEnum.High : UrgencyLevelEnum.Medium,
             Priority = priority,
@@ -100,7 +105,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
             Priority = priority,
-            StartedAt = effectiveStartedAt,
+            StartedAt = now,
             DueAt = dueAt,
             OriginalDueAt = dueAt,
             Status = SlaTimerStatusEnum.Running

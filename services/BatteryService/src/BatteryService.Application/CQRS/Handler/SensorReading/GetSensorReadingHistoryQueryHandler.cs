@@ -1,3 +1,5 @@
+using BatteryService.Application.Anomaly;
+using BatteryService.Application.Common;
 using BatteryService.Application.CQRS.Query.SensorReading;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Helpers;
@@ -45,10 +47,22 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
             };
         }
 
+        // Chỉ nguồn CHÍNH. Một tick sinh nhiều dòng cùng timestamp khác `SensorSourceCode`:
+        // `redundant` (INA226) không đo nhiệt/SOC nên firmware gửi 0, `external-temp` (DS18B20)
+        // không đo điện nên gửi voltage/current = 0. Đó là placeholder, KHÔNG phải số đo.
+        //
+        // Trộn chúng vào bảng lịch sử thì mọi tầng phía sau đều hiểu sai: `AttachAnomaliesAsync`
+        // soi 0V/0% với ngưỡng của loại pin rồi chấm Undervoltage + LowSoc Critical, và FE tô đỏ
+        // đúng theo đó — trong khi engine cảnh báo thật (`AnomalyDetectionService`) đã bỏ qua
+        // các dòng này từ Sprint Bonus NS-08 (#652). Bộ lọc trước đây chỉ nằm ở nhánh sort theo
+        // cột value; nhánh cursor (mặc định, chính là bảng người dùng mở) thì không có.
         var query = _unitOfWork.SensorReadings
             .GetAllAsync()
             .AsNoTracking()
-            .Where(reading => reading.BatteryAssetId == request.BatteryAssetId);
+            .Where(reading => reading.BatteryAssetId == request.BatteryAssetId)
+            .Where(reading => reading.SensorSourceCode == SensorSource.Primary
+                || reading.SensorSourceCode == null
+                || reading.SensorSourceCode == "");
 
         if (request.From.HasValue)
         {
@@ -81,11 +95,6 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
         if (valueSort != null)
         {
             // Hướng B — sort theo cột value trong [from, to] (đã validate bắt buộc), KHÔNG dùng cursor.
-            // Lọc primary source: tránh 3 dòng/tick (redundant temp=0 / external voltage=0) làm sort rác (conflict A).
-            query = query.Where(reading => reading.SensorSourceCode == "primary"
-                || reading.SensorSourceCode == null
-                || reading.SensorSourceCode == "");
-
             var descending = SortHelper.IsDescending(request.SortDir);
             var valueOrdered = valueSort switch
             {
@@ -100,6 +109,8 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
                 .Take(limit)
                 .Select(toDto)
                 .ToListAsync(cancellationToken);
+
+            await AttachAnomaliesAsync(request.BatteryAssetId, valueItems, cancellationToken);
 
             return new CommonResponse<SensorReadingHistoryResponseDto>
             {
@@ -135,6 +146,8 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
         var hasMore = page.Count > limit;
         var items = hasMore ? page.Take(limit).ToList() : page;
 
+        await AttachAnomaliesAsync(request.BatteryAssetId, items, cancellationToken);
+
         return new CommonResponse<SensorReadingHistoryResponseDto>
         {
             IsSuccess = true,
@@ -146,6 +159,68 @@ public class GetSensorReadingHistoryQueryHandler : IRequestHandler<GetSensorRead
                 HasMore = hasMore
             }
         };
+    }
+
+    /// <summary>
+    /// Chấm anomaly cho từng dòng bằng ĐÚNG luật BE (<see cref="AnomalyRules"/>) thay vì để FE
+    /// tự so ngưỡng. Chạy SAU khi materialize: Detect là C# thuần, không dịch được sang SQL.
+    ///
+    /// Không có ThresholdConfig cho loại pin thì để danh sách rỗng — nghĩa là "chưa cấu hình
+    /// ngưỡng", KHÔNG phải "không vi phạm"; bịa ngưỡng mặc định ở đây sẽ tạo cảnh báo giả.
+    /// </summary>
+    private async Task AttachAnomaliesAsync(
+        Guid batteryAssetId,
+        IReadOnlyList<SensorReadingDto> items,
+        CancellationToken cancellationToken)
+    {
+        if (items.Count == 0)
+            return;
+
+        var batteryTypeId = await _unitOfWork.BatteryAssets.GetAllAsync()
+            .AsNoTracking()
+            .Where(asset => asset.Id == batteryAssetId && !asset.IsDeleted)
+            .Select(asset => (Guid?)asset.BatteryTypeId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (batteryTypeId is null)
+            return;
+
+        // Cùng điều kiện chọn config với AnomalyDetectionService / AlertAutoResolveService / gRPC:
+        // active + mới hiệu lực nhất. Thiếu `IsActive` thì bảng lịch sử có thể chấm theo một
+        // config cũ đã tắt, lệch hẳn với Alert mà engine sinh ra trên cùng số đo.
+        var threshold = await _unitOfWork.ThresholdConfigs.GetAllAsync()
+            .AsNoTracking()
+            .Where(t => t.BatteryTypeId == batteryTypeId.Value && t.IsActive && !t.IsDeleted)
+            .OrderByDescending(t => t.EffectiveFromUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (threshold is null)
+            return;
+
+        foreach (var item in items)
+        {
+            // Detect nhận entity SensorReading — dựng lại từ DTO để dùng CHUNG một bộ luật với
+            // luồng phát hiện thật, thay vì chép lại điều kiện ở đây rồi lệch nhau về sau.
+            var reading = new Domain.Entities.SensorReading
+            {
+                BatteryAssetId = batteryAssetId,
+                Time = item.Time,
+                Voltage = item.Voltage,
+                Current = item.Current,
+                Temperature = item.Temperature,
+                SocPercent = item.SocPercent,
+                CycleCount = item.CycleCount
+            };
+
+            item.Anomalies = AnomalyRules.Detect(reading, threshold)
+                .Select(a => new SensorReadingAnomalyDto
+                {
+                    Type = a.Type,
+                    Severity = a.Severity,
+                    ThresholdValue = a.ThresholdValue,
+                    ActualValue = a.ActualValue,
+                    Unit = a.Unit
+                })
+                .ToList();
+        }
     }
 
     private static DateTime ToUtc(DateTime value)

@@ -171,7 +171,7 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
         {
             Email = "wrong@example.com",
             Password = "Strong1Pass!",
-            FullName = "X"
+            FullName = "Wrong OTP User"
         });
 
         var resp = await _client.PostAsJsonAsync("/api/auth/verify-otp", new

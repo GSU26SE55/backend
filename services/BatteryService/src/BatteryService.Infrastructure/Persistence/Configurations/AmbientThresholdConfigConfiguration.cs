@@ -24,6 +24,9 @@ public class AmbientThresholdConfigConfiguration : IEntityTypeConfiguration<Ambi
         builder.Property(c => c.HighHumidityWarning).HasColumnName("high_humidity_warning").HasPrecision(5, 2);
         builder.Property(c => c.HighHumidityCritical).HasColumnName("high_humidity_critical").HasPrecision(5, 2);
 
+        builder.Property(c => c.HighGasWarning).HasColumnName("high_gas_warning").HasPrecision(5, 2);
+        builder.Property(c => c.HighGasCritical).HasColumnName("high_gas_critical").HasPrecision(5, 2);
+
         builder.Property(c => c.ComboTempThreshold).HasColumnName("combo_temp_threshold").HasPrecision(6, 2);
         builder.Property(c => c.ComboHumidityThreshold).HasColumnName("combo_humidity_threshold").HasPrecision(5, 2);
 

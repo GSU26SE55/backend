@@ -57,10 +57,12 @@ public class ReportEnvironmentalIncidentCommand
         else if (DetectedAt > DateTime.UtcNow.AddMinutes(5))
             AddError(response, nameof(DetectedAt), "DetectedAt cannot be more than 5 minutes ahead of the current time.");
 
-        if (ReportedBy?.Length > 256)
+        // Đo trên chuỗi đã trim: FE trim trước khi validate, để raw thì khoảng trắng cuối
+        // (người dùng không nhìn thấy) đẩy độ dài qua ngưỡng và sinh 400 khó hiểu.
+        if (ReportedBy?.Trim().Length > 256)
             AddError(response, nameof(ReportedBy), "ReportedBy must not exceed 256 characters.");
 
-        if (Notes?.Length > 1000)
+        if (Notes?.Trim().Length > 1000)
             AddError(response, nameof(Notes), "Notes must not exceed 1000 characters.");
 
         return Task.FromResult(response);
@@ -129,7 +131,7 @@ public class ResolveEnvironmentalIncidentCommand
 
         if (string.IsNullOrWhiteSpace(ResolutionNote))
             AddError(response, nameof(ResolutionNote), "ResolutionNote is required.");
-        else if (ResolutionNote.Length is < 5 or > 2000)
+        else if (ResolutionNote.Trim().Length is < 5 or > 2000)
             AddError(response, nameof(ResolutionNote), "ResolutionNote must be 5-2000 characters long.");
 
         return Task.FromResult(response);
@@ -167,7 +169,7 @@ public class MarkFalseAlarmEnvironmentalIncidentCommand
 
         if (string.IsNullOrWhiteSpace(FalseAlarmReason))
             AddError(response, nameof(FalseAlarmReason), "FalseAlarmReason is required.");
-        else if (FalseAlarmReason.Length is < 5 or > 2000)
+        else if (FalseAlarmReason.Trim().Length is < 5 or > 2000)
             AddError(response, nameof(FalseAlarmReason), "FalseAlarmReason must be 5-2000 characters long.");
 
         return Task.FromResult(response);

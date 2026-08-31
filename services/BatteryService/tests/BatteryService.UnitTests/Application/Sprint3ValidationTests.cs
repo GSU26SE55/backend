@@ -19,9 +19,9 @@ public class Sprint3ValidationTests
     private static UpsertThresholdConfigCommand ValidThreshold() => new()
     {
         BatteryTypeId = Guid.NewGuid(),
-        VoltageMin = 10m,
-        VoltageMax = 14m,
-        TemperatureMin = -10m,
+        VoltageMin = 14m,
+        VoltageMax = 15m,
+        TemperatureMin = 45m,
         TemperatureMax = 50m,
         SocWarningThreshold = 20m,
         SocCriticalThreshold = 10m

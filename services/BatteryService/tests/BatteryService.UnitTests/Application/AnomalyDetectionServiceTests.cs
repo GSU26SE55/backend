@@ -36,9 +36,10 @@ public class AnomalyDetectionServiceTests
     {
         Id = Guid.NewGuid(),
         BatteryTypeId = BatteryTypeId,
-        VoltageMin = 10,
-        VoltageMax = 14,
-        TemperatureMin = -10,
+        VoltageMin = 14,
+        VoltageMax = 15,
+        // Min = Warning, Max = Critical (thang một chiều).
+        TemperatureMin = 45,
         TemperatureMax = 50,
         SocWarningThreshold = 20,
         SocCriticalThreshold = 10,
@@ -185,7 +186,8 @@ public class AnomalyDetectionServiceTests
         var b = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold())
-            .WithSensorReadings(MakeReading(temp: 53m));
+            // 46°C nằm giữa mốc Warning (45) và mốc Critical (50).
+            .WithSensorReadings(MakeReading(temp: 46m));
         var svc = new AnomalyDetectionService(b.Build(), Opts());
 
         var result = await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), CancellationToken.None);
@@ -209,7 +211,7 @@ public class AnomalyDetectionServiceTests
         var b = new MockUnitOfWorkBuilder()
             .WithBatteryAssets(MakeAsset())
             .WithThresholdConfigs(MakeThreshold())
-            .WithSensorReadings(MakeReading(temp: 53m));
+            .WithSensorReadings(MakeReading(temp: 46m));
         var svc = new AnomalyDetectionService(b.Build(), OptsWithoutWarningNotify());
 
         var result = await svc.ScanRecentReadingsAsync(TimeSpan.FromMinutes(1), CancellationToken.None);

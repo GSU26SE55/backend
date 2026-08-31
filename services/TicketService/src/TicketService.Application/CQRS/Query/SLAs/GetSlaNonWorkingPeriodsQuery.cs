@@ -9,4 +9,6 @@ public sealed class GetSlaNonWorkingPeriodsQuery : PaginationRequest, IRequest<C
 {
     public DateOnly? From { get; set; }
     public DateOnly? To { get; set; }
+    public string? SortBy { get; set; }
+    public string? SortDir { get; set; }
 }

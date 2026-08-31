@@ -51,7 +51,7 @@ public sealed class IotDeviceRecoveredConsumer : IConsumer<IotDeviceRecoveredEve
                     async () =>
                     {
                         var recipients = (await _recipientResolver.GetActiveByRoleAsync(
-                                context.CancellationToken, "Manager", "Admin", "Staff"))
+                                context.CancellationToken, "Manager", "Admin"))
                             .Where(id => id != Guid.Empty)
                             .ToList();
                         if (evt.CustomerId is { } customerId && customerId != Guid.Empty)

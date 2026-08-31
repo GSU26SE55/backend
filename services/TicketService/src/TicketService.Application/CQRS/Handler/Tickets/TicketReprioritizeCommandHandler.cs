@@ -48,6 +48,19 @@ public class TicketReprioritizeCommandHandler : IRequestHandler<TicketReprioriti
                 return;
             }
 
+            // Ticket đã được công bố sự cố (Declare Incident) thì mức ưu tiên Urgent là cố định.
+            //
+            // Declare Incident không chỉ đặt Priority = Urgent: nó dừng hẳn SLA timer
+            // (Urgent không tiêu thụ SLA), chuyển PrimaryHandler sang PreviousPrimaryHandler
+            // và bắn BatteryIsolationRequestedEvent để BatteryService cô lập pin. Cho hạ cấp
+            // về P1/P2/P3 ở đây sẽ hồi sinh SLA timer vừa bị dừng và để lại IsIncident /
+            // ActiveIncidentEpisodeId treo, trong khi pin đã bị cô lập và không có đường thu hồi.
+            if (ticket.IsIncident || ticket.ActiveIncidentEpisodeId.HasValue)
+            {
+                response = Fail(409, "An active incident is fixed at Urgent priority and cannot be re-prioritized.");
+                return;
+            }
+
             // CHỈ Open — tức đã triage nhưng CHƯA gán Staff.
             //
             // User Guide §3.8: "Mức ưu tiên giữ cố định trong suốt vòng đời phiếu. Khi quá
@@ -74,33 +87,16 @@ public class TicketReprioritizeCommandHandler : IRequestHandler<TicketReprioriti
             ticket.UrgencyLevel = request.Urgency;
             ticket.Priority = priority;
 
-            if (ticket.ReopenCount > 0 && ticket.IsIncident && priority != TicketPriorityEnum.Urgent)
-            {
-                await _activityLogger.LogAsync(
-                    ticket.Id,
-                    request.ManagerId,
-                    ActorRoleEnum.Manager,
-                    request.ManagerName,
-                    ActivityActionEnum.IncidentDeclassified,
-                    oldValue: ticket.ActiveIncidentEpisodeId?.ToString(),
-                    newValue: priority.ToString(),
-                    reason: request.Reason);
-
-                ticket.IsIncident = false;
-                ticket.ActiveIncidentEpisodeId = null;
-            }
-
             var timer = await _uow.SlaTimers.GetAllAsync()
                 .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, token);
 
-            // Ở Open thì đồng hồ SLA chưa chạy — §3.8: nó bắt đầu đếm khi phiếu được phân
-            // công cho nhân viên. Nếu timer đã tồn tại (tạo sẵn lúc triage) thì chỉ đồng bộ
-            // Priority + hạn gốc theo mức mới; KHÔNG cộng TotalPausedMinutes và KHÔNG kiểm
-            // tra breach — chưa đếm thì chưa thể trễ, tính breach ở đây sẽ ra breach ảo.
+            // Khi đổi mức ưu tiên ở Open (Stage 1), tính lại hạn chót Response SLA (24/7 calendar) theo priority mới.
             if (timer is not null)
             {
                 timer.Priority = priority;
-                timer.OriginalDueAt = _slaCalculator.CalculateDueDate(timer.StartedAt, priority);
+                timer.OriginalDueAt = ticket.Status == TicketStatusEnum.Open
+                    ? _slaCalculator.CalculateResponseDueDate(timer.StartedAt, priority)
+                    : _slaCalculator.CalculateDueDate(timer.StartedAt, priority);
                 timer.DueAt = timer.OriginalDueAt;
                 _uow.SlaTimers.UpdateAsync(timer);
             }

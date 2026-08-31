@@ -22,10 +22,13 @@ public class UpdateNotificationPreferenceCommand : IRequest<NotificationPreferen
 
     public string TimeZone { get; set; } = "Asia/Ho_Chi_Minh";
 
-    // Chat-specific preferences (#570)
-    public bool NotifyOnChat { get; set; } = true;
-    public bool NotifyOnMention { get; set; } = true;
-    public bool NotifyOnReaction { get; set; } = false;
+    // Chat-specific preferences (#570).
+    // Nullable vì màn Profile của FE chỉ gửi 4 channel + quiet hours: nếu để non-nullable
+    // thì key vắng mặt bind về default C# và handler ghi đè, xoá mất lựa chọn user đã set
+    // ở nơi khác. Null = giữ nguyên giá trị đang lưu.
+    public bool? NotifyOnChat { get; set; }
+    public bool? NotifyOnMention { get; set; }
+    public bool? NotifyOnReaction { get; set; }
     public int? DigestWindowMinutes { get; set; }
 
     public Task<NotificationPreferenceResponse> ValidateAsync()

@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using AuthService.Application.Validation;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -7,22 +7,19 @@ namespace AuthService.Application.CQRS.Command.Auth;
 
 public class ResendOtpCommand : IRequest<CommonResponse<string>>, IValidatable<CommonResponse<string>>
 {
-    private static readonly Regex EmailRegex = new(
-        @"^[^\s@]+@[^\s@]+\.[^\s@]+$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
     public string Email { get; set; } = string.Empty;
 
     public Task<CommonResponse<string>> ValidateAsync()
     {
         var response = new CommonResponse<string>();
 
-        if (string.IsNullOrWhiteSpace(Email) || !EmailRegex.IsMatch(Email.Trim()))
+        AccountFieldPolicy.AddEmailErrors(response.ListErrors, Email);
+
+        if (response.ListErrors.Count > 0)
         {
             response.IsSuccess = false;
             response.StatusCode = 400;
-            response.Message = "Invalid email.";
-            response.ListErrors.Add(new Errors { Field = "Email", Detail = "Invalid email." });
+            response.Message = "Invalid input data.";
         }
 
         return Task.FromResult(response);

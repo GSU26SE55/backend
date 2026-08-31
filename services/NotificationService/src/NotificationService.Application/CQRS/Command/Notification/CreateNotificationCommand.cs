@@ -82,15 +82,16 @@ public class CreateNotificationCommand : IRequest<NotificationActionResponse>, I
 
         if (string.IsNullOrWhiteSpace(Title))
             response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title is required." });
-        else if (Title.Length > 200)
+        // Trim trước khi đo — FE gửi giá trị đã trim, đo raw sẽ lệch ở khoảng trắng cuối.
+        else if (Title.Trim().Length > 200)
             response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title must be at most 200 characters." });
 
         if (string.IsNullOrWhiteSpace(Body))
             response.ListErrors.Add(new Errors { Field = "Body", Detail = "Body is required." });
-        else if (Body.Length > 2000)
+        else if (Body.Trim().Length > 2000)
             response.ListErrors.Add(new Errors { Field = "Body", Detail = "Body must be at most 2000 characters." });
 
-        if (!string.IsNullOrEmpty(EntityType) && EntityType.Length > 100)
+        if (!string.IsNullOrEmpty(EntityType) && EntityType.Trim().Length > 100)
             response.ListErrors.Add(new Errors { Field = "EntityType", Detail = "EntityType must be at most 100 characters." });
 
         if (response.ListErrors.Count > 0)

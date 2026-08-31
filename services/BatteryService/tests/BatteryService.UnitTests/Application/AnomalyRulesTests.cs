@@ -10,9 +10,10 @@ public class AnomalyRulesTests
     {
         Id = Guid.NewGuid(),
         BatteryTypeId = Guid.NewGuid(),
-        VoltageMin = 10m,
-        VoltageMax = 14m,
-        TemperatureMin = -10m,
+        // Min = mốc Warning, Max = mốc Critical — thang MỘT CHIỀU, không phải dải an toàn.
+        VoltageMin = 14m,
+        VoltageMax = 15m,
+        TemperatureMin = 45m,
         TemperatureMax = 50m,
         SocWarningThreshold = 20m,
         SocCriticalThreshold = 10m,
@@ -39,41 +40,126 @@ public class AnomalyRulesTests
     public void NoAnomaly_WhenAllInRange()
         => AnomalyRules.Detect(Reading(), Threshold()).Should().BeEmpty();
 
+    // Cả hai mốc đều là số Admin đặt: trên Min là Warning, trên Max là Critical. Không có hằng
+    // số nào suy ra ở giữa — đây là bộ test vỡ nếu ai đưa `±5` chôn trong code quay lại.
     [Fact]
-    public void Overheat_Warning_WhenAboveButWithin5C()
-        => AnomalyRules.Detect(Reading(temp: 53m), Threshold())
+    public void Overheat_None_BelowWarning()
+        => AnomalyRules.Detect(Reading(temp: 44m), Threshold())
+            .Should().NotContain(a => a.Type == AnomalyTypeEnum.Overheat);
+
+    [Fact]
+    public void Overheat_Warning_AboveWarningThreshold()
+        => AnomalyRules.Detect(Reading(temp: 46m), Threshold())
             .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Warning);
 
     [Fact]
-    public void Overheat_Critical_WhenBeyond5C()
-        => AnomalyRules.Detect(Reading(temp: 60m), Threshold())
+    public void Overheat_Critical_AboveCriticalThreshold()
+        => AnomalyRules.Detect(Reading(temp: 51m), Threshold())
             .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Critical);
 
-    // Sprint Bonus NS-25 (#665, F1) — Undertemp (TemperatureMin = -10°C trong Threshold()).
+    // Đúng BẰNG mốc là ĐÃ vi phạm. Admin đặt 45 nghĩa là "từ 45 trở lên báo cho tôi"; số đo và
+    // ngưỡng đều chỉ có 2 chữ số thập phân nên 45.00 là giá trị chạm tới được thật.
     [Fact]
-    public void Undertemp_Warning_WhenBelowMinWithin5C()
-        => AnomalyRules.Detect(Reading(temp: -12m), Threshold())
-            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Undertemp && a.Severity == AlertSeverityEnum.Warning);
+    public void Overheat_Warning_ExactlyAtWarningThreshold()
+        => AnomalyRules.Detect(Reading(temp: 45m), Threshold())
+            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Warning);
 
     [Fact]
-    public void Undertemp_Critical_WhenBelowMinBeyond5C()
-        => AnomalyRules.Detect(Reading(temp: -20m), Threshold())
-            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Undertemp && a.Severity == AlertSeverityEnum.Critical);
+    public void Overheat_Critical_ExactlyAtCriticalThreshold()
+        => AnomalyRules.Detect(Reading(temp: 50m), Threshold())
+            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Critical);
+
+    // Vượt mốc Critical chỉ ra MỘT alert, không chồng thêm một Warning cho cùng số đo.
+    [Fact]
+    public void Overheat_Critical_DoesNotAlsoRaiseWarning()
+        => AnomalyRules.Detect(Reading(temp: 51m), Threshold())
+            .Where(a => a.Type == AnomalyTypeEnum.Overheat)
+            .Should().HaveCount(1);
+
+    // Phía thấp KHÔNG còn rule: thang một chiều nên lạnh/sụt áp không diễn đạt được nữa.
+    [Fact]
+    public void ColdReading_RaisesNothing()
+        => AnomalyRules.Detect(Reading(temp: -30m, voltage: 5m), Threshold())
+            .Should().BeEmpty();
+
+    // ===== Ca thật trên máy: BAT-24V-JK-V1 (LiFePO4 24V 30Ah), gateway online =====
+    //
+    // Khoá đúng bộ số Admin đang đặt trên màn "Configure alert thresholds" và số đo realtime đọc
+    // được cùng lúc, để BE và màu trên FE không bao giờ nói hai chuyện khác nhau.
+    private static ThresholdConfig DemoThreshold() => new()
+    {
+        Id = Guid.NewGuid(),
+        BatteryTypeId = Guid.NewGuid(),
+        VoltageMin = 25m,      // Warning
+        VoltageMax = 27m,      // Critical
+        TemperatureMin = 30m,  // Warning
+        TemperatureMax = 32m,  // Critical
+        SocWarningThreshold = 91m,
+        SocCriticalThreshold = 89m,
+        CurrentMaxCharge = 2m,
+        CurrentMaxDischarge = 3m,
+        SohWarningThreshold = 80m,
+        SohCriticalThreshold = 75m,
+        EffectiveFromUtc = DateTime.UtcNow,
+        IsActive = true
+    };
 
     [Fact]
-    public void Undertemp_None_WhenAtOrAboveMin()
-        => AnomalyRules.Detect(Reading(temp: -10m), Threshold())
-            .Should().NotContain(a => a.Type == AnomalyTypeEnum.Undertemp);
+    public void DemoAsset_LiveReading_RaisesWarningOnVoltageTemperatureAndSoc()
+    {
+        // Số đo realtime: 26.65 V · 0.00 A · 31.60 °C · 91.00 %
+        var result = AnomalyRules.Detect(
+            Reading(voltage: 26.65m, current: 0m, temp: 31.6m, soc: 91m), DemoThreshold());
+
+        result.Should().ContainSingle(a =>
+            a.Type == AnomalyTypeEnum.Overvoltage && a.Severity == AlertSeverityEnum.Warning,
+            "26.65 V đã qua mốc Warning 25 nhưng chưa tới Critical 27");
+        result.Should().ContainSingle(a =>
+            a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Warning,
+            "31.60 °C đã qua mốc Warning 30 nhưng chưa tới Critical 32");
+        result.Should().ContainSingle(a =>
+            a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Warning,
+            "SOC 91.00 ĐÚNG BẰNG mốc Warning 91 — so sánh bao gồm mốc nên đã tính là vi phạm");
+
+        // 0 A nằm trong cả trần sạc 2 A lẫn trần xả 3 A.
+        result.Should().NotContain(a =>
+            a.Type == AnomalyTypeEnum.AbnormalCharging || a.Type == AnomalyTypeEnum.RapidDischarge);
+
+        // Toàn Warning ⇒ chỉ notify, KHÔNG đẻ ticket. Ticket chỉ sinh từ Critical.
+        result.Should().OnlyContain(a => a.Severity == AlertSeverityEnum.Warning);
+    }
 
     [Fact]
-    public void Overvoltage_Critical()
-        => AnomalyRules.Detect(Reading(voltage: 15m), Threshold())
+    public void DemoAsset_ReachingCriticalThresholds_RaisesCritical()
+    {
+        var result = AnomalyRules.Detect(
+            Reading(voltage: 27m, current: 2m, temp: 32m, soc: 89m), DemoThreshold());
+
+        result.Should().ContainSingle(a =>
+            a.Type == AnomalyTypeEnum.Overvoltage && a.Severity == AlertSeverityEnum.Critical);
+        result.Should().ContainSingle(a =>
+            a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Critical);
+        result.Should().ContainSingle(a =>
+            a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Critical);
+        result.Should().ContainSingle(a =>
+            a.Type == AnomalyTypeEnum.AbnormalCharging, "dòng sạc 2 A đúng bằng trần 2 A");
+    }
+
+    [Fact]
+    public void DemoAsset_ReadingBelowEveryThreshold_RaisesNothing()
+        => AnomalyRules.Detect(
+                Reading(voltage: 24.99m, current: 1m, temp: 29.99m, soc: 91.01m), DemoThreshold())
+            .Should().BeEmpty();
+
+    [Fact]
+    public void Overvoltage_Warning_AboveWarningThreshold()
+        => AnomalyRules.Detect(Reading(voltage: 14.5m), Threshold())
+            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Overvoltage && a.Severity == AlertSeverityEnum.Warning);
+
+    [Fact]
+    public void Overvoltage_Critical_AboveCriticalThreshold()
+        => AnomalyRules.Detect(Reading(voltage: 15.5m), Threshold())
             .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Overvoltage && a.Severity == AlertSeverityEnum.Critical);
-
-    [Fact]
-    public void Undervoltage_Critical()
-        => AnomalyRules.Detect(Reading(voltage: 9m), Threshold())
-            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Undervoltage);
 
     [Fact]
     public void LowSoc_Warning_WhenBelowWarning_ButAboveCritical()

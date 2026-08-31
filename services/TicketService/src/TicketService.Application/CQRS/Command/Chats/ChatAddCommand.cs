@@ -1,9 +1,8 @@
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
-using TicketService.Application.Common.Models;
+using TicketService.Application.Common.Helpers;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 
@@ -11,12 +10,6 @@ namespace TicketService.Application.CQRS.Command.Chats;
 
 public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<TicketActionResponse>
 {
-    // Heuristic — chỉ cover whitespace + emoji range phổ biến (BMP symbol/dingbat + surrogate pair khối emoji),
-    // không exhaustive toàn bộ Unicode emoji (#518 — Simplicity First).
-    private static readonly Regex WhitespaceOrEmojiOnlyRegex = new(
-        "^[\\s\\u2600-\\u27BF\\u2190-\\u21FF\\u2B00-\\u2BFF\\uD83C-\\uDBFF\\uDC00-\\uDFFF\\uFE0F\\u200D]*$",
-        RegexOptions.Compiled);
-
     /// <summary>
     /// ID của Ticket liên quan.
     /// </summary>
@@ -69,16 +62,7 @@ public class ChatAddCommand : IRequest<TicketActionResponse>, IValidatable<Ticke
         if (UserId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Invalid UserId." });
 
-        if (string.IsNullOrWhiteSpace(Body))
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Comment content is required." });
-        // ValidateAsync() không nhận DI nên không inject được IOptions<ChatOptions> tại đây —
-        // dùng hằng số ChatOptions.MaxBodyLengthDefault làm nguồn duy nhất, tránh lặp số tay.
-        // Nếu appsettings.json "Chat:MaxBodyLength" override khác giá trị này, validate ở đây
-        // KHÔNG phản ánh giá trị override — chỉ chặn theo default.
-        else if (Body.Length > ChatOptions.MaxBodyLengthDefault)
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = $"Comment content must be at most {ChatOptions.MaxBodyLengthDefault} characters." });
-        else if (WhitespaceOrEmojiOnlyRegex.IsMatch(Body))
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Content must not contain only whitespace or emoji." });
+        ChatBodyPolicy.AddBodyErrors(response.ListErrors, Body);
 
         if (Attachments != null && Attachments.Any())
         {

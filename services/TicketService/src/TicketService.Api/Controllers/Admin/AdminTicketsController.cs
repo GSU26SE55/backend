@@ -287,6 +287,33 @@ public class AdminTicketsController : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
+    /// <summary>
+    /// Gắn ticket này vào một ticket cha cùng nguyên nhân gốc (body: <c>parentTicketId</c>);
+    /// truyền null để gỡ liên kết.
+    /// </summary>
+    /// <remarks>
+    /// KHÁC <c>/merge</c>: link KHÔNG đóng ticket và KHÔNG dừng SLA. Dùng cho tình huống một sự cố
+    /// môi trường ở cabinet kéo theo nhiều ticket pin do Customer báo — cùng nguyên nhân, nhưng
+    /// mỗi cục pin vẫn phải được kiểm tra riêng sau khi xử lý xong sự cố.
+    /// </remarks>
+    [HttpPost("{id:guid}/link-parent")]
+    [Authorize(Roles = "Manager")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(TicketActionResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> LinkParent(
+        Guid id, [FromBody] TicketLinkParentCommand command, CancellationToken ct)
+    {
+        command.Id = id;
+        command.ActorId = string.IsNullOrEmpty(_currentUser.UserId) ? Guid.Empty : Guid.Parse(_currentUser.UserId);
+        command.ActorName = _currentUser.FullName;
+
+        var result = await _mediator.Send(command, ct);
+        return StatusCode(result.StatusCode, result);
+    }
+
     /// <summary>Kích hoạt AI kiểm tra lại 1 ticket (chỉ ticket manual đang Skipped/Pending).</summary>
     [HttpPost("{id:guid}/re-verify")]
     [Authorize(Roles = "Manager")]

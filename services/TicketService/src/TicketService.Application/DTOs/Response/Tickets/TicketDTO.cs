@@ -98,5 +98,14 @@ public class TicketDTO
     public string? DuplicateReason { get; set; }
     /// <summary>Ticket đích nếu ticket này đã bị gộp (null nếu chưa gộp).</summary>
     public string? MergedIntoTicketId { get; set; }
+
+    /// <summary>Site của ticket — null nếu chưa xác định được (ticket cũ, hoặc auto-from-alert).</summary>
+    public string? SiteId { get; set; }
+
+    /// <summary>
+    /// Ticket cha (cùng nguyên nhân gốc). KHÁC MergedIntoTicketId: link không đóng ticket này,
+    /// SLA vẫn chạy. Xem Ticket.ParentTicketId.
+    /// </summary>
+    public string? ParentTicketId { get; set; }
     public TicketCloseReasonEnum? CloseReason { get; set; }
 }

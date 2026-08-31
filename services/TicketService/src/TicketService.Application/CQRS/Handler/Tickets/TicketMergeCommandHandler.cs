@@ -88,6 +88,18 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                 }
 
                 var now = DateTime.UtcNow;
+                // Merge is not the only relation `source` may be sitting in — it can also be a
+                // CHILD of a parent-ticket link (TicketLinkParentCommand), e.g. it was raised as
+                // a symptom of a site-level incident before turning out to duplicate another
+                // battery ticket. Merge concludes "these are the same work", so a link claiming
+                // it also belongs to a different, now-closed-and-merged ticket has to go —
+                // otherwise the parent's Related-tickets panel keeps listing a dead end: a
+                // ticket that is both Closed and MergedIntoTicketId-set. Do this BEFORE closing
+                // `source` so the same transaction either commits both changes or neither.
+                var hadParent = source.ParentTicketId.HasValue;
+                var previousParentId = source.ParentTicketId;
+                source.ParentTicketId = null;
+
                 source.Status = TicketStatusEnum.Closed;
                 source.CloseReason = TicketCloseReasonEnum.MergedDuplicate;
                 source.ClosedAt = now;
@@ -108,6 +120,53 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                     // Guid is already persisted on Ticket.MergedIntoTicketId for lookups.
                     Reason = $"Merged into master ticket {master.Code}."
                 });
+
+                if (hadParent)
+                {
+                    // Separate timeline entry from the merge one above: this is a side effect of
+                    // the merge, not the merge itself, and a reader scanning the timeline later
+                    // should not have to guess why an unlink happened when nobody clicked Unlink.
+                    await _uow.TicketActivities.AddAsync(new TicketActivity
+                    {
+                        Id = Guid.NewGuid(),
+                        TicketId = source.Id,
+                        ActorUserId = request.ManagerId,
+                        ActorRole = ActorRoleEnum.Manager,
+                        ActorDisplayName = managerDisplayName,
+                        Action = ActivityActionEnum.StatusChanged,
+                        Ticket = source,
+                        NewValue = TicketStatusEnum.Closed.ToString(),
+                        Reason = $"Unlinked from parent ticket {previousParentId} (ticket was merged)."
+                    });
+                }
+
+                // The other direction of the same problem: `source` may itself be a PARENT with
+                // children pointing ParentTicketId at it. TicketLinkParentCommandHandler refuses
+                // to let a ticket-with-children become a child (`hasChildren` check), but Merge
+                // has no such gate — nothing stopped a parent from being merged away as a
+                // duplicate. Left alone, every child would keep citing a Closed+Merged ticket as
+                // its parent, which is exactly the dead link this fix is closing on the other
+                // side. Clear it on every child in the same transaction as the merge itself.
+                var children = await _uow.Tickets.GetAllAsync()
+                    .Where(t => t.ParentTicketId == source.Id && !t.IsDeleted)
+                    .ToListAsync(transactionCt);
+                foreach (var child in children)
+                {
+                    child.ParentTicketId = null;
+                    _uow.Tickets.UpdateAsync(child);
+                    await _uow.TicketActivities.AddAsync(new TicketActivity
+                    {
+                        Id = Guid.NewGuid(),
+                        TicketId = child.Id,
+                        ActorUserId = request.ManagerId,
+                        ActorRole = ActorRoleEnum.Manager,
+                        ActorDisplayName = managerDisplayName,
+                        Action = ActivityActionEnum.StatusChanged,
+                        Ticket = child,
+                        NewValue = child.Status.ToString(),
+                        Reason = $"Unlinked from parent ticket {source.Code} (parent was merged into {master.Code})."
+                    });
+                }
                 await _uow.TicketActivities.AddAsync(new TicketActivity
                 {
                     Id = Guid.NewGuid(),

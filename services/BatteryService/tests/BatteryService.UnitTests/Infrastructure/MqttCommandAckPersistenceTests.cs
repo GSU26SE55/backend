@@ -50,8 +50,15 @@ public class MqttCommandAckPersistenceTests
         builder.IotDeviceCommands.Verify(repo => repo.UpdateAsync(It.IsAny<IotDeviceCommand>()), Times.Never);
     }
 
+    // Lý do thô của firmware phải được LƯU NGUYÊN VĂN. Trước đây chỗ này chuẩn hoá rồi ghi đè,
+    // nên lý do gốc mất vĩnh viễn trong DB và không tầng nào phía sau khôi phục được — mobile dò
+    // chuỗi "unsupported" để ẩn control trên thiết bị không hỗ trợ, nhưng chuỗi tới nơi luôn là
+    // câu chuẩn hoá không chứa từ khoá nào.
+    //
+    // Việc chuẩn hoá thành câu tiếng Anh cho người đọc chuyển sang tầng ĐỌC
+    // (`GetBmsSwitchStateQueryHandler`), nơi nó trả kèm cả `DeviceReason` thô.
     [Fact]
-    public async Task BmsSwitchAckNormalizesLegacyFirmwareErrorToEnglish()
+    public async Task BmsSwitchAckKeepsTheRawFirmwareReason()
     {
         var device = Device();
         var command = Command(device.Id, "cmd-legacy-error");
@@ -62,10 +69,10 @@ public class MqttCommandAckPersistenceTests
         var bridge = Bridge(provider);
 
         await bridge.PersistCommandAckAsync(device.MqttUsername!,
-            """{"cmdId":"cmd-legacy-error","status":"rejected","error":"legacy device error"}""");
+            """{"cmdId":"cmd-legacy-error","status":"rejected","error":"unsupported target"}""");
 
         command.Status.Should().Be(IotDeviceCommandStatusEnum.Rejected);
-        command.AckError.Should().Be("The BMS rejected the control command.");
+        command.AckError.Should().Be("unsupported target");
         builder.IotDeviceCommands.Verify(repo => repo.UpdateAsync(command), Times.Once);
     }
 

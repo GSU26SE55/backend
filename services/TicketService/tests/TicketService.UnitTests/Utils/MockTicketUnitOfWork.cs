@@ -77,7 +77,8 @@ public static class MockTicketUnitOfWork
             IEnumerable<TicketKbReference>? kbRefSeed = null,
             IEnumerable<TicketParticipant>? participantSeed = null,
             IEnumerable<TicketAssignment>? assignmentSeed = null,
-            IEnumerable<TicketAiSuggestion>? aiSuggestionSeed = null)
+            IEnumerable<TicketAiSuggestion>? aiSuggestionSeed = null,
+            IEnumerable<TicketBatteryAsset>? batteryAssetSeed = null)
     {
         var ticketsMock = (ticketSeed ?? Array.Empty<Ticket>()).BuildMock();
         var tickets = new Mock<IGenericRepository<Ticket>>();
@@ -166,7 +167,9 @@ public static class MockTicketUnitOfWork
         uow.SetupGet(u => u.TicketChats).Returns(chats.Object);
         uow.SetupGet(u => u.TicketAttachments).Returns(attachments.Object);
 
+        var batteryAssetsMock = (batteryAssetSeed ?? Array.Empty<TicketBatteryAsset>()).BuildMock();
         var ticketBatteryAssets = new Mock<IGenericRepository<TicketBatteryAsset>>();
+        ticketBatteryAssets.Setup(r => r.GetAllAsync()).Returns(batteryAssetsMock);
         ticketBatteryAssets.Setup(r => r.AddAsync(It.IsAny<TicketBatteryAsset>())).Returns(Task.CompletedTask);
         uow.SetupGet(u => u.TicketBatteryAssets).Returns(ticketBatteryAssets.Object);
         uow.SetupGet(u => u.MaintenanceLogs).Returns(logs.Object);

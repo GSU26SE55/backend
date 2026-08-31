@@ -56,14 +56,7 @@ public class ManagerQueueQueryHandler : IRequestHandler<ManagerQueueQuery, Commo
         if (request.Category.HasValue)
             query = query.Where(t => t.Category == request.Category.Value);
 
-        // Ticket New chưa có Priority (null). Postgres xếp NULL CUỐI khi ORDER BY ASC, nên
-        // nếu sort thẳng theo Priority thì ticket chưa triage bị đẩy xuống sau ticket auto —
-        // ngược với ý nghĩa hàng chờ. Ưu tiên nhóm New lên trước, rồi mới P1→P2→P3.
-        query = query.OrderBy(t => t.Priority == TicketPriorityEnum.Urgent ? 0
-                                  : t.Priority == TicketPriorityEnum.P1Critical ? 1
-                                  : t.Priority == TicketPriorityEnum.P2High ? 2
-                                  : t.Priority == TicketPriorityEnum.P3Normal ? 3 : 4)
-            .ThenBy(t => t.CreatedAt)
+        query = query.OrderByDescending(t => t.CreatedAt)
             .ThenBy(t => t.Id); // tie-breaker cố định — pagination ổn định
 
         // Phân trang trên entity: sau đó còn phải truy vấn phụ (chat chưa đọc) rồi mới dựng DTO,

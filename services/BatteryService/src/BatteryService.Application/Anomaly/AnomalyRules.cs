@@ -8,69 +8,74 @@ namespace BatteryService.Application.Anomaly;
 /// KHÔNG có IO, KHÔNG inject — static class. Được handler/Anomaly command gọi để detect.
 ///
 /// Severity rules:
-/// - Overheat: vượt &gt; 5°C ngưỡng → Critical, ngược lại Warning
-/// - Overvoltage / Undervoltage: Critical (an toàn)
-/// - LowSoc: dưới SocCritical → Critical, dưới SocWarning → Warning
-/// - SohDegradation: dưới SohCritical → Critical, dưới SohWarning → Warning
+/// - Overheat: đạt tới TemperatureMax → Critical, đạt tới TemperatureMin → Warning
+/// - Overvoltage: đạt tới VoltageMax → Critical, đạt tới VoltageMin → Warning
+///   (Min/Max ở đây nghĩa là Warning/Critical — thang một chiều, KHÔNG phải dải an toàn.)
+/// - LowSoc: đạt tới SocCritical → Critical, đạt tới SocWarning → Warning
+/// - SohDegradation: đạt tới SohCritical → Critical, đạt tới SohWarning → Warning
+///
+/// Mọi so sánh đều BAO GỒM mốc (&gt;= / &lt;=): số đo đúng bằng ngưỡng Admin đặt là đã vi phạm.
+/// Đặt 30 nghĩa là "từ 30 trở lên báo cho tôi", không phải "trên 30 mới báo" — ngưỡng lẫn số đo
+/// đều chỉ có 2 chữ số thập phân nên mốc chẵn là giá trị chạm tới được thật, không phải điểm biên
+/// vô nghĩa.
 /// - RapidDischarge / AbnormalCharging: Critical
 /// - DeviceOffline: Warning
 /// </summary>
 public static class AnomalyRules
 {
-    private const decimal OverheatCriticalDeltaC = 5m;
-
-    // Sprint Bonus NS-25 (#665, F1) — dưới TemperatureMin quá 5°C → Critical (mirror Overheat delta).
-    private const decimal UndertempCriticalDeltaC = 5m;
-
     public static IReadOnlyList<AnomalyDetection> Detect(SensorReading reading, ThresholdConfig threshold)
     {
         var anomalies = new List<AnomalyDetection>();
 
-        if (reading.Temperature > threshold.TemperatureMax)
+        // NHIỆT ĐỘ — hai mốc, cùng khuôn SOC/SOH: `TemperatureMin` là mốc **Warning**,
+        // `TemperatureMax` là mốc **Critical**. Cả hai đều là số Admin đặt, không có hằng số nào
+        // suy ra ở giữa (mốc Critical trước đây là `TemperatureMax + 5` chôn trong file này — con
+        // số Admin đặt chỉ ra Warning còn mốc thật sự đẻ ticket thì không sửa được, không hiện ra).
+        //
+        // ⚠️ Tên cột nói "Min/Max" nhưng NGHĨA là "Warning/Critical" — đây là thang MỘT CHIỀU, không
+        // phải hai đầu của một dải an toàn. Cột giữ tên cũ để khỏi phá hợp đồng gRPC sang TicketService
+        // (`SensorSnapshotResponse.TemperatureMin/Max`) và mọi DTO/FE đang đọc theo tên đó.
+        //
+        // Hệ quả có chủ ý: KHÔNG còn rule cho phía thấp. `Undertemp` (lithium plating khi sạc dưới
+        // 0°C, NS-25/#665) và `Undervoltage` (xả kiệt) không còn chỗ nào để diễn đạt ngưỡng nên đã
+        // bị gỡ khỏi engine. Giá trị enum `Undertemp = 16` / `Undervoltage = 3` vẫn giữ vì alert cũ
+        // trong DB tham chiếu tới chúng — chỉ là từ nay không sinh thêm.
+        if (reading.Temperature >= threshold.TemperatureMax)
         {
-            var severity = reading.Temperature > threshold.TemperatureMax + OverheatCriticalDeltaC
-                ? AlertSeverityEnum.Critical
-                : AlertSeverityEnum.Warning;
             anomalies.Add(new AnomalyDetection(
-                AnomalyTypeEnum.Overheat, severity,
+                AnomalyTypeEnum.Overheat, AlertSeverityEnum.Critical,
                 threshold.TemperatureMax, reading.Temperature, "°C"));
         }
-
-        // Sprint Bonus NS-25 (#665, F1, Q11=A) — Undertemp. Trước fix, TemperatureMin (seed −10°C
-        // cho cả 3 loại pin) là field CHẾT: không rule nào dùng. Sạc pin lithium dưới 0°C gây lithium
-        // plating (kim loại lithium bám lên anode → mất dung lượng + nguy cơ short) — nguy hiểm thật,
-        // citation B2 (Feng et al., J. Power Sources 2018).
-        if (reading.Temperature < threshold.TemperatureMin)
+        else if (reading.Temperature >= threshold.TemperatureMin)
         {
-            var severity = reading.Temperature < threshold.TemperatureMin - UndertempCriticalDeltaC
-                ? AlertSeverityEnum.Critical
-                : AlertSeverityEnum.Warning;
             anomalies.Add(new AnomalyDetection(
-                AnomalyTypeEnum.Undertemp, severity,
+                AnomalyTypeEnum.Overheat, AlertSeverityEnum.Warning,
                 threshold.TemperatureMin, reading.Temperature, "°C"));
         }
 
-        if (reading.Voltage > threshold.VoltageMax)
+        // ĐIỆN ÁP — cùng quy ước: `VoltageMin` là Warning, `VoltageMax` là Critical.
+        // `else if` chứ không phải hai `if` rời: vượt mốc Critical thì CHỈ ra một alert Critical,
+        // nếu không mỗi số đo quá ngưỡng sẽ đẻ hai alert chồng nhau cho cùng một sự cố.
+        if (reading.Voltage >= threshold.VoltageMax)
         {
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.Overvoltage, AlertSeverityEnum.Critical,
                 threshold.VoltageMax, reading.Voltage, "V"));
         }
-
-        if (reading.Voltage < threshold.VoltageMin)
+        else if (reading.Voltage >= threshold.VoltageMin)
         {
             anomalies.Add(new AnomalyDetection(
-                AnomalyTypeEnum.Undervoltage, AlertSeverityEnum.Critical,
+                AnomalyTypeEnum.Overvoltage, AlertSeverityEnum.Warning,
                 threshold.VoltageMin, reading.Voltage, "V"));
         }
 
-        if (reading.SocPercent < threshold.SocCriticalThreshold)
+        if (reading.SocPercent <= threshold.SocCriticalThreshold)
         {
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.LowSoc, AlertSeverityEnum.Critical,
                 threshold.SocCriticalThreshold, reading.SocPercent, "%"));
         }
-        else if (reading.SocPercent < threshold.SocWarningThreshold)
+        else if (reading.SocPercent <= threshold.SocWarningThreshold)
         {
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.LowSoc, AlertSeverityEnum.Warning,
@@ -78,14 +83,14 @@ public static class AnomalyRules
         }
 
         if (threshold.CurrentMaxDischarge.HasValue && reading.Current < 0
-            && Math.Abs(reading.Current) > threshold.CurrentMaxDischarge.Value)
+            && Math.Abs(reading.Current) >= threshold.CurrentMaxDischarge.Value)
         {
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.RapidDischarge, AlertSeverityEnum.Critical,
                 threshold.CurrentMaxDischarge.Value, Math.Abs(reading.Current), "A"));
         }
 
-        if (threshold.CurrentMaxCharge.HasValue && reading.Current > threshold.CurrentMaxCharge.Value)
+        if (threshold.CurrentMaxCharge.HasValue && reading.Current >= threshold.CurrentMaxCharge.Value)
         {
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.AbnormalCharging, AlertSeverityEnum.Critical,
@@ -95,14 +100,14 @@ public static class AnomalyRules
         if (reading.SohPercent.HasValue)
         {
             if (threshold.SohCriticalThreshold.HasValue
-                && reading.SohPercent.Value < threshold.SohCriticalThreshold.Value)
+                && reading.SohPercent.Value <= threshold.SohCriticalThreshold.Value)
             {
                 anomalies.Add(new AnomalyDetection(
                     AnomalyTypeEnum.SohDegradation, AlertSeverityEnum.Critical,
                     threshold.SohCriticalThreshold.Value, reading.SohPercent.Value, "%"));
             }
             else if (threshold.SohWarningThreshold.HasValue
-                     && reading.SohPercent.Value < threshold.SohWarningThreshold.Value)
+                     && reading.SohPercent.Value <= threshold.SohWarningThreshold.Value)
             {
                 anomalies.Add(new AnomalyDetection(
                     AnomalyTypeEnum.SohDegradation, AlertSeverityEnum.Warning,
@@ -112,7 +117,7 @@ public static class AnomalyRules
 
         // Sprint 5B #105 — Tier 2 anomalies.
         if (reading.InternalResistanceMilliohm.HasValue && threshold.InternalResistanceMaxMilliohm.HasValue
-            && reading.InternalResistanceMilliohm.Value > threshold.InternalResistanceMaxMilliohm.Value)
+            && reading.InternalResistanceMilliohm.Value >= threshold.InternalResistanceMaxMilliohm.Value)
         {
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.HighInternalResistance, AlertSeverityEnum.Critical,
@@ -121,7 +126,7 @@ public static class AnomalyRules
         }
 
         if (reading.CellVoltageDeltaMv.HasValue && threshold.CellVoltageDeltaMaxMv.HasValue
-            && reading.CellVoltageDeltaMv.Value > threshold.CellVoltageDeltaMaxMv.Value)
+            && reading.CellVoltageDeltaMv.Value >= threshold.CellVoltageDeltaMaxMv.Value)
         {
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.CellImbalance, AlertSeverityEnum.Critical,
@@ -150,7 +155,7 @@ public static class AnomalyRules
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.HighAmbientTemp, AlertSeverityEnum.Critical,
                 threshold.HighAmbientTempCritical.Value,
-                reading.AmbientTemperature, "°C"));
+                reading.AmbientTemperature ?? 0m, "°C"));
         }
         else if (threshold.HighAmbientTempWarning.HasValue
                  && reading.AmbientTemperature > threshold.HighAmbientTempWarning.Value)
@@ -158,7 +163,7 @@ public static class AnomalyRules
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.HighAmbientTemp, AlertSeverityEnum.Warning,
                 threshold.HighAmbientTempWarning.Value,
-                reading.AmbientTemperature, "°C"));
+                reading.AmbientTemperature ?? 0m, "°C"));
         }
 
         if (threshold.HighHumidityCritical.HasValue
@@ -178,6 +183,23 @@ public static class AnomalyRules
                 reading.Humidity ?? 0m, "%"));
         }
 
+        if (threshold.HighGasCritical.HasValue
+            && reading.GasConcentration > threshold.HighGasCritical.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.HighGasConcentration, AlertSeverityEnum.Critical,
+                threshold.HighGasCritical.Value,
+                reading.GasConcentration ?? 0m, "%"));
+        }
+        else if (threshold.HighGasWarning.HasValue
+                 && reading.GasConcentration > threshold.HighGasWarning.Value)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.HighGasConcentration, AlertSeverityEnum.Warning,
+                threshold.HighGasWarning.Value,
+                reading.GasConcentration ?? 0m, "%"));
+        }
+
         // Combo rule — cả 2 cùng vượt threshold → Critical riêng.
         if (threshold.ComboTempThreshold.HasValue && threshold.ComboHumidityThreshold.HasValue
             && reading.AmbientTemperature >= threshold.ComboTempThreshold.Value
@@ -186,7 +208,7 @@ public static class AnomalyRules
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.HighTempHumidityCombo, AlertSeverityEnum.Critical,
                 threshold.ComboTempThreshold.Value,
-                reading.AmbientTemperature, "°C"));
+                reading.AmbientTemperature ?? 0m, "°C"));
         }
 
         return anomalies;

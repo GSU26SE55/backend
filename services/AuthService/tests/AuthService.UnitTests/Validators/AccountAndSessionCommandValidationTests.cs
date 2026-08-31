@@ -10,8 +10,8 @@ public class CreateAccountCommandValidationTests
     {
         Email = "u@e.com",
         Password = "Strong1Pass!",
-        FullName = "U",
-        PhoneNumber = "0900111",
+        FullName = "User",
+        PhoneNumber = "0900111222",
         DateOfBirth = new DateTime(1990, 1, 1),
         Address = "Addr",
         RoleId = Guid.NewGuid()
@@ -87,8 +87,8 @@ public class UpdateAccountCommandValidationTests
     private static UpdateAccountCommand Valid() => new()
     {
         Id = Guid.NewGuid(),
-        FullName = "U",
-        PhoneNumber = "0900111",
+        FullName = "User",
+        PhoneNumber = "0900111222",
         AvatarUrl = null,
         DateOfBirth = new DateTime(1990, 1, 1),
         Address = "Addr"

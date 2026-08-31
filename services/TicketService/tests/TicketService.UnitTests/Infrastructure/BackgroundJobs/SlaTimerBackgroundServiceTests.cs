@@ -162,10 +162,11 @@ public class SlaTimerBackgroundServiceTests
     }
 
     [Theory]
-    [InlineData(TicketStatusEnum.Pending, TicketPriorityEnum.P1Critical)]
-    [InlineData(TicketStatusEnum.Request, TicketPriorityEnum.P1Critical)]
-    [InlineData(TicketStatusEnum.ReAssign, TicketPriorityEnum.P1Critical)]
+    [InlineData(TicketStatusEnum.Closed, TicketPriorityEnum.P1Critical)]
+    [InlineData(TicketStatusEnum.ClosedRejected, TicketPriorityEnum.P1Critical)]
+    [InlineData(TicketStatusEnum.Completed, TicketPriorityEnum.P1Critical)]
     [InlineData(TicketStatusEnum.InProgress, TicketPriorityEnum.Urgent)]
+    [InlineData(TicketStatusEnum.Open, TicketPriorityEnum.Urgent)]
     public async Task RunningTimer_OutsideEligibleWork_DoesNotWarnOrBreach(
         TicketStatusEnum status,
         TicketPriorityEnum priority)
@@ -224,6 +225,127 @@ public class SlaTimerBackgroundServiceTests
         outbox.Verify(
             x => x.WriteAsync(It.IsAny<SlaBreachedEvent>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task When_OpenTicket_SlaInWarningZone_Should_SendWarning_With_NullStaffId()
+    {
+        var ticketId = Guid.NewGuid();
+        var timerId = Guid.NewGuid();
+        await using var provider = CreateProvider(Guid.NewGuid().ToString());
+
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            var ticket = new Ticket
+            {
+                Id = ticketId,
+                Code = "T-OPEN-WARN",
+                CustomerId = Guid.NewGuid(),
+                Title = "Test Open",
+                Description = "Test",
+                Category = TicketCategoryEnum.Other,
+                Status = TicketStatusEnum.Open,
+                Priority = TicketPriorityEnum.P1Critical,
+                Origin = TicketOriginEnum.ManualByCustomer
+            };
+            db.Tickets.Add(ticket);
+            // P1 Response SLA: 4h (240 min). 80% = 192 min elapsed (48 min remaining).
+            // StartedAt = FixedNow - 193 min, DueAt = FixedNow + 47 min.
+            db.SlaTimers.Add(new SlaTimer
+            {
+                Id = timerId,
+                TicketId = ticketId,
+                Ticket = ticket,
+                Priority = TicketPriorityEnum.P1Critical,
+                StartedAt = FixedNow.AddMinutes(-193),
+                DueAt = FixedNow.AddMinutes(47),
+                OriginalDueAt = FixedNow.AddMinutes(47),
+                Status = SlaTimerStatusEnum.Running
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var clock = new Mock<TimeProvider>();
+        clock.Setup(x => x.GetUtcNow()).Returns(new DateTimeOffset(FixedNow));
+        var service = new TestableSlaTimerService(
+            new Mock<ILogger<SlaTimerBackgroundService>>().Object,
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            clock.Object);
+
+        await service.TriggerCheck(CancellationToken.None);
+
+        using var verificationScope = provider.CreateScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<TicketDbContext>();
+        var timer = await verificationDb.SlaTimers.FindAsync(timerId);
+        timer!.WarningSentAt.Should().Be(FixedNow);
+
+        var outbox = Mock.Get(verificationScope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>());
+        outbox.Verify(
+            x => x.WriteAsync(
+                It.Is<SlaWarningEvent>(e => e.TicketId == ticketId && e.StaffId == null && e.Percentage >= 80d),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task When_OpenTicket_SlaBreached_Should_UpdateStatus_To_Breached()
+    {
+        var ticketId = Guid.NewGuid();
+        var timerId = Guid.NewGuid();
+        await using var provider = CreateProvider(Guid.NewGuid().ToString());
+
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            var ticket = new Ticket
+            {
+                Id = ticketId,
+                Code = "T-OPEN-BREACH",
+                CustomerId = Guid.NewGuid(),
+                Title = "Test Open Breach",
+                Description = "Test",
+                Category = TicketCategoryEnum.Other,
+                Status = TicketStatusEnum.Open,
+                Priority = TicketPriorityEnum.P1Critical,
+                Origin = TicketOriginEnum.ManualByCustomer
+            };
+            db.Tickets.Add(ticket);
+            db.SlaTimers.Add(new SlaTimer
+            {
+                Id = timerId,
+                TicketId = ticketId,
+                Ticket = ticket,
+                Priority = TicketPriorityEnum.P1Critical,
+                StartedAt = FixedNow.AddHours(-5),
+                DueAt = FixedNow.AddSeconds(-10),
+                OriginalDueAt = FixedNow.AddSeconds(-10),
+                Status = SlaTimerStatusEnum.Running
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var clock = new Mock<TimeProvider>();
+        clock.Setup(x => x.GetUtcNow()).Returns(new DateTimeOffset(FixedNow));
+        var service = new TestableSlaTimerService(
+            new Mock<ILogger<SlaTimerBackgroundService>>().Object,
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            clock.Object);
+
+        await service.TriggerCheck(CancellationToken.None);
+
+        using var verificationScope = provider.CreateScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<TicketDbContext>();
+        var timer = await verificationDb.SlaTimers.FindAsync(timerId);
+        timer!.Status.Should().Be(SlaTimerStatusEnum.Breached);
+        timer.BreachAt.Should().Be(FixedNow);
+
+        var outbox = Mock.Get(verificationScope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>());
+        outbox.Verify(
+            x => x.WriteAsync(
+                It.Is<SlaBreachedEvent>(e => e.TicketId == ticketId && e.Code == "T-OPEN-BREACH"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     private ServiceProvider CreateProvider(string dbName)

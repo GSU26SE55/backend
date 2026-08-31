@@ -47,9 +47,9 @@ public class UpdateNotificationPreferenceCommandHandler
                 QuietHoursStart = start,
                 QuietHoursEnd = end,
                 TimeZone = request.TimeZone,
-                NotifyOnChat = request.NotifyOnChat,
-                NotifyOnMention = request.NotifyOnMention,
-                NotifyOnReaction = request.NotifyOnReaction,
+                NotifyOnChat = request.NotifyOnChat ?? true,
+                NotifyOnMention = request.NotifyOnMention ?? true,
+                NotifyOnReaction = request.NotifyOnReaction ?? false,
                 DigestWindowMinutes = request.DigestWindowMinutes,
             };
             await _unitOfWork.NotificationPreferences.AddAsync(existing);
@@ -62,11 +62,21 @@ public class UpdateNotificationPreferenceCommandHandler
             existing.InAppEnabled = request.InAppEnabled;
             existing.QuietHoursStart = start;
             existing.QuietHoursEnd = end;
-            existing.TimeZone = request.TimeZone;
-            existing.NotifyOnChat = request.NotifyOnChat;
-            existing.NotifyOnMention = request.NotifyOnMention;
-            existing.NotifyOnReaction = request.NotifyOnReaction;
-            existing.DigestWindowMinutes = request.DigestWindowMinutes;
+            // TimeZone là hằng số của deployment, không client nào có ô sửa. Mobile hardcode
+            // 'Asia/Ho_Chi_Minh' và gửi kèm mọi lần lưu, nên ghi đè vô điều kiện là giá trị
+            // user đặt ở nơi khác bị thay mỗi lần họ bật/tắt một kênh trên điện thoại.
+            if (!string.IsNullOrWhiteSpace(request.TimeZone))
+                existing.TimeZone = request.TimeZone;
+            // Chỉ ghi đè khi client thực sự gửi field — màn Profile chỉ PUT 4 channel
+            // + quiet hours, trước đây các pref chat bị reset về default sau mỗi lần lưu.
+            if (request.NotifyOnChat.HasValue)
+                existing.NotifyOnChat = request.NotifyOnChat.Value;
+            if (request.NotifyOnMention.HasValue)
+                existing.NotifyOnMention = request.NotifyOnMention.Value;
+            if (request.NotifyOnReaction.HasValue)
+                existing.NotifyOnReaction = request.NotifyOnReaction.Value;
+            if (request.DigestWindowMinutes.HasValue)
+                existing.DigestWindowMinutes = request.DigestWindowMinutes;
             _unitOfWork.NotificationPreferences.UpdateAsync(existing);
         }
 

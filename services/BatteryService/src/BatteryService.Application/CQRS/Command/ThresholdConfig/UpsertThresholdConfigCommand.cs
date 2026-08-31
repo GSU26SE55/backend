@@ -10,16 +10,16 @@ public class UpsertThresholdConfigCommand : IRequest<CommonResponse<ThresholdCon
     /// <summary>ID BatteryType (Guid).</summary>
     public Guid BatteryTypeId { get; set; }
 
-    /// <summary>Điện áp tối thiểu cho phép (V).</summary>
+    /// <summary>Điện áp — mốc <b>Warning</b> (V). Vượt mốc này là cảnh báo.</summary>
     public decimal VoltageMin { get; set; }
 
-    /// <summary>Điện áp tối đa cho phép (V).</summary>
+    /// <summary>Điện áp — mốc <b>Critical</b> (V). Vượt mốc này là nghiêm trọng, đẻ ticket.</summary>
     public decimal VoltageMax { get; set; }
 
-    /// <summary>Nhiệt độ tối đa (°C).</summary>
+    /// <summary>Nhiệt độ — mốc <b>Critical</b> (°C). Vượt mốc này là nghiêm trọng, đẻ ticket.</summary>
     public decimal TemperatureMax { get; set; }
 
-    /// <summary>Nhiệt độ tối thiểu (°C).</summary>
+    /// <summary>Nhiệt độ — mốc <b>Warning</b> (°C). Vượt mốc này là cảnh báo.</summary>
     public decimal TemperatureMin { get; set; }
 
     /// <summary>SOC threshold Warning (vd 20%).</summary>
@@ -54,10 +54,10 @@ public class UpsertThresholdConfigCommand : IRequest<CommonResponse<ThresholdCon
             AddError(response, nameof(VoltageMin), "Minimum voltage threshold must be greater than 0.");
 
         if (VoltageMax <= VoltageMin)
-            AddCrossFieldError(response, nameof(VoltageMax), "Maximum voltage threshold must be greater than the minimum threshold.");
+            AddCrossFieldError(response, nameof(VoltageMax), "Critical voltage threshold must be greater than the warning threshold.");
 
         if (TemperatureMax <= TemperatureMin)
-            AddCrossFieldError(response, nameof(TemperatureMax), "Maximum temperature must be greater than the minimum temperature.");
+            AddCrossFieldError(response, nameof(TemperatureMax), "Critical temperature must be greater than the warning temperature.");
 
         if (SocWarningThreshold is < 0 or > 100)
             AddError(response, nameof(SocWarningThreshold), "SOC warning threshold must be between 0-100.");

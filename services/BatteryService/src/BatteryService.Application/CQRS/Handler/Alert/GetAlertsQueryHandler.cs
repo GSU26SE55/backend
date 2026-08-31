@@ -46,6 +46,9 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
             .Include(alert => alert.Site)
             // Màn hình "Device alerts" hiển thị mã/tên thiết bị thay cho serial pin.
             .Include(alert => alert.IotDevice)
+            // Màn hình "Environmental alerts" hiển thị loại sự cố thật (Gas leak, Flood…) cho dòng
+            // alert bản sao — bản thân alert không mang thông tin đó.
+            .Include(alert => alert.EnvironmentalIncident)
             .Where(alert => !alert.IsDeleted);
 
         // Alert có thể gắn asset HOẶC site (cả hai đều nullable) — phải phủ cả hai đường.
@@ -59,6 +62,9 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
         if (request.BatteryAssetId.HasValue)
             query = query.Where(alert => alert.BatteryAssetId == request.BatteryAssetId.Value);
 
+        if (request.SiteId.HasValue)
+            query = query.Where(alert => alert.SiteId == request.SiteId.Value);
+
         if (request.Severity.HasValue)
             query = query.Where(alert => alert.Severity == request.Severity.Value);
 
@@ -70,10 +76,30 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
         if (request.AnomalyType.HasValue)
             query = query.Where(alert => alert.AnomalyType == request.AnomalyType.Value);
 
-        // Alert mirror của EnvironmentalIncident đã có màn hình riêng — không hiện lại ở danh sách
-        // alert pin. Chỉ áp dụng khi client không tự chỉ định AnomalyType.
+        // "Battery alerts" là alert gắn với MỘT viên pin. Mọi alert cấp site — mirror của
+        // EnvironmentalIncident, và ngưỡng môi trường (nhiệt độ/độ ẩm/khí gas) — không có pin nào
+        // để hiện serial, nên bị loại khỏi đây.
+        //
+        // Lọc theo CHÍNH quan hệ "có gắn pin hay không", không liệt kê từng AnomalyType: bản cũ
+        // chỉ trừ đúng EnvironmentalIncident, nên khi thêm loại ngưỡng môi trường mới
+        // (HighGasConcentration #18) nó lại lọt vào danh sách pin dưới dạng dòng "Site level"
+        // không có serial. Liệt kê theo loại là lỗi hẹn giờ — cứ thêm loại là quên cập nhật.
+        // Chỉ áp dụng khi client không tự chỉ định AnomalyType.
         if (request.ExcludeEnvironmentalIncidents && !request.AnomalyType.HasValue)
-            query = query.Where(alert => alert.AnomalyType != Domain.Enums.AnomalyTypeEnum.EnvironmentalIncident);
+            query = query.Where(alert => alert.BatteryAssetId != null);
+
+        // Mặt đối: bảng "Vượt ngưỡng" của màn hình Environmental alerts. Phải trừ thêm hai loại
+        // alert gateway — chúng cũng không gắn pin, nên nếu chỉ xét "không có pin" thì alert thiết
+        // bị sẽ hiện lẫn ở đây và bị đếm hai lần trên sidebar.
+        // GIỮ LẠI alert bản sao của EnvironmentalIncident: mỗi incident đều ghi kèm một dòng ở đây,
+        // nên bảng `alerts` đã chứa TRỌN hai thứ mà màn hình Environmental cần hiện (sự cố do
+        // firmware báo + vượt ngưỡng do backend phát hiện). Nhờ vậy màn hình dùng được MỘT nguồn,
+        // MỘT phân trang — thay vì ghép hai endpoint đã phân trang riêng, vốn không phân trang đúng
+        // được. Dòng bản sao lấy tên và số đo từ chính incident (xem IncidentType/IncidentTypeName).
+        if (request.SiteLevelOnly && !request.AnomalyType.HasValue)
+            query = query.Where(alert => alert.BatteryAssetId == null
+                && alert.AnomalyType != Domain.Enums.AnomalyTypeEnum.DeviceOffline
+                && alert.AnomalyType != Domain.Enums.AnomalyTypeEnum.IotDataIntegrityViolation);
 
         // Alert cấp thiết bị IoT gắn IotDeviceId chứ không gắn pin — màn hình "Device alerts"
         // lấy đúng hai loại này, "Battery alerts" loại chúng ra, nên hai danh sách rời nhau và
@@ -146,6 +172,12 @@ public class GetAlertsQueryHandler : IRequestHandler<GetAlertsQuery, CommonRespo
                 SiteName = x.alert.Site != null ? x.alert.Site.Name : string.Empty,
                 CustomerName = x.account != null ? x.account.FullName : string.Empty,
                 AnomalyType = x.alert.AnomalyType,
+                EnvironmentalIncidentId = x.alert.EnvironmentalIncidentId.HasValue
+                    ? x.alert.EnvironmentalIncidentId.Value.ToString()
+                    : null,
+                IncidentType = x.alert.EnvironmentalIncident != null
+                    ? x.alert.EnvironmentalIncident.IncidentType
+                    : null,
                 Severity = x.alert.Severity,
                 ThresholdValue = x.alert.ThresholdValue,
                 ActualValue = x.alert.ActualValue,

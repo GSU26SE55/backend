@@ -67,8 +67,8 @@ public class MaintenanceCycleDueConsumerTests : IClassFixture<TicketApiFactory>
         ticket.PeriodicMaintenanceDueAtUtc.Should().BeCloseTo(dueAtUtc, TimeSpan.FromSeconds(5));
         ticket.Code.Should().NotBeNullOrWhiteSpace();
 
-        // Priority tính từ ma trận Impact × Urgency lúc Manager triage, không gán sẵn ở đây.
-        ticket.Priority.Should().BeNull();
+        // Bảo trì định kỳ là việc theo lịch, không phải sự cố — gán cứng P3Normal khi mở ticket.
+        ticket.Priority.Should().Be(TicketPriorityEnum.P3Normal);
 
         // Ticket phải nối tới pin, nếu không thì màn hình tài sản không thấy việc đang mở.
         (await db.TicketBatteryAssets.AsNoTracking()

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using AuthService.Application.DTOs.Response.Account;
 using AuthService.Application.Validation;
 using MediatR;
@@ -9,10 +8,6 @@ namespace AuthService.Application.CQRS.Command.Account;
 
 public class CreateAccountCommand : IRequest<AccountActionResponse>, IValidatable<AccountActionResponse>
 {
-    private static readonly Regex EmailRegex = new(
-        @"^[^\s@]+@[^\s@]+\.[^\s@]+$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
@@ -26,28 +21,12 @@ public class CreateAccountCommand : IRequest<AccountActionResponse>, IValidatabl
     {
         var response = new AccountActionResponse();
 
-        if (string.IsNullOrWhiteSpace(Email))
-            response.ListErrors.Add(new Errors { Field = "Email", Detail = "Email is required." });
-        else if (Email.Trim().Length > 256)
-            response.ListErrors.Add(new Errors { Field = "Email", Detail = "Email must not exceed 256 characters." });
-        else if (!EmailRegex.IsMatch(Email.Trim()))
-            response.ListErrors.Add(new Errors { Field = "Email", Detail = "Invalid email format." });
-
+        AccountFieldPolicy.AddEmailErrors(response.ListErrors, Email);
         PasswordPolicy.AddStrongPasswordErrors(response.ListErrors, Password, nameof(Password), "Password");
-
-        if (string.IsNullOrWhiteSpace(FullName))
-            response.ListErrors.Add(new Errors { Field = "FullName", Detail = "Full name is required." });
-        else if (FullName.Trim().Length > 150)
-            response.ListErrors.Add(new Errors { Field = "FullName", Detail = "Full name must not exceed 150 characters." });
-
-        if (!string.IsNullOrWhiteSpace(PhoneNumber) && PhoneNumber.Trim().Length > 20)
-            response.ListErrors.Add(new Errors { Field = "PhoneNumber", Detail = "Phone number must not exceed 20 characters." });
-
-        if (DateOfBirth.HasValue && DateOfBirth.Value > DateTime.UtcNow)
-            response.ListErrors.Add(new Errors { Field = "DateOfBirth", Detail = "Invalid date of birth." });
-
-        if (!string.IsNullOrEmpty(Address) && Address.Length > 500)
-            response.ListErrors.Add(new Errors { Field = "Address", Detail = "Address must not exceed 500 characters." });
+        AccountFieldPolicy.AddFullNameErrors(response.ListErrors, FullName);
+        AccountFieldPolicy.AddPhoneErrors(response.ListErrors, PhoneNumber);
+        AccountFieldPolicy.AddDateOfBirthErrors(response.ListErrors, DateOfBirth);
+        AccountFieldPolicy.AddAddressErrors(response.ListErrors, Address);
 
         if (RoleId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "RoleId", Detail = "A valid role must be assigned to the new account." });

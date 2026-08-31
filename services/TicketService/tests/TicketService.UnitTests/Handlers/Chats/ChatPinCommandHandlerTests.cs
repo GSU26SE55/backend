@@ -1,10 +1,12 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Moq;
 using TicketService.Application.Common.Models;
 using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -17,6 +19,8 @@ public class ChatPinCommandHandlerTests
 {
     // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
     private readonly Mock<IPublisher> _publisher = new();
+    private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
+    private readonly Mock<ILogger<ChatPinCommandHandler>> _logger = new();
     private readonly Mock<IActivityLogger> _activityLogger = new();
 
     private static readonly List<string> PinPermission = new() { ChatPermissionCodes.ChatPin };
@@ -56,7 +60,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object, _realtimeNotifier.Object, _logger.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -102,7 +106,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object, _realtimeNotifier.Object, _logger.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -133,7 +137,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object, _realtimeNotifier.Object, _logger.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -157,17 +161,18 @@ public class ChatPinCommandHandlerTests
         var chatId = Guid.NewGuid();
         var ticket = MakeTicket(ticketId);
         var chat = MakeChat(chatId, ticketId, ticket);
-        var pinned1 = MakeChat(Guid.NewGuid(), ticketId, ticket, isPinned: true);
-        var pinned2 = MakeChat(Guid.NewGuid(), ticketId, ticket, isPinned: true);
-        var pinned3 = MakeChat(Guid.NewGuid(), ticketId, ticket, isPinned: true);
+        // MaxPinnedPerTicket is 5 — seed exactly that many so the next pin is the one rejected.
+        var alreadyPinned = Enumerable.Range(0, 5)
+            .Select(_ => MakeChat(Guid.NewGuid(), ticketId, ticket, isPinned: true))
+            .ToArray();
 
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
             ticketSeed: new[] { ticket },
-            chatSeed: new[] { chat, pinned1, pinned2, pinned3 }
+            chatSeed: new[] { chat }.Concat(alreadyPinned).ToArray()
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object, _realtimeNotifier.Object, _logger.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -195,7 +200,7 @@ public class ChatPinCommandHandlerTests
         var (uow, _, _, _, _, _, _, chats, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync((TicketChat?)null);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object, _realtimeNotifier.Object, _logger.Object);
         var command = new ChatPinCommand
         {
             TicketId = ticketId,
@@ -227,7 +232,7 @@ public class ChatPinCommandHandlerTests
         );
         chats.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
 
-        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object);
+        var handler = new ChatPinCommandHandler(uow.Object, _activityLogger.Object, new ChatAuthorizationService(uow.Object), _publisher.Object, _realtimeNotifier.Object, _logger.Object);
         var command = new ChatPinCommand
         {
             TicketId = otherTicketId,

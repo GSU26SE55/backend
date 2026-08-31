@@ -12,7 +12,7 @@ public class RegisterCommandValidationTests
         Email = "alice@example.com",
         Password = "Strong1Pass!",
         FullName = "Alice",
-        PhoneNumber = "0900111",
+        PhoneNumber = "0900111222",
         DateOfBirth = new DateTime(1990, 1, 1),
         Address = "Hanoi"
     };

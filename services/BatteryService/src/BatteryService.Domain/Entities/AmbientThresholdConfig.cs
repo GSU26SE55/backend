@@ -17,6 +17,12 @@ public class AmbientThresholdConfig : AuditableEntity
     public decimal? HighHumidityCritical { get; set; }
 
     /// <summary>
+    /// Ngưỡng nồng độ khí gas cảnh báo & nguy hiểm (% từ 0 - 100).
+    /// </summary>
+    public decimal? HighGasWarning { get; set; }
+    public decimal? HighGasCritical { get; set; }
+
+    /// <summary>
     /// Combo rule: nếu temp >= threshold AND humidity >= threshold → Combo anomaly.
     /// </summary>
     public decimal? ComboTempThreshold { get; set; }

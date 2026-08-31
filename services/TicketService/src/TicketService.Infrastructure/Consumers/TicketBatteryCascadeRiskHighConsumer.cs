@@ -118,10 +118,18 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
         if (timer is not null && timer.Status == SlaTimerStatusEnum.Running)
         {
             timer.Priority = TicketPriorityEnum.P1Critical;
-            timer.OriginalDueAt = _slaCalculator.CalculateDueDate(
-                timer.StartedAt, TicketPriorityEnum.P1Critical);
-            timer.DueAt = _slaCalculator.AddWorkingMinutes(
-                timer.OriginalDueAt, timer.TotalPausedMinutes);
+            if (ticket.Status == TicketStatusEnum.Open)
+            {
+                timer.OriginalDueAt = _slaCalculator.CalculateResponseDueDate(timer.StartedAt, TicketPriorityEnum.P1Critical);
+                timer.DueAt = timer.OriginalDueAt;
+            }
+            else
+            {
+                timer.OriginalDueAt = _slaCalculator.CalculateDueDate(
+                    timer.StartedAt, TicketPriorityEnum.P1Critical);
+                timer.DueAt = _slaCalculator.AddWorkingMinutes(
+                    timer.OriginalDueAt, timer.TotalPausedMinutes);
+            }
             timer.WarningSentAt = null;
             _uow.SlaTimers.UpdateAsync(timer);
         }
@@ -151,8 +159,7 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
     private async Task AutoCreateP1TicketAsync(BatteryCascadeRiskHighEvent evt, CancellationToken ct)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(now);
-        var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, TicketPriorityEnum.P1Critical);
+        var dueAt = _slaCalculator.CalculateResponseDueDate(now, TicketPriorityEnum.P1Critical);
         var code = await _codeGenerator.GenerateAsync();
 
         var ticket = new Ticket
@@ -179,7 +186,7 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
             Priority = TicketPriorityEnum.P1Critical,
-            StartedAt = effectiveStartedAt,
+            StartedAt = now,
             DueAt = dueAt,
             OriginalDueAt = dueAt,
             Status = SlaTimerStatusEnum.Running

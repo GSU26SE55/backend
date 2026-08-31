@@ -64,6 +64,11 @@ public class MaintenanceLogAddCommand : IRequest<TicketActionResponse>, IValidat
 
         if (string.IsNullOrWhiteSpace(Summary))
             response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary is required." });
+        // Cột summary chỉ có 500 ký tự. Không chặn ở đây thì validate cho qua rồi EF/Npgsql
+        // ném ở tầng DB → 500 Internal Server Error chứ không phải 400 kèm listErrors, user
+        // thấy "lỗi máy chủ" và mất trắng nội dung vừa gõ.
+        else if (Summary.Trim().Length > 500)
+            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary must be at most 500 characters." });
 
         if (DurationMinutes < 0)
             response.ListErrors.Add(new Errors { Field = "DurationMinutes", Detail = "Invalid duration." });
