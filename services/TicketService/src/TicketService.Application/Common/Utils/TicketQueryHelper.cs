@@ -84,7 +84,14 @@ public static class TicketQueryHelper
             ActiveIncidentEpisodeId = t.ActiveIncidentEpisodeId?.ToString(),
             CreatedAt = t.CreatedAt,
             UpdatedAt = t.UpdatedAt,
-            SlaTimer = canViewSlaTimer ? MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc, t.Status) : null,
+            SlaTimer = canViewSlaTimer
+                ? MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc, t.Status,
+                    rescueAssignmentCreatedAt: t.SlaTimer?.Status == SlaTimerStatusEnum.Breached
+                        && t.Status == TicketStatusEnum.InProgress
+                        ? t.Assignments.FirstOrDefault(a => !a.IsDeleted
+                            && a.Role == AssignmentRoleEnum.PrimaryHandler)?.CreatedAt
+                        : null)
+                : null,
             ExpectedCompletionAtUtc = t.SlaTimer?.DueAt,
             HasUnreadChat = hasUnreadChat,
             DetectedAt = t.DetectedAt,
@@ -104,7 +111,8 @@ public static class TicketQueryHelper
         SlaTimer? sla,
         ISlaCalculator slaCalculator,
         DateTime atUtc,
-        TicketStatusEnum ticketStatus = TicketStatusEnum.Open)
+        TicketStatusEnum ticketStatus = TicketStatusEnum.Open,
+        DateTime? rescueAssignmentCreatedAt = null)
     {
         if (sla is null)
             return null;
@@ -135,7 +143,10 @@ public static class TicketQueryHelper
             CalendarExtensionMinutes = calendarExtension.Minutes,
             CalendarExtensionDays = calendarExtension.NonWorkingDays is null
                 ? []
-                : [.. calendarExtension.NonWorkingDays]
+                : [.. calendarExtension.NonWorkingDays],
+            RescueRemainingMinutes = sla.Status == SlaTimerStatusEnum.Breached && rescueAssignmentCreatedAt.HasValue
+                ? Math.Max(0, 1440 - (int)slaCalculator.GetWorkingMinutesBetween(rescueAssignmentCreatedAt.Value, atUtc))
+                : null
         };
     }
 

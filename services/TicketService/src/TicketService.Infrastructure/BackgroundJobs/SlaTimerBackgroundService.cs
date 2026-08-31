@@ -58,7 +58,9 @@ public class SlaTimerBackgroundService : BackgroundService
             var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
             ids = await db.SlaTimers.AsNoTracking()
                 .Where(timer => !timer.IsDeleted
-                                && timer.Status == SlaTimerStatusEnum.Running
+                                && (timer.Status == SlaTimerStatusEnum.Running
+                                    || (timer.Status == SlaTimerStatusEnum.Breached
+                                        && timer.Ticket.Status == TicketStatusEnum.InProgress))
                                 && !timer.Ticket.IsDeleted
                                 && !TicketStatusGroups.Terminal.Contains(timer.Ticket.Status)
                                 && timer.Ticket.Status != TicketStatusEnum.Completed
@@ -88,8 +90,11 @@ public class SlaTimerBackgroundService : BackgroundService
                 .Include(x => x.Ticket)
                 .ThenInclude(x => x.Assignments)
                 .SingleOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct);
+            var isEligibleTimer = timer?.Status == SlaTimerStatusEnum.Running
+                || (timer?.Status == SlaTimerStatusEnum.Breached
+                    && timer.Ticket.Status == TicketStatusEnum.InProgress);
             if (timer is null
-                || timer.Status != SlaTimerStatusEnum.Running
+                || !isEligibleTimer
                 || timer.Ticket.IsDeleted
                 || TicketStatusGroups.Terminal.Contains(timer.Ticket.Status)
                 || timer.Ticket.Status == TicketStatusEnum.Completed
@@ -101,6 +106,47 @@ public class SlaTimerBackgroundService : BackgroundService
             }
 
             var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+
+            // Rescue window: monitor 24h working-hour budget for post-breach reassigned Staff
+            if (timer.Status == SlaTimerStatusEnum.Breached
+                && timer.Ticket.Status == TicketStatusEnum.InProgress)
+            {
+                var currentAssignment = timer.Ticket.Assignments
+                    .FirstOrDefault(a => a.Role == AssignmentRoleEnum.PrimaryHandler && !a.IsDeleted);
+                var rescueExpired = false;
+                if (currentAssignment is not null)
+                {
+                    var rescueMinutes = slaCalculator.GetWorkingMinutesBetween(
+                        currentAssignment.CreatedAt, nowUtc);
+                    if (rescueMinutes > 1440)
+                    {
+                        rescueExpired = true;
+                        // Fire second SlaBreachedEvent → EscalationBackgroundService escalates P1→Urgent
+                        // and fires BatteryIsolationRequestedEvent via the existing chain.
+                        await outbox.WriteAsync(new SlaBreachedEvent
+                        {
+                            TicketId = timer.TicketId,
+                            BreachedAt = nowUtc,
+                            Priority = timer.Ticket.Priority?.ToString() ?? string.Empty,
+                            Code = timer.Ticket.Code
+                        }, ct);
+                        timer.Status = SlaTimerStatusEnum.Stopped;
+                        timer.CurrentPauseStartedAt = null;
+                    }
+                }
+                if (rescueExpired)
+                {
+                    await db.SaveChangesAsync(ct);
+                    if (transaction is not null)
+                        await transaction.CommitAsync(ct);
+                }
+                else if (transaction is not null)
+                {
+                    await transaction.RollbackAsync(ct);
+                }
+                return;
+            }
+
             if (timer.DueAt <= nowUtc)
             {
                 timer.Status = SlaTimerStatusEnum.Breached;
