@@ -88,7 +88,6 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
             // ticket pin cùng cabinet.
             SiteId = evt.SiteId,
             EnvironmentalIncidentId = evt.IncidentId,
-            SiteId = evt.SiteId,
             Status = TicketStatusEnum.Open,
             // `AutoFromEnvironment`, không phải `System`: `System` còn dùng chung cho cascade risk
             // và bảo trì định kỳ, nên phân loại nguồn theo nó phải loại trừ hai nhóm kia bằng field

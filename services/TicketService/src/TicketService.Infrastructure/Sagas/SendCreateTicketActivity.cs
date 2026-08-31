@@ -81,9 +81,6 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
             Unit: saga.Unit,
             DetectedAt: saga.DetectedAt,
             AnomalyCategory: MapAnomalyTypeToCategory(saga.AnomalyType),
-            // Saga đã cầm SiteId từ `BatteryAnomalyDetectedV2Event` ngay từ đầu nhưng trước đây
-            // dừng ở đây — ticket cấp site vì thế không còn đường nào lần ra site của nó.
-            SiteId: saga.SiteId,
             Title: BuildTitle(saga.AnomalyType, saga.AssetSerialNumber),
             Description: description,
             AiPrescription: saga.AiPrescription,

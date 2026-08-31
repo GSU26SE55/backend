@@ -47,9 +47,6 @@ public class TicketDTO
     /// </summary>
     public string? EnvironmentalIncidentId { get; set; }
 
-    /// <summary>Site của ticket cấp site. Null với ticket của một viên pin.</summary>
-    public string? SiteId { get; set; }
-
     public DateTime? ScheduledStartAtUtc { get; set; }
     public int ScheduleVersion { get; set; }
     public DateTime? PeriodicMaintenanceDueAtUtc { get; set; }

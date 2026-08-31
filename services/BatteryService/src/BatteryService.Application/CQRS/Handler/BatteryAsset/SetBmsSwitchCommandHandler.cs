@@ -51,11 +51,7 @@ public class SetBmsSwitchCommandHandler
         // lệnh duy nhất bật/tắt cả hai MOSFET. Tách thành hai lệnh riêng thì thiết bị nhận hai
         // lần và có thể áp dụng lệch nhau — không phải điều người bấm "cả hai" mong đợi.
         var target = request.Target.Trim().ToLowerInvariant();
-<<<<<<< Updated upstream
-        if (target is not ("charge" or "discharge" or "all"))
-=======
         if (target is not (TargetCharge or TargetDischarge or TargetAll))
->>>>>>> Stashed changes
             return Fail(400, "Target must be 'charge', 'discharge' or 'all'.");
 
         // Đường hệ thống (BatteryIsolationRequestedConsumer) không chạy trong HTTP request nên

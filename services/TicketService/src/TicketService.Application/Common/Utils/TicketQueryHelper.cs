@@ -75,7 +75,6 @@ public static class TicketQueryHelper
             EnvironmentalIncidentId = t.EnvironmentalIncidentId.HasValue
                 ? t.EnvironmentalIncidentId.Value.ToString()
                 : null,
-            SiteId = t.SiteId.HasValue ? t.SiteId.Value.ToString() : null,
             ScheduledStartAtUtc = t.ScheduledStartAtUtc,
             ScheduleVersion = t.ScheduleVersion,
             PeriodicMaintenanceDueAtUtc = t.PeriodicMaintenanceDueAtUtc,

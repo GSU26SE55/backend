@@ -57,7 +57,6 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             Category = MapAnomalyToCategory(request.AnomalyCategory),
             CustomerId = request.CustomerId,
             BatteryAssetId = request.BatteryAssetId,
-            SiteId = request.SiteId,
             Status = TicketStatusEnum.Open,
             Origin = IsEnvironmentalAnomaly(request.AnomalyCategory)
                 ? TicketOriginEnum.AutoFromEnvironment
