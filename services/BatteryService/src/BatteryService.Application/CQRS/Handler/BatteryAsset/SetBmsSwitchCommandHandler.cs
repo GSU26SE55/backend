@@ -181,9 +181,11 @@ public class SetBmsSwitchCommandHandler
     /// </remarks>
     private static bool TargetsOverlap(string? pendingTarget, string requestedTarget)
     {
-        if (string.IsNullOrWhiteSpace(pendingTarget)) return false;
+        if (string.IsNullOrWhiteSpace(pendingTarget))
+            return false;
         var pending = pendingTarget.Trim();
-        if (string.Equals(pending, requestedTarget, StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(pending, requestedTarget, StringComparison.OrdinalIgnoreCase))
+            return true;
         return string.Equals(pending, "all", StringComparison.OrdinalIgnoreCase)
                || string.Equals(requestedTarget, "all", StringComparison.OrdinalIgnoreCase);
     }

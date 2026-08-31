@@ -39,4 +39,10 @@ public class SlaTimerDTO
 
     /// <summary>Số phút làm việc còn lại tới <see cref="DueAt"/> — đồng hồ đếm ngược của Staff.</summary>
     public int RemainingWorkingMinutes { get; set; }
+
+    /// <summary>
+    /// Đồng hồ tiếp cứu nội bộ — phút làm việc còn lại trong hạn mức 24h (1440 phút) của Staff mới.
+    /// Chỉ có giá trị khi Status == Breached và ticket đang InProgress.
+    /// </summary>
+    public int? RescueRemainingMinutes { get; set; }
 }

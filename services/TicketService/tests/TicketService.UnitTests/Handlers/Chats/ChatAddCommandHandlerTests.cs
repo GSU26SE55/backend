@@ -722,7 +722,11 @@ public class ChatAddCommandHandlerTests
         var authorId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
         var ticket = new Ticket
-        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "T",
+            Description = "D",
             // Chat is blocked while the ticket is still Open (not yet assigned).
             Status = TicketStatusEnum.InProgress
         };
@@ -772,7 +776,11 @@ public class ChatAddCommandHandlerTests
     {
         var ticketId = Guid.NewGuid();
         var ticket = new Ticket
-        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "T",
+            Description = "D",
             // Chat is blocked while the ticket is still Open (not yet assigned).
             Status = TicketStatusEnum.InProgress
         };
@@ -810,7 +818,11 @@ public class ChatAddCommandHandlerTests
         var authorId = Guid.NewGuid();
         var sharedUserId = Guid.NewGuid();
         var ticket = new Ticket
-        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "T",
+            Description = "D",
             // Chat is blocked while the ticket is still Open (not yet assigned).
             Status = TicketStatusEnum.InProgress
         };
@@ -928,7 +940,11 @@ public class ChatAddCommandHandlerTests
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var ticket = new Ticket
-        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "T",
+            Description = "D",
             // Chat is blocked while the ticket is still Open (not yet assigned).
             Status = TicketStatusEnum.InProgress
         };
@@ -962,7 +978,11 @@ public class ChatAddCommandHandlerTests
         var ticketId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var ticket = new Ticket
-        { Id = ticketId, Code = "TKT-001", Title = "T", Description = "D",
+        {
+            Id = ticketId,
+            Code = "TKT-001",
+            Title = "T",
+            Description = "D",
             // Chat is blocked while the ticket is still Open (not yet assigned).
             Status = TicketStatusEnum.InProgress
         };
