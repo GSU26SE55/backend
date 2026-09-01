@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TicketService.Application.Common.Models;
 using TicketService.Application.Interfaces.Utils;
@@ -66,7 +67,7 @@ public class SlaDeadlineReconcilerTests
             ticketSeed: [ticket],
             slaTimerSeed: [timer],
             slaPauseEventSeed: [pauseEvent]);
-        var reconciler = new SlaDeadlineReconciler(uow.Object, calculator);
+        var reconciler = new SlaDeadlineReconciler(uow.Object, calculator, NullLogger<SlaDeadlineReconciler>.Instance);
 
         await reconciler.ReconcileActiveTimersAsync();
 
@@ -121,7 +122,7 @@ public class SlaDeadlineReconcilerTests
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: [ticket],
             slaTimerSeed: [timer]);
-        var reconciler = new SlaDeadlineReconciler(uow.Object, calculator);
+        var reconciler = new SlaDeadlineReconciler(uow.Object, calculator, NullLogger<SlaDeadlineReconciler>.Instance);
 
         await reconciler.ReconcileActiveTimersAsync();
 

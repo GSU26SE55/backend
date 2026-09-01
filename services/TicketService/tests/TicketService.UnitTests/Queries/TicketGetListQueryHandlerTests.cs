@@ -239,8 +239,9 @@ public class TicketGetListQueryHandlerTests
         aiAlert.Origin = TicketOriginEnum.AutoFromAlert;
         var aiCascade = MakeTicket(code: "AI-CASCADE");
         aiCascade.Origin = TicketOriginEnum.System;
+        // Ticket môi trường nay mang origin RIÊNG — không còn dùng ké System/AutoFromAlert.
         var environmental = MakeTicket(code: "ENVIRONMENTAL");
-        environmental.Origin = TicketOriginEnum.System;
+        environmental.Origin = TicketOriginEnum.AutoFromEnvironment;
         environmental.EnvironmentalIncidentId = Guid.NewGuid();
         var periodic = MakeTicket(code: "PERIODIC");
         periodic.Origin = TicketOriginEnum.System;

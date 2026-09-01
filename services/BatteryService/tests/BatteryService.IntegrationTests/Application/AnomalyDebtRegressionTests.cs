@@ -91,9 +91,9 @@ public class AnomalyDebtRegressionTests
         {
             Id = Guid.NewGuid(),
             BatteryTypeId = BatteryTypeId,
-            VoltageMin = 10,
-            VoltageMax = 14,
-            TemperatureMin = -10,
+            VoltageMin = 14,
+            VoltageMax = 15,
+            TemperatureMin = 45,
             TemperatureMax = 50,
             SocWarningThreshold = 20,
             SocCriticalThreshold = 10,

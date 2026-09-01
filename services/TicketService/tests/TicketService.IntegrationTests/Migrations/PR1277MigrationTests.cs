@@ -6,7 +6,6 @@ using Moq;
 using SharedInfrastructure.Persistence.Interceptors;
 using SharedInfrastructure.Services;
 using Testcontainers.PostgreSql;
-using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
 
@@ -44,9 +43,24 @@ public class PR1277MigrationTests : IAsyncLifetime
 
         var ticketId = Guid.NewGuid();
         var code = $"MIG-{ticketId:N}"[..20];
-        await db.Database.ExecuteSqlRawAsync(
-            "INSERT INTO tickets (id, code, battery_asset_id, customer_id, title, description, category, status, origin, reopen_count, is_incident, schedule_version, created_at, is_deleted) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, 0, false, 0, {9}, false);",
-            ticketId, code, Guid.NewGuid(), Guid.NewGuid(), "Legacy staff-created ticket", "Migration verification", (int)TicketCategoryEnum.Other, (int)TicketStatusEnum.Pending, 3, DateTime.UtcNow);
+        var batteryAssetId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var createdAt = DateTime.UtcNow;
+
+        // The database is intentionally stopped at an old checkpoint. Seed with
+        // that checkpoint's schema instead of asking today's EF model to insert
+        // columns which do not exist yet (for example parent_ticket_id/site_id).
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO tickets
+                (id, code, battery_asset_id, customer_id, title, description,
+                 category, status, origin, ai_verify_status, is_deleted,
+                 is_incident, reopen_count, created_at)
+            VALUES
+                ({ticketId}, {code}, {batteryAssetId}, {customerId},
+                 {"Legacy staff-created ticket"}, {"Migration verification"},
+                 {(int)TicketCategoryEnum.Other}, {(int)TicketStatusEnum.Pending},
+                 {3}, {0}, {false}, {false}, {0}, {createdAt});
+            """);
 
         await migrator.MigrateAsync(OriginMigrationId);
         db.ChangeTracker.Clear();

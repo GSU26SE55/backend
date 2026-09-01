@@ -472,13 +472,19 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
                 "rejected" => IotDeviceCommandStatusEnum.Rejected,
                 _ => IotDeviceCommandStatusEnum.Unknown
             };
-            var ackError = root.TryGetProperty("error", out var errorValue)
-                           && errorValue.ValueKind == JsonValueKind.String
+            // Lưu lý do THÔ của firmware. Trước đây `set_bms_switch` bị chuẩn hoá NGAY Ở ĐÂY rồi
+            // ghi đè, nên lý do gốc mất vĩnh viễn trong DB — không tầng nào phía sau khôi phục
+            // được. Hệ quả cụ thể: mobile dò chuỗi "unsupported"/"not support" để ẩn control trên
+            // thiết bị không hỗ trợ, nhưng chuỗi tới nơi luôn là câu chuẩn hoá không chứa từ khoá
+            // nào, nên nhánh đó chưa từng chạy.
+            //
+            // Chuẩn hoá là việc của tầng ĐỌC: `GetBmsSwitchStateQueryHandler.NormalizeCommandError`
+            // đã làm đúng việc đó (và còn phủ thêm `TimedOut`), rồi trả kèm `DeviceReason` thô cho
+            // client nào cần biết lý do thật.
+            command.AckError = root.TryGetProperty("error", out var errorValue)
+                               && errorValue.ValueKind == JsonValueKind.String
                 ? errorValue.GetString()
                 : null;
-            command.AckError = command.Type == "set_bms_switch"
-                ? NormalizeBmsSwitchAckError(command.Status, ackError)
-                : ackError;
             command.ResultJson = root.TryGetProperty("state", out var stateValue)
                                  && stateValue.ValueKind == JsonValueKind.Object
                 ? stateValue.GetRawText()
@@ -487,21 +493,6 @@ public class MqttBridgeBackgroundService : BackgroundService, IMqttBridgePublish
             unitOfWork.IotDeviceCommands.UpdateAsync(command);
             await unitOfWork.SaveChangesAsync();
         }
-    }
-
-    private static string? NormalizeBmsSwitchAckError(
-        IotDeviceCommandStatusEnum status,
-        string? error)
-    {
-        if (status == IotDeviceCommandStatusEnum.Ok)
-            return null;
-        if (status == IotDeviceCommandStatusEnum.Rejected)
-            return "The BMS rejected the control command.";
-        if (status == IotDeviceCommandStatusEnum.Unknown)
-            return "The firmware did not recognize the BMS control command.";
-        if (status == IotDeviceCommandStatusEnum.Failed)
-            return "The BMS control command failed.";
-        return string.IsNullOrWhiteSpace(error) ? null : "The BMS control command could not be completed.";
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

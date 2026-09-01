@@ -123,6 +123,12 @@ public static class TicketQueryHelper
             return null;
 
         var isStoppedOrTerminal = sla.Status == SlaTimerStatusEnum.Stopped || TicketStatusGroups.Terminal.Contains(ticketStatus);
+        // Stage 1 (Open) response SLA runs 24/7 and never consults the calendar — asking for an
+        // extension there would just count non-working days that had no effect on its DueAt.
+        var isStage1Open = ticketStatus == TicketStatusEnum.Open;
+        (int Minutes, IReadOnlyList<DateOnly> NonWorkingDays) calendarExtension = isStage1Open
+            ? (0, [])
+            : slaCalculator.GetCalendarExtension(sla.StartedAt, sla.DueAt);
         return new SlaTimerDTO
         {
             Id = sla.Id.ToString(),
@@ -141,7 +147,11 @@ public static class TicketQueryHelper
             RemainingWorkingMinutes = isStoppedOrTerminal ? 0 : ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc),
             RescueRemainingMinutes = sla.Status == SlaTimerStatusEnum.Breached && rescueAssignmentCreatedAt.HasValue
                 ? Math.Max(0, 1440 - (int)slaCalculator.GetWorkingMinutesBetween(rescueAssignmentCreatedAt.Value, atUtc))
-                : null
+                : null,
+            CalendarExtensionMinutes = calendarExtension.Minutes,
+            CalendarExtensionDays = calendarExtension.NonWorkingDays is null
+                ? []
+                : [.. calendarExtension.NonWorkingDays]
         };
     }
 
@@ -275,18 +285,28 @@ public static class TicketQueryHelper
         TicketSourceFilterEnum.Customer => query.Where(t =>
             t.Origin == TicketOriginEnum.ManualByCustomer),
 
-        // AI dự đoán: alert bất thường do AI module chấm, hoặc điểm cascade risk cao
-        // (System nhưng không phải sự cố môi trường / bảo trì định kỳ).
+        // AI dự đoán: alert bất thường của MỘT viên pin do AI module chấm, hoặc điểm cascade
+        // risk cao (System nhưng không phải bảo trì định kỳ).
+        //
+        // Không còn phải loại trừ `ImpactScope == Site` ở đây: sự cố môi trường nay mang
+        // `AutoFromEnvironment` chứ không dùng ké `AutoFromAlert` nữa.
         TicketSourceFilterEnum.AiPredicted => query.Where(t =>
             t.Origin == TicketOriginEnum.AutoFromAlert
             || (t.Origin == TicketOriginEnum.System
+                // Dòng CŨ chưa qua backfill vẫn là `System` + có IncidentId — vẫn phải loại,
+                // cùng lưới an toàn với nhánh Environmental ngay dưới.
                 && t.EnvironmentalIncidentId == null
                 && t.PeriodicMaintenanceDueAtUtc == null)),
 
-        // Xét trước Origin: ticket sự cố môi trường luôn có IncidentId, và đây là dấu hiệu
-        // duy nhất tách nó khỏi luồng System còn lại.
+        // Sự cố môi trường — đọc thẳng origin. Hai đường (thiết bị tự báo qua
+        // EnvironmentalIncident, và backend chấm số đo ambient) nay cùng một origin.
+        //
+        // `EnvironmentalIncidentId != null` giữ lại cho DÒNG CŨ: ticket tạo trước khi có
+        // `AutoFromEnvironment` vẫn mang `System`, migration backfill lo phần còn lại nhưng
+        // điều kiện này là lưới an toàn nếu backfill chưa chạy.
         TicketSourceFilterEnum.Environmental => query.Where(t =>
-            t.EnvironmentalIncidentId != null),
+            t.Origin == TicketOriginEnum.AutoFromEnvironment
+            || t.EnvironmentalIncidentId != null),
 
         TicketSourceFilterEnum.PeriodicMaintenance => query.Where(t =>
             t.PeriodicMaintenanceDueAtUtc != null),

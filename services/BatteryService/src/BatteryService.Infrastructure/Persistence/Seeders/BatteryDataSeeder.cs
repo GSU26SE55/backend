@@ -155,10 +155,19 @@ public class BatteryDataSeeder
 
         var now = SeedTime();
         // 3 BatteryType — kèm SOH threshold (Tier 1 Sprint 3): EOL khi SOH ≤ 75% (Critical), warning từ 85%
+        // `voltageMin`/`temperatureMin` là mốc WARNING, `voltageMax`/`temperatureMax` là mốc
+        // CRITICAL — thang một chiều, không phải hai đầu dải an toàn (xem `AnomalyRules.Detect`).
+        //
+        // Số cũ (vd LiFePO4 10.5–14.6V, −10..60°C) là dải an toàn theo nghĩa CŨ; giữ nguyên thì
+        // dưới nghĩa mới thành "cảnh báo khi trên 10.5V" — tức mọi số đo đều Warning. Đặt lại theo
+        // giới hạn sạc đầy của từng hoá học, Critical cao hơn Warning một biên nhỏ.
         _dbContext.ThresholdConfigs.AddRange(
-            CreateThreshold(liFePo4TypeId, 10.5m, 14.6m, -10, 60, 20, 10, sohWarning: 85m, sohCritical: 75m, now),
-            CreateThreshold(nmcTypeId, 42m, 54.6m, -10, 55, 25, 15, sohWarning: 85m, sohCritical: 75m, now),
-            CreateThreshold(ncaTypeId, 21m, 29.2m, -10, 55, 25, 15, sohWarning: 85m, sohCritical: 75m, now));
+            // 4S LiFePO4 12.8V — đầy 14.6V (3.65V/cell).
+            CreateThreshold(liFePo4TypeId, 14.6m, 15.2m, 55, 60, 20, 10, sohWarning: 85m, sohCritical: 75m, now),
+            // 13S NMC 48V — đầy 54.6V (4.2V/cell).
+            CreateThreshold(nmcTypeId, 54.6m, 56.0m, 50, 55, 25, 15, sohWarning: 85m, sohCritical: 75m, now),
+            // 8S LiFePO4 24V (nhãn NCA) — đầy 29.2V.
+            CreateThreshold(ncaTypeId, 29.2m, 30.0m, 50, 55, 25, 15, sohWarning: 85m, sohCritical: 75m, now));
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }

@@ -64,6 +64,9 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.EnvironmentalIncidentId)
             .HasColumnName("environmental_incident_id");
 
+        builder.Property(e => e.SiteId)
+            .HasColumnName("site_id");
+
         builder.Property(e => e.ReopenCount)
             .HasColumnName("reopen_count");
 

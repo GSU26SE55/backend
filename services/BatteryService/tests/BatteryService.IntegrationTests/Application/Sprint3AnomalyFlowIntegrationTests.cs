@@ -83,7 +83,8 @@ public class Sprint3AnomalyFlowIntegrationTests
             BatteryAssetId = AssetId,
             Voltage = 12,
             Current = 0,
-            Temperature = 53,
+            // 47°C nằm giữa TemperatureMin = 45 (Warning) và TemperatureMax = 50 (Critical).
+            Temperature = 47,
             SocPercent = 60
         });
         await db.SaveChangesAsync();
@@ -113,7 +114,8 @@ public class Sprint3AnomalyFlowIntegrationTests
             BatteryAssetId = AssetId,
             Voltage = 12,
             Current = 0,
-            Temperature = 53,
+            // 47°C nằm giữa TemperatureMin = 45 (Warning) và TemperatureMax = 50 (Critical).
+            Temperature = 47,
             SocPercent = 60
         });
         await db.SaveChangesAsync();
@@ -290,9 +292,9 @@ public class Sprint3AnomalyFlowIntegrationTests
         {
             Id = Guid.NewGuid(),
             BatteryTypeId = BatteryTypeId,
-            VoltageMin = 10,
-            VoltageMax = 14,
-            TemperatureMin = -10,
+            VoltageMin = 14,
+            VoltageMax = 15,
+            TemperatureMin = 45,
             TemperatureMax = 50,
             SocWarningThreshold = 20,
             SocCriticalThreshold = 10,

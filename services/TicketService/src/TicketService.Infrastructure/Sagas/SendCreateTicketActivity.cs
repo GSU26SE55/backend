@@ -81,7 +81,7 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
             Unit: saga.Unit,
             DetectedAt: saga.DetectedAt,
             AnomalyCategory: MapAnomalyTypeToCategory(saga.AnomalyType),
-            Title: $"[Auto] {saga.AssetSerialNumber ?? "Battery"} - {MapAnomalyTypeToTitle(saga.AnomalyType)}",
+            Title: BuildTitle(saga.AnomalyType, saga.AssetSerialNumber),
             Description: description,
             AiPrescription: saga.AiPrescription,
             AiActionSteps: ai?.ActionSteps,
@@ -132,6 +132,9 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         13 => "Voltage imbalance between battery cells exceeded the threshold.",
         14 => "An environmental incident at the site is affecting the battery.",
         15 => "Sensor readings do not match — a sensor fault is suspected.",
+        16 => "Ambient temperature has dropped below the safe threshold.",
+        17 => "The IoT gateway was decommissioned after sending impossible sensor values.",
+        18 => "Gas concentration at the site exceeded the safe threshold.",
         _ => "An anomaly was detected on the battery."
     };
 
@@ -159,8 +162,40 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         // chỗ, cái sau không insert được và saga kẹt ở `TicketRequested` mà không log gì.
         16 => "Undertemp",
         17 => "IotDataIntegrityViolation",
+        18 => "HighGasConcentration",
         _ => "GenericAnomaly"
     };
+
+    /// <summary>
+    /// Sự cố MÔI TRƯỜNG của site — không phải bất thường của một viên pin.
+    /// Cùng danh sách với <c>TicketAutoCreateFromAlertCommandHandler.IsEnvironmentalAnomaly</c>,
+    /// nhưng theo GIÁ TRỊ enum vì tầng này chưa map sang chuỗi category.
+    /// 9 HighAmbientTemp · 10 HighHumidity · 11 HighTempHumidityCombo · 14 EnvironmentalIncident
+    /// · 18 HighGasConcentration.
+    /// </summary>
+    private static bool IsEnvironmental(int anomalyType) => anomalyType is 9 or 10 or 11 or 14 or 18;
+
+    /// <summary>
+    /// Tiêu đề ticket. Sự cố môi trường đọc như sự cố môi trường, KHÔNG đeo mác <c>[Auto]</c> và
+    /// không lấy khuôn "{serial} - {lỗi}" của pin.
+    /// </summary>
+    /// <remarks>
+    /// Với alert cấp site, <c>AssetSerialNumber</c> chứa TÊN SITE (đường ambient truyền
+    /// <c>site.Name</c> vào đó vì alert không thuộc viên pin nào), nên câu ghép ra đúng nghĩa.
+    ///
+    /// Khuôn cũ cho ra <c>"[Auto] DEMO-V2 - High Ambient Temperature"</c> — nhìn y hệt một ticket
+    /// bất thường của pin, trong khi ticket môi trường tạo bằng đường incident lại đọc là
+    /// <c>"Environmental incident at DEMO-V2"</c>. Cùng một loại sự cố, hai giọng khác nhau trên
+    /// cùng một hàng chờ.
+    /// </remarks>
+    private static string BuildTitle(int anomalyType, string? assetOrSiteName)
+    {
+        var name = assetOrSiteName ?? "Battery";
+        var what = MapAnomalyTypeToTitle(anomalyType);
+        return IsEnvironmental(anomalyType)
+            ? $"Environmental incident at {name} - {what}"
+            : $"[Auto] {name} - {what}";
+    }
 
     private static string MapAnomalyTypeToTitle(int anomalyType) => anomalyType switch
     {
@@ -183,6 +218,7 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         // đọc lên không biết pin bị lỗi gì, và cũng không phân biệt được với mọi loại lạ khác.
         16 => "Low Temperature",
         17 => "IoT Data Integrity Violation",
+        18 => "High Gas Concentration",
         _ => "Critical Battery Anomaly"
     };
 }

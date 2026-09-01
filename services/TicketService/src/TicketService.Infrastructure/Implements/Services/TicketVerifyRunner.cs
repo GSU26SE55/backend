@@ -114,6 +114,7 @@ public class TicketVerifyRunner : ITicketVerifyRunner
                 Category = (int)t.Category,
                 DetectedAt = t.DetectedAt,
                 IsMachineWritten = t.Origin is TicketOriginEnum.AutoFromAlert or TicketOriginEnum.System
+                    or TicketOriginEnum.AutoFromEnvironment
             }).ToList();
         }
 
@@ -140,7 +141,9 @@ public class TicketVerifyRunner : ITicketVerifyRunner
             (int)ticket.Category,
             sensor,
             candidates,
-            isMachineWritten: ticket.Origin is TicketOriginEnum.AutoFromAlert or TicketOriginEnum.System,
+            isMachineWritten: ticket.Origin is TicketOriginEnum.AutoFromAlert or TicketOriginEnum.System
+                or TicketOriginEnum.AutoFromEnvironment
+                    or TicketOriginEnum.AutoFromEnvironment,
             ct);
 
         if (result is null)

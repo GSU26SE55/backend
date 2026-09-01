@@ -21,6 +21,10 @@ public class UpsertAmbientThresholdConfigCommand
     public decimal? HighHumidityWarning { get; set; }
     /// <summary>Humidity Critical threshold (%).</summary>
     public decimal? HighHumidityCritical { get; set; }
+    /// <summary>Gas Concentration Warning threshold (%).</summary>
+    public decimal? HighGasWarning { get; set; }
+    /// <summary>Gas Concentration Critical threshold (%).</summary>
+    public decimal? HighGasCritical { get; set; }
     /// <summary>Combo temp threshold (cùng với humidity).</summary>
     public decimal? ComboTempThreshold { get; set; }
     /// <summary>Combo humidity threshold.</summary>
@@ -33,6 +37,8 @@ public class UpsertAmbientThresholdConfigCommand
     private const decimal TempMax = 150m;
     private const decimal HumidityMin = 0m;
     private const decimal HumidityMax = 100m;
+    private const decimal GasMin = 0m;
+    private const decimal GasMax = 100m;
 
     private static void AddRangeError(
         AmbientThresholdConfigResponse response,
@@ -67,6 +73,8 @@ public class UpsertAmbientThresholdConfigCommand
         AddRangeError(response, HighHumidityWarning, nameof(HighHumidityWarning), HumidityMin, HumidityMax, "%");
         AddRangeError(response, HighHumidityCritical, nameof(HighHumidityCritical), HumidityMin, HumidityMax, "%");
         AddRangeError(response, ComboHumidityThreshold, nameof(ComboHumidityThreshold), HumidityMin, HumidityMax, "%");
+        AddRangeError(response, HighGasWarning, nameof(HighGasWarning), GasMin, GasMax, "%");
+        AddRangeError(response, HighGasCritical, nameof(HighGasCritical), GasMin, GasMax, "%");
 
         if (HighAmbientTempWarning.HasValue && HighAmbientTempCritical.HasValue
             && HighAmbientTempCritical.Value < HighAmbientTempWarning.Value)
@@ -84,6 +92,16 @@ public class UpsertAmbientThresholdConfigCommand
             response.ListErrors.Add(new Errors
             {
                 Field = nameof(HighHumidityCritical),
+                Detail = "Critical must be >= Warning."
+            });
+        }
+
+        if (HighGasWarning.HasValue && HighGasCritical.HasValue
+            && HighGasCritical.Value < HighGasWarning.Value)
+        {
+            response.ListErrors.Add(new Errors
+            {
+                Field = nameof(HighGasCritical),
                 Detail = "Critical must be >= Warning."
             });
         }

@@ -11,6 +11,12 @@ public class GetAlertsQuery : PaginationRequest, IRequest<CommonResponse<Paginat
     /// <summary>ID BatteryAsset (Guid).</summary>
     public Guid? BatteryAssetId { get; set; }
 
+    /// <summary>
+    /// Lọc theo site — dùng bởi màn hình "Environmental alerts" (alert cấp site không có pin để
+    /// lọc qua <see cref="BatteryAssetId"/>).
+    /// </summary>
+    public Guid? SiteId { get; set; }
+
     /// <summary>Severity của alert (Warning | Critical).</summary>
     public AlertSeverityEnum? Severity { get; set; }
 
@@ -24,12 +30,24 @@ public class GetAlertsQuery : PaginationRequest, IRequest<CommonResponse<Paginat
     public AnomalyTypeEnum? AnomalyType { get; set; }
 
     /// <summary>
-    /// Loại trừ alert mirror của EnvironmentalIncident (<c>AnomalyType = EnvironmentalIncident</c>).
-    /// Mỗi incident sinh kèm 1 alert cấp site chỉ để dedup/notification; nó đã có màn hình riêng
-    /// (/api/environmental-incidents) nên màn hình "Battery alerts" bật cờ này để không hiện trùng.
+    /// Loại trừ MỌI alert cấp site (alert không gắn pin: mirror của EnvironmentalIncident, và
+    /// ngưỡng môi trường nhiệt độ/độ ẩm/khí gas). Màn hình "Battery alerts" bật cờ này vì alert
+    /// cấp site không có serial pin để hiện. Bị bỏ qua khi <c>AnomalyType</c> được truyền.
     /// Mặc định false — giữ nguyên payload cũ cho các consumer hiện tại.
     /// </summary>
     public bool ExcludeEnvironmentalIncidents { get; set; }
+
+    /// <summary>
+    /// Mặt đối của <see cref="ExcludeEnvironmentalIncidents"/>: CHỈ lấy alert cấp site — dùng bởi
+    /// bảng "Vượt ngưỡng" trong màn hình "Environmental alerts".
+    /// </summary>
+    /// <remarks>
+    /// Alert cấp thiết bị IoT cũng không gắn pin, nên riêng "không có pin" chưa đủ để tách: thiếu
+    /// phần trừ hai loại đó ra thì alert gateway sẽ hiện lẫn trong danh sách môi trường, và cùng
+    /// một alert bị đếm ở cả hai badge. Ba danh sách phải rời nhau hoàn toàn.
+    /// Bị bỏ qua khi <c>AnomalyType</c> được truyền.
+    /// </remarks>
+    public bool SiteLevelOnly { get; set; }
 
     /// <summary>
     /// Chỉ lấy alert cấp thiết bị IoT (<c>DeviceOffline</c>, <c>IotDataIntegrityViolation</c>) —

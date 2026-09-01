@@ -17,6 +17,13 @@ public class SetBmsSwitchCommandHandler
     : IRequestHandler<SetBmsSwitchCommand, CommonResponse<BmsSwitchCommandAcceptedDto>>
 {
     private const string CommandType = "set_bms_switch";
+
+    // Wire values — firmware map: charge=1, discharge=2, all=3. `all` ghi CẢ HAI MOSFET cùng
+    // một giá trị `enable`; nó không phải một MOSFET thứ ba.
+    private const string TargetCharge = "charge";
+    private const string TargetDischarge = "discharge";
+    private const string TargetAll = "all";
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IBatteryUnitOfWork _unitOfWork;
@@ -44,7 +51,7 @@ public class SetBmsSwitchCommandHandler
         // lệnh duy nhất bật/tắt cả hai MOSFET. Tách thành hai lệnh riêng thì thiết bị nhận hai
         // lần và có thể áp dụng lệch nhau — không phải điều người bấm "cả hai" mong đợi.
         var target = request.Target.Trim().ToLowerInvariant();
-        if (target is not ("charge" or "discharge" or "all"))
+        if (target is not (TargetCharge or TargetDischarge or TargetAll))
             return Fail(400, "Target must be 'charge', 'discharge' or 'all'.");
 
         // Đường hệ thống (BatteryIsolationRequestedConsumer) không chạy trong HTTP request nên
@@ -101,7 +108,7 @@ public class SetBmsSwitchCommandHandler
                               && command.Type == CommandType
                               && command.Status == IotDeviceCommandStatusEnum.Pending)
             .ToListAsync(cancellationToken);
-        var isAutomaticSafetyCut = isSystemIssued && target == "discharge" && !request.Enable;
+        var isAutomaticSafetyCut = isSystemIssued && target == TargetDischarge && !request.Enable;
         if (pending.Any(command => IsPendingConflict(
                 command.ParamsJson, target, request.Enable, isAutomaticSafetyCut)))
             return Fail(409, "A previous command for this switch is still awaiting a response.");
@@ -171,23 +178,16 @@ public class SetBmsSwitchCommandHandler
     }
 
     /// <summary>
-    /// Hai target có cùng chạm tới một MOSFET hay không.
+    /// Hai target có cùng chạm tới một MOSFET hay không. "all" giao với mọi target, theo cả hai chiều.
     /// </summary>
-    /// <remarks>
-    /// So sánh chuỗi thuần là không đủ từ khi có "all": lệnh "all" đang chờ ack sẽ không bị coi là
-    /// xung đột với một lệnh "charge" mới, nên hai lệnh trái chiều cùng bay xuống thiết bị và
-    /// trạng thái cuối phụ thuộc vào cái nào tới trước. "all" phủ cả hai MOSFET nên phải giao với
-    /// mọi target, theo cả hai chiều.
-    /// </remarks>
     private static bool TargetsOverlap(string? pendingTarget, string requestedTarget)
     {
         if (string.IsNullOrWhiteSpace(pendingTarget))
             return false;
-        var pending = pendingTarget.Trim();
-        if (string.Equals(pending, requestedTarget, StringComparison.OrdinalIgnoreCase))
+        var pending = pendingTarget.Trim().ToLowerInvariant();
+        if (pending == TargetAll || requestedTarget == TargetAll)
             return true;
-        return string.Equals(pending, "all", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(requestedTarget, "all", StringComparison.OrdinalIgnoreCase);
+        return pending == requestedTarget;
     }
 
     private static bool IsPendingConflict(

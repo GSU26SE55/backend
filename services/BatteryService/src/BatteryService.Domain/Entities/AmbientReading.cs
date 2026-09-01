@@ -12,13 +12,20 @@ public class AmbientReading
     public DateTime Time { get; set; }
     public Guid SiteId { get; set; }
 
-    public decimal AmbientTemperature { get; set; }
+    /// <summary>°C. Nullable — báo cáo chỉ-có-gas (MQ-2, không qua SHT31) không có giá trị này.</summary>
+    public decimal? AmbientTemperature { get; set; }
 
     /// <summary>%RH 0–100. Nullable — OpenMeteo có thể bỏ qua.</summary>
     public decimal? Humidity { get; set; }
 
     /// <summary>W/m² — `shortwave_radiation` từ OpenMeteo hoặc pyranometer. Nullable.</summary>
     public decimal? SolarIrradiance { get; set; }
+
+    /// <summary>% 0–100 — nồng độ khí gas quy đổi từ ADC (MQ-2). Nullable — OpenMeteo không có.</summary>
+    public decimal? GasConcentration { get; set; }
+
+    /// <summary>true = ướt, false = khô. Nullable — chỉ cảm biến nước (rain/water-leak) mới gửi.</summary>
+    public bool? WaterLeakDetected { get; set; }
 
     /// <summary>Sprint 5B — đổi từ string sang enum (IotSensor / WeatherApi).</summary>
     public AmbientReadingSourceEnum Source { get; set; } = AmbientReadingSourceEnum.WeatherApi;

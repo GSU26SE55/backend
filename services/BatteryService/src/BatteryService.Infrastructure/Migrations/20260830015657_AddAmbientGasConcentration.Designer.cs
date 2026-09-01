@@ -3,6 +3,7 @@ using System;
 using BatteryService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BatteryService.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830015657_AddAmbientGasConcentration")]
+    partial class AddAmbientGasConcentration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -165,7 +168,7 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("site_id");
 
-                    b.Property<decimal?>("AmbientTemperature")
+                    b.Property<decimal>("AmbientTemperature")
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)")
                         .HasColumnName("ambient_temperature_celsius");
@@ -195,10 +198,6 @@ namespace BatteryService.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("source_device_id");
-
-                    b.Property<bool?>("WaterLeakDetected")
-                        .HasColumnType("boolean")
-                        .HasColumnName("water_leak_detected");
 
                     b.HasKey("Time", "SiteId");
 

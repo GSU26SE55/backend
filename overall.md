@@ -554,10 +554,14 @@ services/BatteryService/
 |-------|------|-----------|------|
 | `Id` | `Guid` | PK | — |
 | `BatteryTypeId` | `Guid` | FK, NOT NULL | One-active-config per type |
-| `VoltageMin` | `decimal(6,2)` | NOT NULL | — |
-| `VoltageMax` | `decimal(6,2)` | NOT NULL, > VoltageMin | — |
-| `TemperatureMax` | `decimal(5,2)` | NOT NULL | °C |
-| `TemperatureMin` | `decimal(5,2)` | NOT NULL | °C |
+| `VoltageMin` | `decimal(6,2)` | NOT NULL | V — mốc **Warning** phía dưới |
+| `VoltageMax` | `decimal(6,2)` | NOT NULL, > VoltageMin | V — mốc **Warning** phía trên |
+| `VoltageMaxCritical` | `decimal(6,2)?` | nullable, > `VoltageMax` | V — mốc **Critical** phía trên. `null` ⇒ vượt `VoltageMax` là Critical ngay (hành vi trước khi tách tầng) |
+| `VoltageMinCritical` | `decimal(6,2)?` | nullable, < `VoltageMin` | V — mốc **Critical** phía dưới. `null` ⇒ dưới `VoltageMin` là Critical ngay |
+| `TemperatureMax` | `decimal(5,2)` | NOT NULL | °C — mốc **Warning** phía nóng |
+| `TemperatureMin` | `decimal(5,2)` | NOT NULL | °C — mốc **Warning** phía lạnh |
+| `TemperatureMaxCritical` | `decimal(5,2)?` | nullable, > `TemperatureMax` | °C — mốc **Critical** phía nóng. Trước đây là hằng số `TemperatureMax + 5` chôn trong `AnomalyRules`; nay Admin đặt được. `null` ⇒ vượt `TemperatureMax` là Critical ngay |
+| `TemperatureMinCritical` | `decimal(5,2)?` | nullable, < `TemperatureMin` | °C — mốc **Critical** phía lạnh. `null` ⇒ dưới `TemperatureMin` là Critical ngay |
 | `SocWarningThreshold` | `decimal(5,2)` | NOT NULL, 0–100 | % |
 | `SocCriticalThreshold` | `decimal(5,2)` | NOT NULL, 0–100 | % |
 | `CurrentMaxCharge` | `decimal(8,2)?` | nullable | A |
@@ -575,6 +579,10 @@ services/BatteryService/
 **Validation:**
 - `SocCriticalThreshold < SocWarningThreshold`.
 - `TemperatureMin < TemperatureMax`.
+- Nếu `VoltageMaxCritical` không null: `VoltageMaxCritical > VoltageMax`.
+- Nếu `VoltageMinCritical` không null: `VoltageMinCritical < VoltageMin`.
+- Nếu `TemperatureMaxCritical` không null: `TemperatureMaxCritical > TemperatureMax`.
+- Nếu `TemperatureMinCritical` không null: `TemperatureMinCritical < TemperatureMin`.
 - Nếu cả 2 SOH threshold không null: `SohCriticalThreshold < SohWarningThreshold`.
 - `NoiseSuppressionCount` ≥ 1 và ≤ 50, `NoiseSuppressionWindowHours` ≥ 1 và ≤ 168 (7 ngày).
 
@@ -1019,8 +1027,10 @@ public class WeatherSyncBackgroundService : BackgroundService
 
 | Anomaly | Input source | Threshold source | Severity quy ước |
 |---------|-------------|------------------|------------------|
-| `Overheat` | SensorReading.Temperature | ThresholdConfig.TemperatureMax | Critical nếu > +5°C ngưỡng, ngược lại Warning |
-| `Overvoltage` / `Undervoltage` | Voltage | VoltageMax / VoltageMin | Critical |
+| `Overheat` | SensorReading.Temperature | TemperatureMaxCritical / TemperatureMax | Critical / Warning — **cả hai mốc đều cấu hình được**, cùng khuôn SOC/SOH. Hằng số `+5°C` cũ đã bỏ. `TemperatureMaxCritical = null` ⇒ Critical ngay khi vượt `TemperatureMax` |
+| `Undertemp` | SensorReading.Temperature | TemperatureMinCritical / TemperatureMin | Critical / Warning — cùng quy ước với `Overheat` |
+| `Overvoltage` | Voltage | VoltageMaxCritical / VoltageMax | Critical / Warning — cả hai mốc cấu hình được. `VoltageMaxCritical = null` ⇒ Critical ngay khi vượt `VoltageMax` |
+| `Undervoltage` | Voltage | VoltageMinCritical / VoltageMin | Critical / Warning — cùng quy ước |
 | `LowSoc` | SocPercent | SocCritical / SocWarning | Critical / Warning |
 | `RapidDischarge` / `AbnormalCharging` | Current | CurrentMaxDischarge / CurrentMaxCharge | Critical |
 | `DeviceOffline` | LastSensorReadingAt | > 10 phút không có reading | Warning |
@@ -1113,7 +1123,7 @@ foreach (var reading in batch)
 
 **Critical anomaly bypass noise filter:**
 - `EnvironmentalIncident` (smoke, water) — `NoiseSuppressionEnabled = false` mặc định
-- `Overheat` với `ActualValue > TemperatureMax + 10°C` — bypass (an toàn cao hơn noise tradeoff)
+- `Overheat` mức Critical — bypass (an toàn cao hơn noise tradeoff). Mức Critical nay do `TemperatureMaxCritical` quyết định, không còn là `TemperatureMax + 10°C` như bản doc cũ ghi (code chưa từng dùng con số 10). ⚠️ `Undertemp` KHÔNG bypass — kể cả mức Critical vẫn đi qua noise filter.
 
 #### 1.6.6. Cross-source validation (B9 + B10)
 
