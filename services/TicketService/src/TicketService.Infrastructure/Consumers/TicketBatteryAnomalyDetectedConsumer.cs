@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using TicketService.Application.CQRS.Command.Tickets;
-using TicketService.Infrastructure.Anomaly;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Anomaly;
 
 namespace TicketService.Infrastructure.Consumers;
 /// <summary>

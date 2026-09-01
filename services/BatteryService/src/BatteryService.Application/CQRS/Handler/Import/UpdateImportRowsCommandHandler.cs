@@ -95,33 +95,33 @@ public class UpdateImportRowsCommandHandler
             switch (row.EntityType)
             {
                 case ImportEntityTypeEnum.Customer:
-                {
-                    var validation = _validator.ValidateCustomer(ImportRowPayload.ToCustomer(cells));
-                    if (validation.IsValid)
-                        customerCodes.Add(validation.Value!.ExternalCode);
-                    ApplyValidation(row, validation.Value?.ExternalCode
-                        ?? ImportSerialNormalizer.NormalizeReference(cells.GetValueOrDefault("external_customer_code")),
-                        validation.Errors);
-                    break;
-                }
+                    {
+                        var validation = _validator.ValidateCustomer(ImportRowPayload.ToCustomer(cells));
+                        if (validation.IsValid)
+                            customerCodes.Add(validation.Value!.ExternalCode);
+                        ApplyValidation(row, validation.Value?.ExternalCode
+                            ?? ImportSerialNormalizer.NormalizeReference(cells.GetValueOrDefault("external_customer_code")),
+                            validation.Errors);
+                        break;
+                    }
                 case ImportEntityTypeEnum.Site:
-                {
-                    var validation = _validator.ValidateSite(ImportRowPayload.ToSite(cells));
-                    if (validation.IsValid)
-                        siteCodes.Add(validation.Value!.ExternalCode);
-                    ApplyValidation(row, validation.Value?.ExternalCode
-                        ?? ImportSerialNormalizer.NormalizeReference(cells.GetValueOrDefault("external_site_code")),
-                        validation.Errors);
-                    break;
-                }
+                    {
+                        var validation = _validator.ValidateSite(ImportRowPayload.ToSite(cells));
+                        if (validation.IsValid)
+                            siteCodes.Add(validation.Value!.ExternalCode);
+                        ApplyValidation(row, validation.Value?.ExternalCode
+                            ?? ImportSerialNormalizer.NormalizeReference(cells.GetValueOrDefault("external_site_code")),
+                            validation.Errors);
+                        break;
+                    }
                 case ImportEntityTypeEnum.BatteryAsset:
-                {
-                    var validation = _validator.ValidateAsset(ImportRowPayload.ToAsset(cells));
-                    ApplyValidation(row, validation.Value?.ExternalCode
-                        ?? ImportSerialNormalizer.NormalizeReference(cells.GetValueOrDefault("external_asset_code")),
-                        validation.Errors);
-                    break;
-                }
+                    {
+                        var validation = _validator.ValidateAsset(ImportRowPayload.ToAsset(cells));
+                        ApplyValidation(row, validation.Value?.ExternalCode
+                            ?? ImportSerialNormalizer.NormalizeReference(cells.GetValueOrDefault("external_asset_code")),
+                            validation.Errors);
+                        break;
+                    }
             }
         }
 

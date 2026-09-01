@@ -60,7 +60,9 @@ public class ImportCommitServiceTests
         var builder = new MockUnitOfWorkBuilder()
             .WithImportBatches(new ImportBatch
             {
-                Id = batchId, Status = ImportBatchStatusEnum.Committing, StartedAt = DateTime.UtcNow,
+                Id = batchId,
+                Status = ImportBatchStatusEnum.Committing,
+                StartedAt = DateTime.UtcNow,
             })
             .WithImportRows(row1, row2)
             .WithCustomerAccounts(new CustomerAccount { Id = customerId, IsActive = true })
@@ -94,7 +96,9 @@ public class ImportCommitServiceTests
         var builder = new MockUnitOfWorkBuilder()
             .WithImportBatches(new ImportBatch
             {
-                Id = batchId, Status = ImportBatchStatusEnum.Committing, StartedAt = DateTime.UtcNow,
+                Id = batchId,
+                Status = ImportBatchStatusEnum.Committing,
+                StartedAt = DateTime.UtcNow,
             })
             .WithImportRows(
                 NewSiteRow(batchId, "ST-001", "CUST-001", "Nha May A"),
