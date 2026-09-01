@@ -36,7 +36,17 @@ namespace TicketService.Infrastructure.Migrations
                   AND t.is_deleted = false;
             ");
 
-            // 3. Unique index (ticket_id, type) — guarantees at most one Response and one Resolution
+            // 3. The old per-ticket UNIQUE index "IX_sla_timers_ticket_id" (from
+            //    20260517105233_InitialTicketSchema, renamed by 20260602131049) enforced "one
+            //    SlaTimer per ticket" and would reject the second (Resolution) timer this split
+            //    introduces. Drop it and recreate as a plain non-unique index to match the model.
+            //    On environments that already applied this migration without the drop, the follow-up
+            //    20260901120000_DropStaleSlaTimerTicketIdUniqueIndex performs the same correction.
+            migrationBuilder.Sql(@"DROP INDEX IF EXISTS ""IX_sla_timers_ticket_id"";");
+            migrationBuilder.Sql(
+                @"CREATE INDEX IF NOT EXISTS ""IX_sla_timers_ticket_id"" ON sla_timers (ticket_id);");
+
+            // 4. Unique index (ticket_id, type) — guarantees at most one Response and one Resolution
             //    timer per ticket.
             migrationBuilder.CreateIndex(
                 name: "ux_sla_timers_ticket_type",

@@ -151,16 +151,20 @@ public class TicketActivationService : ITicketActivationService
         }
 
         // Nhánh 2 — Post-breach reassignment (ReAssign or already InProgress via correction):
-        // preserve the contractual clock — OriginalDueAt, BreachAt, DueAt must not be reset.
+        // preserve the ENTIRE contractual clock — the escalation adds staff/tier, it does not
+        // re-scope the SLA. Priority is deliberately NOT synced onto the timer either: the
+        // deadline stays on the budget it was created with (SPE O&M v4.0 § Record Control), so
+        // syncing Priority would leave GetRemainingPercent dividing the old DueAt by the new,
+        // larger budget — the % collapses even though nothing about the clock changed. The
+        // ticket's own Priority is the source of truth for "current priority" in the UI.
         if (fromStatus is TicketStatusEnum.ReAssign or TicketStatusEnum.InProgress)
         {
             if (resolutionTimer is null)
                 return;  // no existing Resolution timer — nothing to preserve, skip
-            resolutionTimer.Priority = priority;
             if (resolutionTimer.Status != SlaTimerStatusEnum.Breached)
                 resolutionTimer.Status = SlaTimerStatusEnum.Running;
-            // DueAt, OriginalDueAt, BreachAt, TotalPausedMinutes, PauseEpisodesCount, WarningSentAt
-            // are intentionally left unchanged — SPE O&M v4.0 § Record Control
+            // Priority, DueAt, OriginalDueAt, BreachAt, TotalPausedMinutes, PauseEpisodesCount,
+            // WarningSentAt are all intentionally left unchanged.
             _uow.SlaTimers.UpdateAsync(resolutionTimer);
             return;
         }

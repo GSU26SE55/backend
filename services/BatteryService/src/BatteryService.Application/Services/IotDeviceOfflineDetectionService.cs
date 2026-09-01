@@ -171,6 +171,11 @@ public sealed class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectio
         if (enforceSilenceWindow && offlineDurationSeconds < effectiveSilence)
             return default;
 
+        // Alert measurements are reported in whole minutes ("Offline for" column) — round rather
+        // than keep raw seconds/60, which renders as 5.5667 min against a clean "5 min" threshold.
+        var offlineDurationMinutes = Math.Round(offlineDurationSeconds / 60m, MidpointRounding.AwayFromZero);
+        var effectiveSilenceMinutes = Math.Round(effectiveSilence / 60m, MidpointRounding.AwayFromZero);
+
         await _unitOfWork.BeginTransactionAsync();
         try
         {
@@ -214,8 +219,8 @@ public sealed class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectio
                     SiteId = device.SiteId,
                     AnomalyType = AnomalyTypeEnum.DeviceOffline,
                     Severity = AlertSeverityEnum.Warning,
-                    ThresholdValue = effectiveSilence / 60m,
-                    ActualValue = offlineDurationSeconds / 60m,
+                    ThresholdValue = effectiveSilenceMinutes,
+                    ActualValue = offlineDurationMinutes,
                     Unit = "min",
                     DetectedAt = detectedAt,
                     Status = AlertStatusEnum.Open,
@@ -225,7 +230,7 @@ public sealed class IotDeviceOfflineDetectionService : IIotDeviceOfflineDetectio
             }
             else
             {
-                incident.ActualValue = offlineDurationSeconds / 60m;
+                incident.ActualValue = offlineDurationMinutes;
                 incident.DedupWindowEndUtc = detectedAt.AddHours(1);
                 _unitOfWork.Alerts.UpdateAsync(incident);
             }
