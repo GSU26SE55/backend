@@ -68,6 +68,8 @@ public static class ManageDependencyInjection
             configuration.GetSection(BatteryService.Application.Import.ImportOptions.SectionName));
         services.AddScoped<BatteryService.Application.Import.IImportFileParser,
             BatteryService.Application.Import.CsvImportFileParser>();
+        services.AddScoped<BatteryService.Application.Import.IImportWorkbookSplitter,
+            BatteryService.Application.Import.ImportWorkbookSplitter>();
         services.AddScoped<BatteryService.Application.Import.IImportRowValidator,
             BatteryService.Application.Import.ImportRowValidator>();
         services.AddScoped<BatteryService.Application.Import.IBatteryTypeResolver,

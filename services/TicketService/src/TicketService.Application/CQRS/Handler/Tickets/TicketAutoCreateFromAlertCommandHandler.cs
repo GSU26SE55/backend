@@ -217,7 +217,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
     /// </remarks>
     public static bool IsEnvironmentalAnomaly(string anomalyCategory) => anomalyCategory
         is "HighAmbientTemp" or "HighHumidity" or "HighTempHumidityCombo"
-        or "HighGasConcentration" or "EnvironmentalIncident";
+        or "HighGasConcentration" or "EnvironmentalIncident" or "WaterLeak";
 
     public static TicketCategoryEnum MapAnomalyToCategory(string anomalyCategory) => anomalyCategory switch
     {
@@ -252,7 +252,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         // tranh slot voi ticket pin, chi khien moi site co mot ticket moi truong dang mo tai
         // mot thoi diem — dung y nghia, vi do la mot su co cua mot cai tu.
         "HighAmbientTemp" or "HighHumidity" or "HighTempHumidityCombo"
-            or "HighGasConcentration" or "EnvironmentalIncident"
+            or "HighGasConcentration" or "EnvironmentalIncident" or "WaterLeak"
             => TicketCategoryEnum.Repair,
 
         // Con lai — can ky thuat vien toi xu ly.
@@ -263,7 +263,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
     {
         return category switch
         {
-            "EnvironmentalIncident" => (ImpactScopeEnum.Site, UrgencyLevelEnum.High),
+            "EnvironmentalIncident" or "WaterLeak" => (ImpactScopeEnum.Site, UrgencyLevelEnum.High),
             "Overheat" => (ImpactScopeEnum.SingleAsset, UrgencyLevelEnum.High),
 
             // Cac anomaly do cam bien MOI TRUONG cua site sinh ra: hong hoc nam o tu/phong,

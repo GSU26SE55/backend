@@ -6,6 +6,7 @@ using SharedContracts.Events;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Anomaly;
 
 namespace TicketService.Infrastructure.Consumers;
 /// <summary>
@@ -34,6 +35,16 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
     public async Task Consume(ConsumeContext<BatteryAnomalyDetectedEvent> context)
     {
         var @event = context.Message;
+
+        // Notification-only: thoát TRƯỚC dedup BR-02. Đặt sau thì một pin đang có ticket mở sẽ
+        // đi vào nhánh "đã có ticket" và không phân biệt được với ca thật.
+        if (NotificationOnlyAnomalies.Contains(@event.AnomalyType))
+        {
+            _logger.LogInformation(
+                "AnomalyType {AnomalyType} is notification-only. Skipping ticket auto-creation for alert {AlertId}.",
+                @event.AnomalyType, @event.AlertId);
+            return;
+        }
 
         var activeStatuses = new[]
         {
@@ -84,6 +95,7 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
             11 => "HighTempHumidityCombo",
             14 => "EnvironmentalIncident",
             18 => "HighGasConcentration",
+            19 => "WaterLeak",
             _ => "GenericAnomaly"
         };
     }
@@ -92,7 +104,7 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
     /// Sự cố MÔI TRƯỜNG của site — cùng danh sách với `SendCreateTicketActivity.IsEnvironmental`
     /// và `TicketAutoCreateFromAlertCommandHandler.IsEnvironmentalAnomaly`.
     /// </summary>
-    private static bool IsEnvironmental(int anomalyType) => anomalyType is 9 or 10 or 11 or 14 or 18;
+    private static bool IsEnvironmental(int anomalyType) => anomalyType is 9 or 10 or 11 or 14 or 18 or 19;
 
     /// <summary>
     /// Ticket môi trường KHÔNG đeo mác <c>[Auto]</c> và không lấy khuôn "{serial} - {lỗi}" của
@@ -126,6 +138,7 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
             11 => "High Temperature + Humidity",
             14 => "Environmental Incident",
             18 => "High Gas Concentration",
+            19 => "Water Leak Detected",
             _ => "Critical Battery Anomaly"
         };
     }

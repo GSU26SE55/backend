@@ -80,7 +80,7 @@ public class VerifyOtpCommandHandlerTests
     }
 
     [Fact]
-    public async Task Verify_WrongOtp_IncrementsFailedAttempts_Returns401()
+    public async Task Verify_WrongOtp_IncrementsFailedAttempts_Returns400()
     {
         var account = PendingAccount(otp: "999999");
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
@@ -93,7 +93,9 @@ public class VerifyOtpCommandHandlerTests
         }, CancellationToken.None);
 
         response.IsSuccess.Should().BeFalse();
-        response.StatusCode.Should().Be(401);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng chưa đăng nhập không được
+        // dùng 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        response.StatusCode.Should().Be(400);
         account.FailedLoginAttempts.Should().Be(1);
         account.Status.Should().Be(AccountStatusEnum.PendingVerification);
         accounts.Verify(r => r.UpdateAsync(account), Times.Once);
@@ -132,7 +134,9 @@ public class VerifyOtpCommandHandlerTests
             Otp = "123456"
         }, CancellationToken.None);
 
-        response.StatusCode.Should().Be(401);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng chưa đăng nhập không được
+        // dùng 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        response.StatusCode.Should().Be(400);
         response.Message.Should().Contain("expired");
     }
 

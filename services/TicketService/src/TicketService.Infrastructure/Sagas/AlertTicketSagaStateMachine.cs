@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using SharedContracts.Saga.AlertTicket;
 using SharedInfrastructure.Metrics;
+using TicketService.Infrastructure.Anomaly;
 
 namespace TicketService.Infrastructure.Sagas;
 
@@ -94,14 +95,30 @@ public class AlertTicketSagaStateMachine : MassTransitStateMachine<AlertTicketSa
         //
         // Chỉ V2 được khởi tạo saga (nhiều field hơn). V1 KHÔNG còn ở Initially — nó vẫn
         // được DuringAny bắt để dedup, và NotificationService vẫn consume V1 như cũ.
+        //
+        // Notification-only (LowSoc): `IfElse` + `Finalize()` — nhận rồi kết thúc ngay, không
+        // publish CreateTicketFromAlertCommand. `SetCompletedWhenFinalized()` ở dưới xoá luôn
+        // instance nên không để lại saga rác.
+        //
+        // ⚠️ Hai cách chặn khác đều SAI, đã thử:
+        // - Điều kiện đặt ở `When(AnomalyDetectedV2, ctx => ...)`: MassTransit tạo instance TRƯỚC
+        //   rồi mới xét điều kiện (event nằm trong `Initially` là initiating, bất kể filter), nên
+        //   mỗi alert LowSoc vẫn đẻ một saga nằm chết ở state Initial. Đo được bằng Case2b.
+        // - Chặn bên trong `SendCreateTicketActivity`: chuỗi vẫn chạy tiếp qua
+        //   `.Schedule(TicketCreationTimer).TransitionTo(TicketRequested)`, nên saga kẹt ở
+        //   TicketRequested mà command không bao giờ được gửi — đúng con bug saga-stuck đã ghi ở
+        //   đầu `SendCreateTicketActivity`.
         Initially(
             When(AnomalyDetectedV2)
-                .Then(ctx => HydrateFromV2(ctx.Saga, ctx.Message))
-                .Then(_ => AppMetrics.SagaStarted.Inc())
-                .Then(_ => AppMetrics.SagaActive.Inc())
-                .Activity(x => x.OfInstanceType<SendCreateTicketActivity>())
-                .Schedule(TicketCreationTimer, ctx => new TicketCreationTimeoutFired(ctx.Saga.CorrelationId))
-                .TransitionTo(TicketRequested),
+                .IfElse(ctx => NotificationOnlyAnomalies.Contains(ctx.Message.AnomalyType),
+                    notificationOnly => notificationOnly.Finalize(),
+                    createTicket => createTicket
+                        .Then(ctx => HydrateFromV2(ctx.Saga, ctx.Message))
+                        .Then(_ => AppMetrics.SagaStarted.Inc())
+                        .Then(_ => AppMetrics.SagaActive.Inc())
+                        .Activity(x => x.OfInstanceType<SendCreateTicketActivity>())
+                        .Schedule(TicketCreationTimer, ctx => new TicketCreationTimeoutFired(ctx.Saga.CorrelationId))
+                        .TransitionTo(TicketRequested)),
 
             // Admin reconciliation — Ticket đã tồn tại, skip create, đi thẳng tới link Alert.
             When(ReconciliationRequested)

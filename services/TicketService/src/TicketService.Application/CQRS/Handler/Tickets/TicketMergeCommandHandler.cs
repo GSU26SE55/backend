@@ -97,7 +97,15 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                 // ticket that is both Closed and MergedIntoTicketId-set. Do this BEFORE closing
                 // `source` so the same transaction either commits both changes or neither.
                 var hadParent = source.ParentTicketId.HasValue;
-                var previousParentId = source.ParentTicketId;
+                // Same fix as TicketLinkParentCommandHandler's own unlink branch: the timeline
+                // must read a ticket CODE, not a raw Guid — resolved before we detach the FK.
+                var previousParentCode = hadParent
+                    ? await _uow.Tickets.GetAllAsync()
+                        .AsNoTracking()
+                        .Where(t => t.Id == source.ParentTicketId!.Value)
+                        .Select(t => t.Code)
+                        .FirstOrDefaultAsync(transactionCt) ?? source.ParentTicketId.Value.ToString()
+                    : null;
                 source.ParentTicketId = null;
 
                 source.Status = TicketStatusEnum.Closed;
@@ -136,7 +144,7 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                         Action = ActivityActionEnum.StatusChanged,
                         Ticket = source,
                         NewValue = TicketStatusEnum.Closed.ToString(),
-                        Reason = $"Unlinked from parent ticket {previousParentId} (ticket was merged)."
+                        Reason = $"Unlinked from parent ticket {previousParentCode} (ticket was merged)."
                     });
                 }
 

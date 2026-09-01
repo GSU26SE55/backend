@@ -38,11 +38,14 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
             return Fail(423, "Account is locked. Please try again later.");
 
+        // #38 QA solars.io.vn 2026-08-29: 401 ở 2 nhánh này từng bị axios.ts coi là hết phiên
+        // (mọi 401 != TOKEN_EXPIRED ⇒ auto-logout) ⇒ quên mật khẩu gõ sai/hết hạn OTP là bị
+        // văng thẳng về /login mất cả luồng, không hiện thông báo gì.
         if (account.OtpPurpose != OtpPurposeEnum.PasswordReset
             || string.IsNullOrEmpty(account.OtpCode)
             || !account.OtpExpiredAt.HasValue
             || account.OtpExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(401, "Invalid or expired OTP.");
+            return Fail(400, "Invalid or expired OTP.");
 
         if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
         {
@@ -53,7 +56,7 @@ public class VerifyResetOtpCommandHandler : IRequestHandler<VerifyResetOtpComman
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             AppMetrics.AuthOtpUsageTotal.WithLabels("password_reset", "wrong").Inc(); // #AUTH-78
-            return Fail(401, "Incorrect OTP.");
+            return Fail(400, "Incorrect OTP.");
         }
 
         account.FailedLoginAttempts = 0;

@@ -169,17 +169,32 @@ public class AcknowledgeEnvironmentalIncidentCommandHandler
 
     public async Task<EnvironmentalIncidentResponse> Handle(AcknowledgeEnvironmentalIncidentCommand request, CancellationToken cancellationToken)
     {
-        var incident = await _uow.EnvironmentalIncidents.GetByIdAsync(request.Id);
+        var incident = await _uow.EnvironmentalIncidents.GetAllAsync()
+            .Include(i => i.Alerts)
+            .FirstOrDefaultAsync(i => i.Id == request.Id, cancellationToken);
+
         if (incident is null || incident.IsDeleted)
             return new EnvironmentalIncidentResponse { IsSuccess = false, StatusCode = 404, Message = "Incident not found." };
 
         if (incident.Status != EnvironmentalIncidentStatusEnum.Open)
             return new EnvironmentalIncidentResponse { IsSuccess = false, StatusCode = 409, Message = $"Cannot acknowledge incident in state {incident.Status}." };
 
+        var now = DateTime.UtcNow;
         incident.Status = EnvironmentalIncidentStatusEnum.Acknowledged;
         incident.AcknowledgedBy = request.AcknowledgedBy;
-        incident.AcknowledgedAt = DateTime.UtcNow;
+        incident.AcknowledgedAt = now;
         _uow.EnvironmentalIncidents.UpdateAsync(incident);
+
+        // Keep the mirror alert row in step — Resolve/MarkFalseAlarm already do this; Acknowledge
+        // was the one path left setting only the incident, so the alert-backed list kept showing
+        // "Open" after the dialog had already moved to Acknowledged.
+        foreach (var alert in incident.Alerts.Where(a => !a.IsDeleted && a.Status == AlertStatusEnum.Open))
+        {
+            alert.Status = AlertStatusEnum.Acknowledged;
+            alert.AcknowledgedAt = now;
+            _uow.Alerts.UpdateAsync(alert);
+        }
+
         await _uow.SaveChangesAsync(cancellationToken);
 
         return new EnvironmentalIncidentResponse { IsSuccess = true, StatusCode = 200, Data = ReportEnvironmentalIncidentCommandHandler.Map(incident) };

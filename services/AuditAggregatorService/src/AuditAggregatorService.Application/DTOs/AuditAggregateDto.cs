@@ -18,6 +18,7 @@ public class AuditAggregateDto
     public string? ActorRole { get; set; }
     public string? ActorDisplay { get; set; }
     public string? ActorIp { get; set; }
+    public string? ActorUserAgent { get; set; }
     public bool IsSuccess { get; set; }
     public string? ErrorCode { get; set; }
     public string? Reason { get; set; }
@@ -44,6 +45,7 @@ public class AuditAggregateDto
         ActorRole = x.ActorRole,
         ActorDisplay = x.ActorDisplay,
         ActorIp = x.ActorIp,
+        ActorUserAgent = x.ActorUserAgent,
         IsSuccess = x.IsSuccess,
         ErrorCode = x.ErrorCode,
         Reason = x.Reason,

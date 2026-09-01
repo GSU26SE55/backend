@@ -8,6 +8,7 @@ using NotificationService.Domain.Enums;
 using SharedContracts.Audit;
 using SharedContracts.Events.Audit;
 using SharedInfrastructure.Middleware;
+using SharedInfrastructure.RateLimiting;
 
 namespace NotificationService.Infrastructure.Services;
 
@@ -58,7 +59,11 @@ public class NotificationAuditWriter : INotificationAuditWriter
             var httpContext = _httpContextAccessor?.HttpContext;
             if (httpContext is not null)
             {
-                ip = httpContext.Connection?.RemoteIpAddress?.ToString();
+                // #27 QA solars.io.vn 2026-08-29: RemoteIpAddress sau ApiGateway luôn là IP pod của
+                // gateway (vd "10.42.0.8"), không phải IP trình duyệt thật. Ưu tiên header
+                // X-Client-Ip mà gateway ghi đè (anti-spoof, xem RateLimitPartitionResolver).
+                var gatewayIp = httpContext.Request.Headers[RateLimitPartitionResolver.ClientIpHeader].FirstOrDefault();
+                ip = !string.IsNullOrWhiteSpace(gatewayIp) ? gatewayIp.Trim() : httpContext.Connection?.RemoteIpAddress?.ToString();
                 userAgent = Truncate(httpContext.Request?.Headers.UserAgent.ToString(), MaxUserAgentLength);
                 if (Guid.TryParse(httpContext.GetCorrelationId(), out var parsed) && parsed != Guid.Empty)
                     correlationGuid = parsed;

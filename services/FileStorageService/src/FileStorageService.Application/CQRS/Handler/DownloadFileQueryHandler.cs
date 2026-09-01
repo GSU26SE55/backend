@@ -1,3 +1,4 @@
+using FileStorageService.Application.CQRS.Notification.Audit;
 using FileStorageService.Application.CQRS.Query;
 using FileStorageService.Application.DTOs;
 using FileStorageService.Application.Interfaces;
@@ -13,15 +14,18 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
     private readonly IObjectStorageService _objectStorageService;
     private readonly IFileStorageUnitOfWork _unitOfWork;
     private readonly IFileAuthorizationService _fileAuthorizationService;
+    private readonly IPublisher _publisher;
 
     public DownloadFileQueryHandler(
         IObjectStorageService objectStorageService,
         IFileStorageUnitOfWork unitOfWork,
-        IFileAuthorizationService fileAuthorizationService)
+        IFileAuthorizationService fileAuthorizationService,
+        IPublisher publisher)
     {
         _objectStorageService = objectStorageService;
         _unitOfWork = unitOfWork;
         _fileAuthorizationService = fileAuthorizationService;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<FileDownloadResponse>> Handle(DownloadFileQuery request, CancellationToken cancellationToken)
@@ -40,7 +44,15 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
             return NotFound();
 
         if (!_fileAuthorizationService.CanRead(file))
+        {
+            // #46 QA solars.io.vn 2026-08-29 — hạ tầng FileAuditLog có đủ nhưng chưa handler nào
+            // từng ghi vào đó. Đây chính là action "data leak investigation" cần theo dõi nhất.
+            await _publisher.Publish(FileAuditTrailNotification.For(
+                FileAuditActionEnum.AccessDenied, file.Id, file.OriginalFileName, isSuccess: false,
+                reason: "Not authorized to download this file"), cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Forbidden();
+        }
 
         if (file.Status == FileStatusEnum.Quarantined)
             return Conflict("File is quarantined and cannot be downloaded.");
@@ -49,6 +61,10 @@ public class DownloadFileQueryHandler : IRequestHandler<DownloadFileQuery, Commo
             return Conflict("File is being processed, please try again later.");
 
         var result = await _objectStorageService.DownloadAsync(objectKey, cancellationToken);
+
+        await _publisher.Publish(FileAuditTrailNotification.For(
+            FileAuditActionEnum.FileDownloaded, file.Id, file.OriginalFileName), cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CommonResponse<FileDownloadResponse>
         {

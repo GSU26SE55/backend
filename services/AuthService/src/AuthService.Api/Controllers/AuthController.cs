@@ -260,16 +260,14 @@ public class AuthController : ControllerBase
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns><see cref="CommonResponse{T}"/> thông báo kết quả xác thực.</returns>
     /// <response code="200">Verify thành công. Tài khoản đã kích hoạt, client tự gọi login để lấy token.</response>
-    /// <response code="400">Email/OTP sai định dạng (validation).</response>
-    /// <response code="401">OTP sai giá trị (kèm số lần thử còn lại).</response>
+    /// <response code="400">Email/OTP sai định dạng (validation), OTP hết hạn, HOẶC OTP sai giá trị (kèm số lần thử còn lại — #38 QA 2026-08-29: đổi từ 401, business error trên luồng chưa đăng nhập không được phép trùng mã với "hết phiên" kẻo FE tự logout).</response>
     /// <response code="404">Tài khoản không tồn tại.</response>
     /// <response code="409">Tài khoản đã được kích hoạt trước đó.</response>
-    /// <response code="422">OTP hết hạn HOẶC OTP không phải dành cho mục đích đăng ký (purpose mismatch — business rule violation, không phải auth fail).</response>
+    /// <response code="422">OTP không phải dành cho mục đích đăng ký (purpose mismatch — business rule violation, không phải auth fail).</response>
     /// <response code="423">Tài khoản bị khóa tạm thời do sai OTP nhiều lần.</response>
     [HttpPost("verify-otp")]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status422UnprocessableEntity)]
@@ -497,10 +495,11 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>#AUTH-50: bước 2 reactivate — submit email + OTP để restore account.</summary>
+    /// <response code="400">OTP sai giá trị hoặc đã hết hạn (#38 QA 2026-08-29: đổi từ 401 — kẻo FE tự logout trên luồng chưa đăng nhập).</response>
     [HttpPost("reactivate-verify")]
     [EnableRateLimiting(RateLimitingExtensions.PolicyAnonOtp)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ReactivateVerify([FromBody] ReactivateVerifyCommand command, CancellationToken cancellationToken)
     {
@@ -535,7 +534,6 @@ public class AuthController : ControllerBase
     [HttpPost("verify-reset-otp")]
     [ProducesResponseType(typeof(CommonResponse<ResetTokenDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<ResetTokenDto>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(CommonResponse<ResetTokenDto>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(CommonResponse<ResetTokenDto>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(CommonResponse<ResetTokenDto>), StatusCodes.Status423Locked)]
     public async Task<IActionResult> VerifyResetOtp([FromBody] VerifyResetOtpCommand command, CancellationToken cancellationToken)
@@ -570,7 +568,6 @@ public class AuthController : ControllerBase
     [HttpPost("reset-password")]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(CommonResponse<string>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordCommand command, CancellationToken cancellationToken)
     {
@@ -630,12 +627,10 @@ public class AuthController : ControllerBase
     /// - Hệ thống issue luôn cặp AccessToken + RefreshToken để login tự động.
     /// </remarks>
     /// <response code="200">Accept invite thành công, trả token đăng nhập.</response>
-    /// <response code="400">Dữ liệu không hợp lệ hoặc account đã active trước đó.</response>
-    /// <response code="401">Token không hợp lệ hoặc đã hết hạn.</response>
+    /// <response code="400">Dữ liệu không hợp lệ, token không hợp lệ/đã hết hạn (#38 QA 2026-08-29: đổi từ 401 — kẻo FE tự logout trên luồng chưa đăng nhập), hoặc account đã active trước đó.</response>
     [HttpPost("accept-invite")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AcceptInvite([FromBody] AcceptInviteCommand command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);

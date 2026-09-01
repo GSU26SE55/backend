@@ -16,8 +16,9 @@ public static class ManageDependencyInjection
         services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
         services.Configure<ChatOptions>(configuration.GetSection(ChatOptions.SectionName));
 
-        // Register MediatR handlers
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ManageDependencyInjection).Assembly));
+        // MediatR đã được đăng ký bởi AddSharedInfrastructure (Infrastructure DI) cho cùng assembly
+        // "TicketService.Application" — gọi AddMediatR ở đây nữa làm mọi INotificationHandler
+        // chạy 2 lần (audit log ghi đôi).
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ClosedTicketMutationBehavior<,>));
         services.AddScoped<ITicketStateMachine, TicketStateMachine>();
         services.AddScoped<ITransitionRuleProvider, TransitionRuleProvider>();

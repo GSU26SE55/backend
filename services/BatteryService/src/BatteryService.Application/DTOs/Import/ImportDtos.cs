@@ -72,4 +72,8 @@ public class ImportRowDto
     public string? CreatedEntityId { get; set; }
 
     public DateTime? ProcessedAt { get; set; }
+
+    /// <summary>Giá trị từng cột của dòng gốc (tên cột như trong file .xlsx) — để giao diện cho sửa
+    /// trực tiếp một dòng hỏng mà không cần tải lại cả file.</summary>
+    public Dictionary<string, string> Fields { get; set; } = new();
 }

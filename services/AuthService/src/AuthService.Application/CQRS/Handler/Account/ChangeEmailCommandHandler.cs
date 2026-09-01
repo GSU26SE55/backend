@@ -56,8 +56,11 @@ public class ChangeEmailCommandHandler : IRequestHandler<ChangeEmailCommand, Acc
         if (account == null)
             return Fail(404, "Account not found.");
 
+        // #38 QA solars.io.vn 2026-08-29: 401 ở đây từng bị axios.ts coi là hết phiên (mọi 401
+        // != TOKEN_EXPIRED ⇒ auto-logout) ⇒ gõ sai mật khẩu hiện tại là bị đăng xuất luôn.
+        // ChangePasswordCommandHandler dùng 400 cho đúng tình huống này — đồng bộ theo đó.
         if (!_passwordHasher.Verify(request.CurrentPassword, account.PasswordHash))
-            return Fail(401, "Current password is incorrect.");
+            return Fail(400, "Current password is incorrect.");
 
         var newEmail = EmailNormalizer.Normalize(request.NewEmail);
 

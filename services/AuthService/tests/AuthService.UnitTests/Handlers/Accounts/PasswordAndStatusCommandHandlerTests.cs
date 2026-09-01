@@ -141,4 +141,35 @@ public class DeleteAccountCommandHandlerTests
 
         resp.StatusCode.Should().Be(404);
     }
+
+    // #50 QA solars.io.vn 2026-08-29 — không có chốt chặn "Admin cuối cùng". Xoá account Admin duy
+    // nhất còn lại là khoá cửa vĩnh viễn.
+    [Fact]
+    public async Task Delete_LastAdmin_Returns409_DoesNotDelete()
+    {
+        var adminRole = new global::AuthService.Domain.Entities.Role
+        {
+            Id = Guid.NewGuid(),
+            Name = "Admin",
+            NormalizedName = "ADMIN",
+            Status = RoleStatusEnum.Active
+        };
+        var lastAdmin = new global::AuthService.Domain.Entities.Account
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@e.com",
+            PasswordHash = "x",
+            FullName = "Admin",
+            Status = AccountStatusEnum.Active,
+            RoleId = adminRole.Id
+        };
+        var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { lastAdmin }, roleSeed: new[] { adminRole });
+        var handler = new DeleteAccountCommandHandler(uow.Object, new Mock<IMessageProducerService>().Object, Moq.Mock.Of<MediatR.IPublisher>());
+
+        var resp = await handler.Handle(new DeleteAccountCommand { Id = lastAdmin.Id }, CancellationToken.None);
+
+        resp.IsSuccess.Should().BeFalse();
+        resp.StatusCode.Should().Be(409);
+        accounts.Verify(r => r.DeleteAsync(It.IsAny<global::AuthService.Domain.Entities.Account>()), Times.Never);
+    }
 }
