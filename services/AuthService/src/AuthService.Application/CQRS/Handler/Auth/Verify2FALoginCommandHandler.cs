@@ -124,6 +124,12 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
                     targetEmail: account.Email,
                     reason: "Backup code rate limit exceeded",
                     cancellationToken: cancellationToken);
+                // #39 QA solars.io.vn 2026-08-29: trước đây chỉ publish LoginAttemptNotification khi
+                // Success ⇒ login history của chính chủ không hiện lần sai 2FA (vẫn có trong audit
+                // log admin qua AuditTrailNotification ở trên — lệch phạm vi hiển thị).
+                await _publisher.Publish(new LoginAttemptNotification(
+                    account.Id, account.Email, LoginAttemptResult.WrongTwoFactorCode,
+                    Method: "BackupCode", Note: "Backup code rate limit exceeded"), cancellationToken);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return Fail(429, "Too many backup code attempts. Please try again in 15 minutes or use TOTP.");
             }
@@ -174,6 +180,13 @@ public class Verify2FALoginCommandHandler : IRequestHandler<Verify2FALoginComman
                     ["maxAttempts"] = MaxAttemptsPerChallenge,
                 },
                 cancellationToken: cancellationToken);
+            // #39 QA solars.io.vn 2026-08-29: trước đây chỉ publish LoginAttemptNotification khi
+            // Success ⇒ login history của chính chủ không hiện lần sai 2FA (vẫn có trong audit log
+            // admin qua AuditTrailNotification ở trên — lệch phạm vi hiển thị, không mất dữ liệu).
+            await _publisher.Publish(new LoginAttemptNotification(
+                account.Id, account.Email, LoginAttemptResult.WrongTwoFactorCode,
+                Method: request.IsSmsCode ? "SmsOtp" : (request.IsBackupCode ? "BackupCode" : "TOTP"),
+                Note: request.IsBackupCode ? "Wrong backup code" : "Wrong TOTP"), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             var remaining = MaxAttemptsPerChallenge - attempts;
             return Fail(422, $"Incorrect verification code. {Math.Max(0, remaining)} attempt(s) remaining.");

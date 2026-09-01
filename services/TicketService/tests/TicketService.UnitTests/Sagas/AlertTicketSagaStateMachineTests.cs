@@ -123,6 +123,42 @@ public class AlertTicketSagaStateMachineTests
         await harness.Stop();
     }
 
+    /// <summary>
+    /// LowSoc notification-only — pin dùng hết KHÔNG được sinh ticket.
+    ///
+    /// Khẳng định thật nằm ở <c>CreateTicketFromAlertCommand</c>: đó là message duy nhất dẫn tới
+    /// ticket. Saga có được tạo tạm rồi <c>Finalize()</c> hay không là chi tiết cài đặt —
+    /// MassTransit tạo instance trước khi xét mọi điều kiện của event initiating.
+    /// </summary>
+    [Fact]
+    public async Task Case2b_V2Anomaly_LowSoc_ShouldNotRequestTicket()
+    {
+        var (harness, saga) = await SetupHarnessAsync();
+        var alertId = Guid.NewGuid();
+
+        await harness.Bus.Publish(MakeV2(alertId) with { AnomalyType = 4 }); // LowSoc
+        await Task.Delay(500);
+
+        (await harness.Published.Any<CreateTicketFromAlertCommand>()).Should()
+            .BeFalse("LowSoc là notification-only — không được xin tạo ticket");
+        saga.Created.Contains(alertId)?.CurrentState.Should()
+            .NotBe(nameof(AlertTicketSagaStateMachine.TicketRequested),
+                "saga phải kết thúc ngay, không được nằm chờ ticket");
+        await harness.Stop();
+    }
+
+    /// <summary>Đường hiện có không hỏng: anomaly thường vẫn xin tạo ticket.</summary>
+    [Fact]
+    public async Task Case2c_V2Anomaly_NonNotificationOnly_ShouldRequestTicket()
+    {
+        var (harness, _) = await SetupHarnessAsync();
+
+        await harness.Bus.Publish(MakeV2(Guid.NewGuid())); // AnomalyType 12 — HighInternalResistance
+
+        (await harness.Published.Any<CreateTicketFromAlertCommand>()).Should().BeTrue();
+        await harness.Stop();
+    }
+
     [Fact]
     public async Task Case3_Reconciliation_ShouldStartInAlertLinkRequested()
     {

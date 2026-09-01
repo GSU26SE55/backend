@@ -40,5 +40,8 @@ public enum AnomalyTypeEnum
     IotDataIntegrityViolation = 17,
 
     /// <summary>Nồng độ khí gas (MQ-2, %) vượt <c>AmbientThresholdConfig.HighGasWarning/Critical</c>.</summary>
-    HighGasConcentration = 18
+    HighGasConcentration = 18,
+
+    /// <summary>Cảm biến rò nước (rain/water-leak) báo ướt — <c>AmbientReading.WaterLeakDetected == true</c>. Không có threshold số, luôn Critical.</summary>
+    WaterLeak = 19
 }

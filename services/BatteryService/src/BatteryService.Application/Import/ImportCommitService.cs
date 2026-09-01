@@ -36,6 +36,24 @@ public class ImportCommitService : IImportCommitService
     private readonly ImportOptions _options;
     private readonly ILogger<ImportCommitService> _logger;
 
+    /// <summary>
+    /// (KhachHangId, TenSite) đã tạo trong lượt này. Cùng bẫy như <see cref="IBatteryTypeResolver"/>:
+    /// site vừa <c>AddAsync</c> chưa được lưu xuống nên truy vấn DB không thấy nó — hai dòng site
+    /// cùng tên dưới cùng một khách trong CHUNG một lô sẽ cùng lọt qua kiểm tra "trùng tên" rồi vỡ
+    /// ràng buộc duy nhất <c>IX_sites_customer_id_name</c> lúc lưu, đánh sập toàn bộ lượt tiến độ
+    /// thay vì chỉ đánh hỏng đúng dòng thứ hai.
+    /// </summary>
+    private readonly HashSet<(Guid CustomerId, string Name)> _pendingSiteNames = new();
+
+    /// <summary>
+    /// Serial number các pin mới đã <c>AddAsync</c> trong lượt này. Cùng bẫy như
+    /// <see cref="_pendingSiteNames"/>: hai dòng pin cùng serial (sau chuẩn hoá) trong CHUNG một lô
+    /// cùng lọt qua kiểm tra "serial đã tồn tại" (query DB không thấy entity vừa <c>AddAsync</c>
+    /// nhưng chưa <c>SaveChanges</c>) rồi vỡ ràng buộc duy nhất <c>IX_battery_assets_serial_number</c>
+    /// lúc lưu — đánh sập toàn bộ lượt tiến độ thay vì chỉ đánh hỏng đúng dòng thứ hai.
+    /// </summary>
+    private readonly HashSet<string> _pendingSerialNumbers = new();
+
     public ImportCommitService(
         IBatteryUnitOfWork unitOfWork,
         IImportRowValidator validator,
@@ -65,6 +83,8 @@ public class ImportCommitService : IImportCommitService
             return true;
 
         _batteryTypeResolver.Reset();
+        _pendingSiteNames.Clear();
+        _pendingSerialNumbers.Clear();
 
         var rows = await _unitOfWork.ImportRows
             .GetAllAsync()
@@ -216,7 +236,8 @@ public class ImportCommitService : IImportCommitService
                 continue;
             }
 
-            var nameTaken = await _unitOfWork.Sites
+            var nameKey = (customerId.Value, site.Name);
+            var nameTaken = _pendingSiteNames.Contains(nameKey) || await _unitOfWork.Sites
                 .GetAllAsync()
                 .AnyAsync(s => !s.IsDeleted && s.CustomerId == customerId.Value && s.Name == site.Name, cancellationToken);
 
@@ -236,6 +257,7 @@ public class ImportCommitService : IImportCommitService
             ApplySite(created, site, customerId.Value);
 
             await _unitOfWork.Sites.AddAsync(created);
+            _pendingSiteNames.Add(nameKey);
             await AddLinkAsync(batch, ImportEntityTypeEnum.Site, site.ExternalCode, site.ExternalCodeRaw, created.Id);
             MarkRow(row, ImportRowStatusEnum.Created, created.Id);
         }
@@ -308,7 +330,7 @@ public class ImportCommitService : IImportCommitService
                 continue;
             }
 
-            var serialTaken = await _unitOfWork.BatteryAssets
+            var serialTaken = _pendingSerialNumbers.Contains(asset.SerialNumber) || await _unitOfWork.BatteryAssets
                 .GetAllAsync()
                 .AnyAsync(a => !a.IsDeleted && a.SerialNumber == asset.SerialNumber, cancellationToken);
 
@@ -327,6 +349,7 @@ public class ImportCommitService : IImportCommitService
             ApplyAsset(created, asset, site, typeResolution.BatteryTypeId);
 
             await _unitOfWork.BatteryAssets.AddAsync(created);
+            _pendingSerialNumbers.Add(asset.SerialNumber);
             await AddLinkAsync(batch, ImportEntityTypeEnum.BatteryAsset, asset.ExternalCode, asset.ExternalCodeRaw, created.Id);
 
             var evt = new BatteryAssetCreatedEvent(

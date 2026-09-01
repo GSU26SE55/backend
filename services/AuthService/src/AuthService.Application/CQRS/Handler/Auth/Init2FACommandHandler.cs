@@ -46,7 +46,10 @@ public class Init2FACommandHandler : IRequestHandler<Init2FACommand, CommonRespo
         var pendingToken = Guid.NewGuid().ToString("N");
         await _pending.SetAsync(account.Id, secret, pendingToken, PendingTtl, cancellationToken);
 
-        var issuer = _configuration["JwtSettings:Issuer"] ?? "GSU26SE55 Auth";
+        // #28 QA solars.io.vn 2026-08-29: JwtSettings:Issuer là URL API (vd "https://api.solaris.io.vn")
+        // dùng để validate claim `iss` của JWT — KHÔNG phải tên hiển thị cho authenticator app.
+        // Issuer của mã QR TOTP phải là tên sản phẩm người dùng nhận ra được.
+        var issuer = "Solar Battery Maintenance";
         var label = account.Email;
         var otpAuthUri = _totp.BuildOtpAuthUri(secret, label, issuer);
 

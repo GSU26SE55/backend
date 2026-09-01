@@ -87,8 +87,16 @@ public class AnomalyDetectionServiceTests
         b.Alerts.Verify(r => r.AddAsync(It.IsAny<Alert>()), Times.Never);
     }
 
+    /// <summary>
+    /// LowSoc notification-only — pin dùng hết KHÔNG được sinh ticket.
+    ///
+    /// Pin trong hệ solar xả mỗi đêm; chạm ngưỡng SOC là vận hành bình thường. Alert vẫn ghi và
+    /// khách vẫn được báo, nhưng phải đi qua <c>BatteryAnomalyWarningDetectedEvent</c> — event mà
+    /// chỉ NotificationService consume. <c>BatteryAnomalyDetectedEvent</c>/<c>V2</c> là hai event
+    /// duy nhất dẫn tới ticket auto, nên SOC 5% (dưới cả mốc Critical 10) vẫn không được chạm tới.
+    /// </summary>
     [Fact]
-    public async Task Scan_PrimaryReadingLowSoc_CreatesAlert()
+    public async Task Scan_PrimaryReadingLowSoc_CreatesAlert_AndNotifiesOnly_NoTicketEvent()
     {
         var reading = MakeReading(soc: 5m);
         reading.SourceType = SensorReadingSourceTypeEnum.Bms;
@@ -105,7 +113,16 @@ public class AnomalyDetectionServiceTests
         result.AlertsCreated.Should().Be(1);
         b.Alerts.Verify(r => r.AddAsync(It.Is<Alert>(a =>
             a.AnomalyType == AnomalyTypeEnum.LowSoc
-            && a.Severity == AlertSeverityEnum.Critical)), Times.Once);
+            && a.Severity == AlertSeverityEnum.Warning)), Times.Once);
+
+        b.OutboxMessages.Verify(
+            r => r.AddAsync(It.Is<OutboxMessage>(m => m.Type == nameof(BatteryAnomalyWarningDetectedEvent))),
+            Times.Once, "khách vẫn phải được báo pin yếu");
+        b.OutboxMessages.Verify(
+            r => r.AddAsync(It.Is<OutboxMessage>(m =>
+                m.Type == nameof(BatteryAnomalyDetectedEvent)
+                || m.Type == nameof(BatteryAnomalyDetectedV2Event))),
+            Times.Never, "SOC thấp KHÔNG được đi vào event auto-tạo ticket");
     }
 
     [Fact]

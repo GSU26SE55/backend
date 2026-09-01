@@ -53,8 +53,10 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
         if (account.LockoutEndAt.HasValue && account.LockoutEndAt.Value > DateTime.UtcNow)
             return Fail(423, "Account is locked. Please try again later.");
 
+        // #38 QA solars.io.vn 2026-08-29: 401 ở 2 nhánh này từng bị axios.ts coi là hết phiên
+        // (mọi 401 != TOKEN_EXPIRED ⇒ auto-logout) ⇒ gõ sai/hết hạn OTP là bị đăng xuất luôn.
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(401, "OTP has expired. Please request the email change again.");
+            return Fail(400, "OTP has expired. Please request the email change again.");
 
         if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
         {
@@ -63,7 +65,7 @@ public class ConfirmEmailChangeCommandHandler : IRequestHandler<ConfirmEmailChan
                 account.LockoutEndAt = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "Invalid OTP.");
+            return Fail(400, "Invalid OTP.");
         }
 
         // Double-check email vẫn chưa bị account khác chiếm trong khoảng chờ verify.

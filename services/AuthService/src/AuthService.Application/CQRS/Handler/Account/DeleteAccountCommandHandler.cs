@@ -1,6 +1,7 @@
 using AuthService.Application.CQRS.Command.Account;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Domain.Enums;
 using MediatR;
@@ -38,6 +39,18 @@ public class DeleteAccountCommandHandler : IRequestHandler<DeleteAccountCommand,
                 IsSuccess = false,
                 StatusCode = 404,
                 Message = "Account not found."
+            };
+        }
+
+        // #50 QA solars.io.vn 2026-08-29 — KHÔNG có chốt chặn "Admin cuối cùng". Xoá account Admin
+        // duy nhất còn lại là khoá cửa vĩnh viễn (không ai còn quyền quản trị để tự cứu).
+        if (await LastAdminGuard.WouldRemoveLastAdminAsync(_unitOfWork, account.Id, account.RoleId, cancellationToken))
+        {
+            return new AccountActionResponse
+            {
+                IsSuccess = false,
+                StatusCode = 409,
+                Message = "Cannot delete the last remaining Admin account. Assign another account as Admin first."
             };
         }
 

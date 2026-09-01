@@ -130,14 +130,8 @@ pipeline {
 
                             ./ci/scripts/verify-deploy-registry-auth.sh
 
-                            helm repo add prometheus-community \
-                              https://prometheus-community.github.io/helm-charts \
-                              --force-update
-                            helm repo add grafana \
-                              https://grafana.github.io/helm-charts \
-                              --force-update
-                            helm repo update
-                            helm dependency build deploy/helm/solar-battery
+                            ./deploy/scripts/prepare-helm-dependencies.sh \
+                              deploy/helm/solar-battery
                             helm lint deploy/helm/solar-battery \
                               -f deploy/helm/solar-battery/values.yaml \
                               -f deploy/helm/solar-battery/values-production.yaml \

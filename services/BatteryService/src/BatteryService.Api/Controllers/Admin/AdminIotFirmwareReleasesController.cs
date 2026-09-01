@@ -325,11 +325,15 @@ public class AdminIotFirmwareReleasesController : ControllerBase
             sha256 = Convert.ToHexString(hasher.Hash!).ToLowerInvariant();
         }
 
-        // URL public: dùng PublicBaseUrl nếu set, không thì tương đối /firmware-storage/{file}.
+        // #36 QA solars.io.vn 2026-08-29: URL public PHẢI absolute — CreateIotFirmwareReleaseCommand
+        // đòi UriKind.Absolute (ArtifactUrl là presigned-style URL, không phải path tương đối).
+        // Thiếu Firmware:PublicBaseUrl trước đây fallback về "/firmware-storage/{file}" (tương đối)
+        // ⇒ publish firmware luôn fail validation, không hiện lỗi gì trên UI. Fallback giờ dựng từ
+        // chính request hiện tại (scheme + host) để luôn ra absolute URL.
         var publicBase = configuration["Firmware:PublicBaseUrl"];
         var artifactUrl = !string.IsNullOrWhiteSpace(publicBase)
             ? $"{publicBase.TrimEnd('/')}/{fileName}"
-            : $"/firmware-storage/{fileName}";
+            : $"{Request.Scheme}://{Request.Host}/firmware-storage/{fileName}";
 
         return StatusCode(201, new CommonResponse<FirmwareBinaryUploadDto>
         {

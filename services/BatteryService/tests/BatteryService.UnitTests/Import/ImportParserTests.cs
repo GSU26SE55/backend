@@ -122,4 +122,36 @@ public class ImportParserTests
                 $"every required column of {entityType} must appear in the downloadable template");
         }
     }
+
+    [Fact]
+    public void ParseCustomers_LineStartingWithHash_IsIgnoredAsComment()
+    {
+        // File mẫu tải về chèn dòng chú thích/ví dụ bắt đầu bằng '#' giữa tiêu đề và dữ liệu thật.
+        // Nếu người dùng quên xoá trước khi nộp, những dòng đó không được biến thành dữ liệu.
+        var result = _parser.ParseCustomers(Csv(
+            "external_customer_code,full_name,email,phone\n" +
+            "#REQUIRED,REQUIRED,REQUIRED,optional\n" +
+            "#VIDU-KH-001,Cong Ty Vi Du,vidu@example.com,0900000000\n" +
+            "KH-001,Cong ty That,that@example.com,0901234567\n"), 5000);
+
+        result.IsFatal.Should().BeFalse();
+        result.Rows.Should().ContainSingle();
+        result.Rows[0].Value.ExternalCustomerCode.Should().Be("KH-001");
+        // Dòng dữ liệu thật là dòng 4 trong file — không bị lệch bởi các dòng chú thích đứng trước.
+        result.Rows[0].RowNumber.Should().Be(4);
+    }
+
+    [Fact]
+    public void ParseCustomers_OnlyCommentLinesAfterHeader_IsFatalNoDataRows()
+    {
+        var result = _parser.ParseCustomers(Csv(
+            "external_customer_code,full_name,email,phone\n" +
+            "#REQUIRED,REQUIRED,REQUIRED,optional\n" +
+            "#VIDU-KH-001,Cong Ty Vi Du,vidu@example.com,0900000000\n" +
+            "\n" +
+            "# ===== HUONG DAN =====\n"), 5000);
+
+        result.IsFatal.Should().BeTrue();
+        result.FatalError.Should().Contain("no data rows");
+    }
 }

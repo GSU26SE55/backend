@@ -118,15 +118,16 @@ public class AnomalyRulesTests
             a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Warning,
             "31.60 °C đã qua mốc Warning 30 nhưng chưa tới Critical 32");
         result.Should().ContainSingle(a =>
-            a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Warning,
-            "SOC 91.00 ĐÚNG BẰNG mốc Warning 91 — so sánh bao gồm mốc nên đã tính là vi phạm");
+            a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Info,
+            "SOC 91.00 ĐÚNG BẰNG mốc Warning 91 — so sánh bao gồm mốc nên đã tính là vi phạm; "
+            + "mốc Warning của SOC nay sinh Info");
 
         // 0 A nằm trong cả trần sạc 2 A lẫn trần xả 3 A.
         result.Should().NotContain(a =>
             a.Type == AnomalyTypeEnum.AbnormalCharging || a.Type == AnomalyTypeEnum.RapidDischarge);
 
-        // Toàn Warning ⇒ chỉ notify, KHÔNG đẻ ticket. Ticket chỉ sinh từ Critical.
-        result.Should().OnlyContain(a => a.Severity == AlertSeverityEnum.Warning);
+        // Không có Critical nào ⇒ chỉ notify, KHÔNG đẻ ticket. Ticket chỉ sinh từ Critical.
+        result.Should().NotContain(a => a.Severity == AlertSeverityEnum.Critical);
     }
 
     [Fact]
@@ -139,7 +140,10 @@ public class AnomalyRulesTests
             a.Type == AnomalyTypeEnum.Overvoltage && a.Severity == AlertSeverityEnum.Critical);
         result.Should().ContainSingle(a =>
             a.Type == AnomalyTypeEnum.Overheat && a.Severity == AlertSeverityEnum.Critical);
+        // SOC là ngoại lệ: chạm mốc Critical vẫn chỉ ra Warning — pin dùng cạn không đẻ ticket.
         result.Should().ContainSingle(a =>
+            a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Warning);
+        result.Should().NotContain(a =>
             a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Critical);
         result.Should().ContainSingle(a =>
             a.Type == AnomalyTypeEnum.AbnormalCharging, "dòng sạc 2 A đúng bằng trần 2 A");
@@ -162,14 +166,28 @@ public class AnomalyRulesTests
             .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.Overvoltage && a.Severity == AlertSeverityEnum.Critical);
 
     [Fact]
-    public void LowSoc_Warning_WhenBelowWarning_ButAboveCritical()
+    public void LowSoc_Info_WhenBelowWarning_ButAboveCritical()
         => AnomalyRules.Detect(Reading(soc: 15m), Threshold())
-            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Warning);
+            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Info);
 
     [Fact]
-    public void LowSoc_Critical_WhenBelowCritical()
+    public void LowSoc_Warning_WhenBelowCritical()
         => AnomalyRules.Detect(Reading(soc: 5m), Threshold())
-            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Critical);
+            .Should().ContainSingle(a => a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Warning);
+
+    /// <summary>
+    /// Pin xả cạn là vận hành bình thường của hệ solar. Chỉ alert Critical mới publish
+    /// <c>BatteryAnomalyDetectedEvent</c>/<c>V2</c> — hai event duy nhất dẫn tới ticket auto.
+    /// Test này khoá đúng điều kiện đó: SOC dù chạm 0 cũng không được sinh Critical.
+    /// </summary>
+    [Theory]
+    [InlineData(15)]
+    [InlineData(5)]
+    [InlineData(0)]
+    public void LowSoc_NeverCritical_SoNoTicketIsEverCreated(int soc)
+        => AnomalyRules.Detect(Reading(soc: soc), Threshold())
+            .Should().NotContain(a =>
+                a.Type == AnomalyTypeEnum.LowSoc && a.Severity == AlertSeverityEnum.Critical);
 
     [Fact]
     public void RapidDischarge_Critical_WhenAbsCurrentAboveLimit()

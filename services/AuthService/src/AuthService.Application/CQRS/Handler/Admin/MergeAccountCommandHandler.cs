@@ -2,6 +2,7 @@ using System.Text.Json;
 using AuthService.Application.CQRS.Command.Admin;
 using AuthService.Application.CQRS.Notification.Audit;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Interfaces.Helpers;
 using AuthService.Application.Interfaces.Repositories;
 using AuthService.Application.Interfaces.Services;
 using AuthService.Domain.Entities;
@@ -66,6 +67,12 @@ public class MergeAccountCommandHandler : IRequestHandler<MergeAccountCommand, A
 
         if (secondary.MergedIntoId != null)
             return Fail(409, "Secondary account has already been merged previously.");
+
+        // #50 QA solars.io.vn 2026-08-29 — KHÔNG có chốt chặn "Admin cuối cùng": picker gộp liệt
+        // kê cả admin@solars.io.vn. Gộp = tombstone secondary vĩnh viễn, nên nếu secondary là Admin
+        // duy nhất còn lại thì đây cũng là khoá cửa vĩnh viễn.
+        if (await LastAdminGuard.WouldRemoveLastAdminAsync(_unitOfWork, secondary.Id, secondary.RoleId, cancellationToken))
+            return Fail(409, "Cannot merge the last remaining Admin account. Assign another account as Admin first.");
 
         var now = DateTime.UtcNow;
         var conflictResolution = new Dictionary<string, object?>();

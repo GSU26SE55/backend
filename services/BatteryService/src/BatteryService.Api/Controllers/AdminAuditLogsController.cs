@@ -145,21 +145,27 @@ public class AdminAuditLogsController : ControllerBase
             "issuccess" => descending ? q.OrderByDescending(x => x.IsSuccess) : q.OrderBy(x => x.IsSuccess),
             _ => descending ? q.OrderByDescending(x => x.OccurredAt) : q.OrderBy(x => x.OccurredAt),
         };
+        // #48 QA solars.io.vn 2026-08-29: DTO chỉ có ActorAccountId (GUID) dù đã có sẵn cặp
+        // TargetId+TargetDisplay cho target — resolve tên actor qua CustomerAccount (read-model
+        // đồng bộ từ AuthService, keyed cùng AccountId) để màn Admin không phải hiện thẳng GUID.
+        var accounts = _unitOfWork.CustomerAccounts.GetAllAsync();
         var page = await ordered
             .ThenBy(x => x.Id) // tie-breaker cố định — pagination ổn định
-            .Select(x => new BatteryAuditLogDto
+            .GroupJoin(accounts, log => log.ActorAccountId, acc => (Guid?)acc.Id, (log, accs) => new { log, accs })
+            .SelectMany(x => x.accs.DefaultIfEmpty(), (x, acc) => new BatteryAuditLogDto
             {
-                Id = x.Id.ToString(),
-                EventId = x.EventId.ToString(),
-                ActionCode = x.ActionCode,
-                ActionCategory = x.ActionCategory,
-                Severity = x.Severity,
-                TargetId = x.TargetId.HasValue ? x.TargetId.ToString() : null,
-                TargetDisplay = x.TargetDisplay,
-                ActorAccountId = x.ActorAccountId.HasValue ? x.ActorAccountId.ToString() : null,
-                IsSuccess = x.IsSuccess,
-                Reason = x.Reason,
-                OccurredAt = x.OccurredAt,
+                Id = x.log.Id.ToString(),
+                EventId = x.log.EventId.ToString(),
+                ActionCode = x.log.ActionCode,
+                ActionCategory = x.log.ActionCategory,
+                Severity = x.log.Severity,
+                TargetId = x.log.TargetId.HasValue ? x.log.TargetId.ToString() : null,
+                TargetDisplay = x.log.TargetDisplay,
+                ActorAccountId = x.log.ActorAccountId.HasValue ? x.log.ActorAccountId.ToString() : null,
+                ActorDisplay = acc != null ? acc.FullName : null,
+                IsSuccess = x.log.IsSuccess,
+                Reason = x.log.Reason,
+                OccurredAt = x.log.OccurredAt,
             })
             .ToPagedEntityListAsync(pageNumber, pageSize, ct);
 
@@ -181,6 +187,8 @@ public class BatteryAuditLogDto
     public string? TargetId { get; set; }
     public string? TargetDisplay { get; set; }
     public string? ActorAccountId { get; set; }
+    /// <summary>#48 QA solars.io.vn 2026-08-29 — tên hiển thị của actor (resolve từ CustomerAccount), null nếu không tra được.</summary>
+    public string? ActorDisplay { get; set; }
     public bool IsSuccess { get; set; }
     public string? Reason { get; set; }
     public DateTime OccurredAt { get; set; }

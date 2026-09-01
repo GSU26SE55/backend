@@ -175,6 +175,7 @@ public class ImportRevertAndContractTests
     [InlineData(nameof(ImportsController.GetBatches), "Admin")]
     [InlineData(nameof(ImportsController.GetBatch), "Admin")]
     [InlineData(nameof(ImportsController.GetRows), "Admin")]
+    [InlineData(nameof(ImportsController.UpdateRows), "Admin")]
     [InlineData(nameof(ImportsController.GetErrorsCsv), "Admin")]
     [InlineData(nameof(ImportsController.GetTemplate), "Admin")]
     [InlineData(nameof(ImportsController.Commit), "Admin")]

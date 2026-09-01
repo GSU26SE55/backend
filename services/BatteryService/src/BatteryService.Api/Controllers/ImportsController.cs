@@ -2,7 +2,7 @@ using System.Security.Claims;
 using BatteryService.Application.CQRS.Command.Import;
 using BatteryService.Application.CQRS.Query.Import;
 using BatteryService.Application.DTOs.Import;
-using BatteryService.Domain.Enums;
+using BatteryService.Application.Import;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -40,22 +40,21 @@ public class ImportsController : ControllerBase
     private const long MaxUploadBytes = 10 * 1024 * 1024;
 
     private readonly IMediator _mediator;
+    private readonly IImportWorkbookSplitter _workbookSplitter;
 
-    public ImportsController(IMediator mediator)
+    public ImportsController(IMediator mediator, IImportWorkbookSplitter workbookSplitter)
     {
         _mediator = mediator;
+        _workbookSplitter = workbookSplitter;
     }
 
-    /// <summary>Tải file CSV mẫu cho một loại dữ liệu.</summary>
-    /// <response code="200">Trả file CSV.</response>
-    [HttpGet("templates/{entityType}")]
+    /// <summary>Tải file Excel mẫu — một file .xlsx, ba sheet: khách hàng, site, pin.</summary>
+    /// <response code="200">Trả file .xlsx.</response>
+    [HttpGet("templates")]
     [Authorize(Roles = "Admin")]
-    // KHÔNG khai [Produces("text/csv")]: thuộc tính đó khoá luôn kiểu nội dung của nhánh lỗi, nên
-    // một entityType không hợp lệ sẽ nhận 406 rỗng thay vì 400 kèm lý do — client không biết vì sao.
-    // Nhánh thành công trả FileContentResult vốn tự đặt kiểu nội dung nên không cần thuộc tính này.
-    public async Task<IActionResult> GetTemplate(ImportEntityTypeEnum entityType, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetTemplate(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetImportTemplateQuery { EntityType = entityType }, cancellationToken);
+        var result = await _mediator.Send(new GetImportTemplateQuery(), cancellationToken);
         if (!result.IsSuccess || result.Data is null)
             return StatusCode(result.StatusCode, result);
 
@@ -64,8 +63,10 @@ public class ImportsController : ControllerBase
 
     /// <summary>Gửi file lên để đọc và kiểm định. Không ghi dữ liệu nghiệp vụ nào.</summary>
     /// <remarks>
-    /// Gửi dạng multipart. Ba phần đều tuỳ chọn nhưng phải có ít nhất một:
-    /// <c>customersFile</c>, <c>sitesFile</c>, <c>assetsFile</c>.
+    /// Gửi dạng multipart, một phần duy nhất tên <c>file</c> — một workbook .xlsx ba sheet
+    /// (<c>1-Customers</c>, <c>2-Sites</c>, <c>3-Assets</c>, đúng tên và thứ tự trong file mẫu tải
+    /// về). Một sheet không có dòng dữ liệu nào (ngoài dòng chú thích) coi như không tham gia lô này
+    /// — giống hệt việc trước đây không đính kèm file cho loại đó.
     ///
     /// Thiết bị IoT KHÔNG nhập được qua đây: thiết bị do hệ thống cấp phát cùng khoá API và
     /// credential MQTT, nên chúng chỉ được tạo ở màn quản trị thiết bị.
@@ -77,18 +78,37 @@ public class ImportsController : ControllerBase
     [Authorize(Roles = "Admin")]
     [RequestSizeLimit(MaxUploadBytes)]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> CreateBatch(
-        IFormFile? customersFile,
-        IFormFile? sitesFile,
-        IFormFile? assetsFile,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateBatch(IFormFile? file, CancellationToken cancellationToken)
     {
+        var bytes = await ReadAsync(file, cancellationToken);
+
+        var splitResult = new ImportWorkbookSplitResult(null, null, null);
+        if (bytes is not null)
+        {
+            try
+            {
+                using var stream = new MemoryStream(bytes);
+                splitResult = _workbookSplitter.Split(stream);
+            }
+            catch (Exception ex)
+            {
+                // Hỏng ở mức file (không phải .xlsx thật, hoặc bị hỏng khi tải lên) — không có lô
+                // nào để dựng, nên trả lỗi thẳng ở đây thay vì đi qua CreateImportBatchCommand.
+                return StatusCode(422, new CommonResponse<ImportBatchDto>
+                {
+                    IsSuccess = false,
+                    StatusCode = 422,
+                    Message = $"The file could not be read as an Excel workbook: {ex.Message}"
+                });
+            }
+        }
+
         var command = new CreateImportBatchCommand
         {
-            CustomersCsv = await ReadAsync(customersFile, cancellationToken),
-            SitesCsv = await ReadAsync(sitesFile, cancellationToken),
-            AssetsCsv = await ReadAsync(assetsFile, cancellationToken),
-            FileName = BuildFileName(customersFile, sitesFile, assetsFile),
+            CustomersCsv = splitResult.CustomersCsv,
+            SitesCsv = splitResult.SitesCsv,
+            AssetsCsv = splitResult.AssetsCsv,
+            FileName = file is { Length: > 0 } ? file.FileName : null,
             DryRun = true,
             RequestedBy = ResolveAccountId()
         };
@@ -112,6 +132,22 @@ public class ImportsController : ControllerBase
     public async Task<IActionResult> GetBatch(Guid id, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetImportBatchByIdQuery { Id = id }, cancellationToken);
+        return StatusCode(result.StatusCode, result);
+    }
+
+    /// <summary>
+    /// Sửa trực tiếp giá trị một hoặc nhiều dòng rồi kiểm định lại cả lô — thay cho việc phải tải cả
+    /// file .xlsx lên lại chỉ để sửa vài ô sai. Chỉ dùng được khi lô đang ở trạng thái ReadyToCommit.
+    /// </summary>
+    /// <response code="200">Đã kiểm định lại; xem bộ đếm mới trong kết quả.</response>
+    /// <response code="409">Lô không ở trạng thái ReadyToCommit.</response>
+    [HttpPut("batches/{id:guid}/rows")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateRows(
+        Guid id, [FromBody] UpdateImportRowsCommand command, CancellationToken cancellationToken)
+    {
+        command.BatchId = id;
+        var result = await _mediator.Send(command, cancellationToken);
         return StatusCode(result.StatusCode, result);
     }
 
@@ -172,19 +208,5 @@ public class ImportsController : ControllerBase
         using var buffer = new MemoryStream();
         await file.CopyToAsync(buffer, cancellationToken);
         return buffer.ToArray();
-    }
-
-    private static string? BuildFileName(params IFormFile?[] files)
-    {
-        var names = files
-            .Where(file => file is { Length: > 0 })
-            .Select(file => file!.FileName)
-            .ToList();
-
-        if (names.Count == 0)
-            return null;
-
-        var joined = string.Join(", ", names);
-        return joined.Length <= 255 ? joined : joined[..255];
     }
 }

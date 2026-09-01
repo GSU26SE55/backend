@@ -41,9 +41,18 @@ public class TicketLinkParentCommandHandler
                 return Fail(409, "This ticket is not linked to a parent.");
 
             var previousParentId = child.ParentTicketId.Value;
+            // Timeline text must read like the "Linked" entry below (ticket CODE, e.g.
+            // "TKT-2608-0004"), not the raw Guid — a Manager scanning history for what happened
+            // should never have to go look up an id to make sense of an entry. Fall back to the
+            // id only if the parent itself was hard-deleted since, which the FK does not prevent.
+            var previousParentCode = await _uow.Tickets.GetAllAsync()
+                .AsNoTracking()
+                .Where(t => t.Id == previousParentId)
+                .Select(t => t.Code)
+                .FirstOrDefaultAsync(ct) ?? previousParentId.ToString();
             child.ParentTicketId = null;
             _uow.Tickets.UpdateAsync(child);
-            await LogAsync(request, child, $"Unlinked from parent ticket {previousParentId}.", ct);
+            await LogAsync(request, child, $"Unlinked from parent ticket {previousParentCode}.", ct);
             return Ok(child);
         }
 
