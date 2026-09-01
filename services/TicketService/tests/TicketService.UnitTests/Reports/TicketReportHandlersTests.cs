@@ -171,6 +171,7 @@ public class TicketReportHandlersTests
         var rowB = res.Data!.Single(r => r.StaffId == staffBId.ToString());
         rowA.Breached.Should().Be(1, "PreviousPrimaryHandler owns the breach liability");
         rowA.Met.Should().Be(0);
+        rowA.TotalAssigned.Should().Be(1, "historical primary assignments remain part of the denominator");
         rowB.Breached.Should().Be(0, "rescue PrimaryHandler must not be penalised for the breach");
         rowB.TotalAssigned.Should().Be(1);
     }

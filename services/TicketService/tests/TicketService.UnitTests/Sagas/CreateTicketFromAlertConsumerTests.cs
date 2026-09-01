@@ -31,14 +31,15 @@ public class CreateTicketFromAlertConsumerTests
         return (mediator, uow, ticketRepo);
     }
 
-    private static CreateTicketFromAlertCommand MakeMsg(Guid alertId, Guid assetId)
+    private static CreateTicketFromAlertCommand MakeMsg(Guid alertId, Guid assetId, Guid? siteId = null)
         => new(
             CorrelationId: alertId, AlertId: alertId, BatteryAssetId: assetId,
             CustomerId: Guid.NewGuid(), AssetSerialNumber: "BMS-1",
             AnomalyType: 1, Severity: 3,
             ThresholdValue: 60m, ActualValue: 75m, Unit: "C",
             DetectedAt: DateTime.UtcNow,
-            AnomalyCategory: "Overheat", Title: "Overheat", Description: "Detected");
+            AnomalyCategory: "Overheat", Title: "Overheat", Description: "Detected",
+            SiteId: siteId);
 
     /// <summary>Lenh cho alert CAP SITE: khong thuoc vien pin nao, mang SiteId + loai su co.</summary>
     private static CreateTicketFromAlertCommand MakeSiteMsg(Guid alertId, Guid siteId, int anomalyType)
@@ -96,7 +97,8 @@ public class CreateTicketFromAlertConsumerTests
             .Setup(m => m.Send(It.IsAny<TicketAutoCreateFromAlertCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TicketActionResponse
             {
-                IsSuccess = true, StatusCode = 201,
+                IsSuccess = true,
+                StatusCode = 201,
                 Data = new TicketActionDTO
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -246,6 +248,47 @@ public class CreateTicketFromAlertConsumerTests
         published.Should().ContainSingle();
         published[0].Context.Message.IsReused.Should().BeTrue();
         published[0].Context.Message.TicketId.Should().Be(existing.Id);
+
+        await harness.Stop();
+    }
+
+    [Fact]
+    public async Task BatteryLevelAlert_WithSiteId_StillDeduplicatesByAssetAndCategory()
+    {
+        var siteId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var existing = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TCK-ASSET-AT-SITE",
+            BatteryAssetId = assetId,
+            SiteId = siteId,
+            AnomalyType = 1,
+            CustomerId = Guid.NewGuid(),
+            OriginAlertId = Guid.NewGuid(),
+            Category = TicketCategoryEnum.Overheat,
+            Title = "x",
+            Description = "x",
+            Status = TicketStatusEnum.InProgress,
+            Origin = TicketOriginEnum.AutoFromAlert
+        };
+
+        var (mediator, uow, _) = BuildMocks([existing]);
+
+        await using var provider = BuildHarnessProvider(mediator, uow);
+        var harness = provider.GetRequiredService<ITestHarness>();
+        await harness.Start();
+
+        await harness.Bus.Publish(MakeMsg(Guid.NewGuid(), assetId, siteId));
+        (await harness.Consumed.Any<CreateTicketFromAlertCommand>()).Should().BeTrue();
+
+        var published = harness.Published.Select<TicketCreatedFromAlertResponse>().ToList();
+        published.Should().ContainSingle();
+        published[0].Context.Message.IsReused.Should().BeTrue(
+            "a battery alert remains asset-level even when its V2 payload includes SiteId");
+        published[0].Context.Message.TicketId.Should().Be(existing.Id);
+        mediator.Verify(m => m.Send(It.IsAny<TicketAutoCreateFromAlertCommand>(),
+            It.IsAny<CancellationToken>()), Times.Never);
 
         await harness.Stop();
     }

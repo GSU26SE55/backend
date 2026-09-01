@@ -29,12 +29,10 @@ namespace TicketService.Infrastructure.Migrations
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Restoring the UNIQUE variant would fail whenever any ticket already has both a Response
-            // and a Resolution timer, so the down path only reverts to the pre-Up shape on a best-effort
-            // basis: drop the non-unique index and recreate the unique one.
-            migrationBuilder.Sql(@"DROP INDEX IF EXISTS ""IX_sla_timers_ticket_id"";");
-            migrationBuilder.Sql(
-                @"CREATE UNIQUE INDEX ""IX_sla_timers_ticket_id"" ON sla_timers (ticket_id);");
+            // SplitSlaTimerByType now creates the non-unique lookup index itself, so rolling back
+            // only this compatibility migration is intentionally a no-op. Recreating the legacy
+            // UNIQUE index would fail as soon as a ticket has both Response and Resolution timers.
+            // Keeping the non-unique index preserves all timer data and still supports lookups.
         }
     }
 }

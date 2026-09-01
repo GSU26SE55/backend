@@ -65,13 +65,23 @@ public class OutboxRelayBackgroundService : BackgroundService
             //
             // Timer KHÔNG bỏ: nó là lưới an toàn cho những event ghi vào outbox mà không ai gọi
             // `Notify()` (đường pin, consumer khác, hoặc process vừa restart giữa chừng).
+            using var cycleCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             try
             {
-                await Task.WhenAny(
-                    _signal.WaitAsync(stoppingToken),
-                    Task.Delay(interval, stoppingToken));
+                var signalWait = _signal.WaitAsync(cycleCancellation.Token);
+                var intervalWait = Task.Delay(interval, cycleCancellation.Token);
+                await Task.WhenAny(signalWait, intervalWait);
+
+                // Cancel and observe the losing task. Otherwise every timer tick leaves an old
+                // semaphore waiter behind; a future Notify can be consumed by that abandoned
+                // waiter instead of waking the current relay cycle.
+                await cycleCancellation.CancelAsync();
+                await Task.WhenAll(signalWait, intervalWait);
             }
-            catch (OperationCanceledException) { /* shutdown */ }
+            catch (OperationCanceledException) when (cycleCancellation.IsCancellationRequested)
+            {
+                // Expected for the losing wait, or host shutdown.
+            }
         }
 
         _logger.LogInformation("OutboxRelayBackgroundService stopped");

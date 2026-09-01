@@ -68,7 +68,7 @@ public class SlaByStaffReportQueryHandler
             {
                 StaffId = g.Key.ToString(),
                 Name = names.TryGetValue(g.Key, out var n) ? n : null,
-                TotalAssigned = g.Count(x => x.Role == AssignmentRoleEnum.PrimaryHandler),
+                TotalAssigned = g.Select(x => x.TicketId).Distinct().Count(),
                 Met = met,
                 Breached = breached,
                 ComplianceRate = TicketReportHelpers.Compliance(met, breached)

@@ -46,7 +46,10 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
 
                 var timer = await _uow.SlaTimers.GetAllAsync()
                     .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && x.Type == SlaTimerTypeEnum.Resolution && !x.IsDeleted, ct);
-                if (timer?.Status != SlaTimerStatusEnum.Breached)
+                var isInitialResolutionBreach = timer?.Status == SlaTimerStatusEnum.Breached;
+                var isCompletedRescueBreach = context.Message.IsRescueWindowExpired
+                    && timer?.Status == SlaTimerStatusEnum.Stopped;
+                if (!isInitialResolutionBreach && !isCompletedRescueBreach)
                     return;
 
                 var oldPriority = ticket.Priority.Value;

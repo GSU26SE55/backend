@@ -427,7 +427,10 @@ public class SlaTimerBackgroundServiceTests
         var outbox = Mock.Get(verifyScope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>());
         outbox.Verify(
             x => x.WriteAsync(
-                It.Is<SlaBreachedEvent>(e => e.TicketId == ticketId && e.Code == "T-RESCUE-EXP"),
+                It.Is<SlaBreachedEvent>(e =>
+                    e.TicketId == ticketId
+                    && e.Code == "T-RESCUE-EXP"
+                    && e.IsRescueWindowExpired),
                 It.IsAny<CancellationToken>()),
             Times.Once, "second SlaBreachedEvent must be fired when rescue window expires");
     }

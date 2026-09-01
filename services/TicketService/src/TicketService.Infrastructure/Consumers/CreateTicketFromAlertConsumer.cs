@@ -100,13 +100,16 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
         // Dieu kien nay PHAI khop hai partial index ben DB (`ux_tickets_active_auto_per_asset_category`
         // cho ticket pin, `ux_tickets_active_env_per_site_anomaly` cho ticket site). Lech nhau thi
         // check cho qua roi INSERT vo 23505.
-        var isSiteLevel = msg.SiteId.HasValue;
+        // Battery alerts also carry SiteId in V2, so SiteId alone cannot identify an
+        // environmental/site-level alert. Those alerts deliberately use Guid.Empty because
+        // they do not belong to a single battery asset.
+        var isSiteLevel = msg.BatteryAssetId == Guid.Empty && msg.SiteId.HasValue;
 
         var existingActive = await _uow.Tickets.GetAllAsync()
             .Where(t =>
                 (isSiteLevel
                     ? t.SiteId == msg.SiteId && t.AnomalyType == msg.AnomalyType
-                    : t.SiteId == null && t.BatteryAssetId == msg.BatteryAssetId && t.Category == category) &&
+                    : t.BatteryAssetId == msg.BatteryAssetId && t.Category == category) &&
                 t.OriginAlertId != null &&
                 ActiveStatuses.Contains(t.Status) &&
                 !t.IsDeleted)
@@ -165,12 +168,15 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
             // 2 command chạy song song, cả hai qua được idempotency check rồi cùng INSERT.
             // Constraint ux_tickets_active_auto_per_asset_category (hoặc IX_tickets_code) bắn 23505.
             // Người thắng đã tạo ticket → đọc lại và reuse thay vì fault vào error queue.
-            // Tìm ticket auto active của cùng pin — KHÔNG lọc theo `category` parse từ message
-            // vì handler set Category = Repair cố định, lệch với AnomalyCategory.
+            // Read back the winner using the exact same key as the pre-check and database
+            // partial indexes. A looser lookup can acknowledge the alert with an unrelated
+            // ticket when concurrent alerts are created at the same site.
             var winner = await _uow.Tickets.GetAllAsync()
                 .AsNoTracking()
                 .Where(t =>
-                    t.BatteryAssetId == msg.BatteryAssetId &&
+                    (isSiteLevel
+                        ? t.BatteryAssetId == Guid.Empty && t.SiteId == msg.SiteId && t.AnomalyType == msg.AnomalyType
+                        : t.BatteryAssetId == msg.BatteryAssetId && t.Category == category) &&
                     t.OriginAlertId != null &&
                     ActiveStatuses.Contains(t.Status) &&
                     !t.IsDeleted)

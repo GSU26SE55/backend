@@ -131,7 +131,8 @@ public class SlaTimerBackgroundService : BackgroundService
                             TicketId = timer.TicketId,
                             BreachedAt = nowUtc,
                             Priority = timer.Ticket.Priority?.ToString() ?? string.Empty,
-                            Code = timer.Ticket.Code
+                            Code = timer.Ticket.Code,
+                            IsRescueWindowExpired = true
                         }, ct);
                         timer.Status = SlaTimerStatusEnum.Stopped;
                         timer.CurrentPauseStartedAt = null;

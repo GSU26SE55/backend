@@ -1,9 +1,9 @@
 using System.Text.Json;
 using BatteryService.Application.Anomaly;
-using BatteryService.Application.Services;
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
+using BatteryService.Application.Services;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using MediatR;
@@ -264,7 +264,7 @@ public class BatchIngestAmbientReadingsCommandHandler
                         SeverityName: alert.Severity.ToString());
 
                     wroteEvent = true;
-                await _uow.OutboxMessages.AddAsync(new OutboxEntity
+                    await _uow.OutboxMessages.AddAsync(new OutboxEntity
                     {
                         Id = Guid.NewGuid(),
                         AggregateId = alert.Id,

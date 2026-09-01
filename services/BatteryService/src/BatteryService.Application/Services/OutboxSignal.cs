@@ -17,7 +17,8 @@ public sealed class OutboxSignal : IOutboxSignal
 
     public void Notify()
     {
-        try { _semaphore.Release(); }
+        try
+        { _semaphore.Release(); }
         catch (SemaphoreFullException) { /* đã có tín hiệu chờ — không cần thêm */ }
     }
 

@@ -84,6 +84,13 @@ public class TicketDTO
     public SlaTimerDTO? ResolutionSlaTimer { get; set; }
 
     /// <summary>
+    /// Backward-compatible effective SLA field for clients deployed before the dual-timer API.
+    /// New clients should read <see cref="ResolutionSlaTimer"/> and <see cref="ResponseSlaTimer"/>.
+    /// </summary>
+    [Obsolete("Use ResolutionSlaTimer and ResponseSlaTimer.")]
+    public SlaTimerDTO? SlaTimer => ResolutionSlaTimer ?? ResponseSlaTimer;
+
+    /// <summary>
     /// Ngày dự kiến hoàn thành (UTC) — lấy từ <c>ResolutionSlaTimer.DueAt</c> (nếu có),
     /// fallback về <c>ResponseSlaTimer.DueAt</c>. Đây là field duy nhất Customer thấy về SLA;
     /// FE format DATE-ONLY. Null khi ticket chưa có bất kỳ SLA timer nào.

@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -32,9 +32,9 @@ UPDATE tickets SET anomaly_type = 19 WHERE is_deleted = false AND site_id IS NOT
             // MỘT ticket môi trường đang mở, không phân biệt loại sự cố lẫn site. Gas nổ trước thì
             // nước và nhiệt độ sau đó bị gắn vào ticket gas.
             //
-            // Tách làm hai partial index loại trừ nhau theo `site_id`:
-            //   - ticket pin  (site_id IS NULL)     → giữ nguyên khoá cũ
-            //   - ticket site (site_id IS NOT NULL) → khoá theo (site, loại sự cố)
+            // Tách làm hai partial index loại trừ nhau theo `battery_asset_id`:
+            //   - ticket pin  (battery_asset_id != Guid.Empty) → giữ nguyên khoá cũ, dù pin có SiteId
+            //   - ticket site (battery_asset_id = Guid.Empty)  → khoá theo (site, loại sự cố)
             //
             // Vì sao KHÔNG gộp thành một index (battery_asset_id, site_id, category, anomaly_type):
             // ticket pin có `site_id` NULL, mà trong unique index Postgres coi NULL <> NULL, nên
@@ -47,14 +47,17 @@ ON tickets (battery_asset_id, category)
 WHERE origin_alert_id IS NOT NULL
   AND is_deleted = false
   AND status NOT IN (6, 7, 8)
-  AND site_id IS NULL;");
+  AND (battery_asset_id <> '00000000-0000-0000-0000-000000000000'::uuid
+       OR site_id IS NULL);");
             migrationBuilder.Sql(@"
 CREATE UNIQUE INDEX ux_tickets_active_env_per_site_anomaly
 ON tickets (site_id, anomaly_type)
 WHERE origin_alert_id IS NOT NULL
   AND is_deleted = false
   AND status NOT IN (6, 7, 8)
-  AND site_id IS NOT NULL;");
+  AND battery_asset_id = '00000000-0000-0000-0000-000000000000'::uuid
+  AND site_id IS NOT NULL
+  AND anomaly_type IS NOT NULL;");
         }
 
         /// <inheritdoc />
