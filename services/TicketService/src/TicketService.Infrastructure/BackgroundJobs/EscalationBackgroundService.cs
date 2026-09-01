@@ -35,15 +35,21 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
             {
                 var ticket = await _uow.Tickets.GetAllAsync()
                     .FirstOrDefaultAsync(x => x.Id == context.Message.TicketId && !x.IsDeleted, ct);
+                // Priority chỉ tự leo bậc khi Staff đã được gán xử lý (InProgress) mà Resolution SLA
+                // breach — hoặc qua escalation request reassign thủ công. Response SLA breach (ticket
+                // còn Open, chưa ai nhận) chỉ tính là vi phạm/giờ phạt, KHÔNG đổi Priority ticket.
                 if (ticket is null ||
-                    (ticket.Status != TicketStatusEnum.InProgress && ticket.Status != TicketStatusEnum.Open) ||
+                    ticket.Status != TicketStatusEnum.InProgress ||
                     ticket.Priority is null or TicketPriorityEnum.Urgent ||
                     ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate)
                     return;
 
                 var timer = await _uow.SlaTimers.GetAllAsync()
-                    .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, ct);
-                if (timer?.Status != SlaTimerStatusEnum.Breached)
+                    .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && x.Type == SlaTimerTypeEnum.Resolution && !x.IsDeleted, ct);
+                var isInitialResolutionBreach = timer?.Status == SlaTimerStatusEnum.Breached;
+                var isCompletedRescueBreach = context.Message.IsRescueWindowExpired
+                    && timer?.Status == SlaTimerStatusEnum.Stopped;
+                if (!isInitialResolutionBreach && !isCompletedRescueBreach)
                     return;
 
                 var oldPriority = ticket.Priority.Value;

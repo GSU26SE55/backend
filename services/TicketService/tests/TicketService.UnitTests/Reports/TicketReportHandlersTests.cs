@@ -7,6 +7,7 @@ using TicketService.Application.CQRS.Query.Reports;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
+using TicketService.Infrastructure.Implements.Utils;
 
 namespace TicketService.UnitTests.Reports;
 
@@ -132,5 +133,89 @@ public class TicketReportHandlersTests
         res.Data!.Single().Category.Should().Be("Charging");
         res.Data!.Single().Count.Should().Be(2);
         res.Data!.Single().AvgReopenCount.Should().Be(3.0m);
+    }
+
+    // ── QA Bug #20 — Dual-Timer Architecture breach liability and Rescue KPI ─────
+
+    [Fact]
+    public async Task SlaByStaff_AttributesBreachLiability_ToPreviousPrimaryHandler()
+    {
+        // Ticket T1 đã vi phạm SLA: Staff A là PreviousPrimaryHandler (người gây vi phạm),
+        // Staff B là PrimaryHandler mới (người tiếp cứu). Chỉ Staff A bị tính Breached.
+        var ticketId = Guid.NewGuid();
+        var staffAId = Guid.NewGuid();
+        var staffBId = Guid.NewGuid();
+
+        var timer = new SlaTimer { Id = Guid.NewGuid(), TicketId = ticketId, Priority = TicketPriorityEnum.P2High, Status = SlaTimerStatusEnum.Breached, Type = SlaTimerTypeEnum.Resolution };
+        var ticket = new Ticket { Id = ticketId, Code = "T-BREACH", Title = "t", Description = "d", SlaTimers = new List<SlaTimer> { timer } };
+
+        var assignments = new List<TicketAssignment>
+        {
+            new() { Id = Guid.NewGuid(), TicketId = ticketId, StaffId = staffAId, Role = AssignmentRoleEnum.PreviousPrimaryHandler },
+            new() { Id = Guid.NewGuid(), TicketId = ticketId, StaffId = staffBId, Role = AssignmentRoleEnum.PrimaryHandler }
+        };
+        var staff = new List<StaffAccount>
+        {
+            new() { Id = staffAId, AccountId = staffAId, FullName = "Staff A" },
+            new() { Id = staffBId, AccountId = staffBId, FullName = "Staff B" }
+        };
+
+        var uow = new Mock<ITicketUnitOfWork>();
+        uow.SetupGet(u => u.TicketAssignments).Returns(Repo(assignments).Object);
+        uow.SetupGet(u => u.Tickets).Returns(Repo(new List<Ticket> { ticket }).Object);
+        uow.SetupGet(u => u.StaffAccounts).Returns(Repo(staff).Object);
+
+        var res = await new SlaByStaffReportQueryHandler(uow.Object).Handle(new SlaByStaffReportQuery(), default);
+
+        var rowA = res.Data!.Single(r => r.StaffId == staffAId.ToString());
+        var rowB = res.Data!.Single(r => r.StaffId == staffBId.ToString());
+        rowA.Breached.Should().Be(1, "PreviousPrimaryHandler owns the breach liability");
+        rowA.Met.Should().Be(0);
+        rowA.TotalAssigned.Should().Be(1, "historical primary assignments remain part of the denominator");
+        rowB.Breached.Should().Be(0, "rescue PrimaryHandler must not be penalised for the breach");
+        rowB.TotalAssigned.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task StaffPerformance_Rescue_KPI_CountsAttemptAndSuccess()
+    {
+        // Staff B nhận ticket đã Breached, giải quyết trong 60 phút làm việc (<= 1440) → success.
+        var ticketId = Guid.NewGuid();
+        var staffBId = Guid.NewGuid();
+        var assignmentCreatedAt = new DateTime(2026, 8, 11, 7, 0, 0, DateTimeKind.Utc);  // 14:00 HCM — trong giờ làm
+        var resolvedAt = assignmentCreatedAt.AddMinutes(60);
+
+        var timer = new SlaTimer { Id = Guid.NewGuid(), TicketId = ticketId, Priority = TicketPriorityEnum.P2High, Status = SlaTimerStatusEnum.Breached, BreachAt = assignmentCreatedAt.AddHours(-1), Type = SlaTimerTypeEnum.Resolution };
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "T-RESCUE",
+            Title = "t",
+            Description = "d",
+            Status = TicketStatusEnum.Completed,
+            CreatedAt = assignmentCreatedAt.AddHours(-5),
+            ResolvedAt = resolvedAt,
+            SlaTimers = new List<SlaTimer> { timer }
+        };
+        var assignments = new List<TicketAssignment>
+        {
+            new() { Id = Guid.NewGuid(), TicketId = ticketId, StaffId = staffBId, Role = AssignmentRoleEnum.PrimaryHandler, CreatedAt = assignmentCreatedAt }
+        };
+        var staff = new List<StaffAccount>
+        {
+            new() { Id = staffBId, AccountId = staffBId, FullName = "Staff B" }
+        };
+
+        var uow = new Mock<ITicketUnitOfWork>();
+        uow.SetupGet(u => u.TicketAssignments).Returns(Repo(assignments).Object);
+        uow.SetupGet(u => u.Tickets).Returns(Repo(new List<Ticket> { ticket }).Object);
+        uow.SetupGet(u => u.StaffAccounts).Returns(Repo(staff).Object);
+
+        var res = await new StaffPerformanceReportQueryHandler(uow.Object, new SlaCalculator())
+            .Handle(new StaffPerformanceReportQuery(), default);
+
+        var row = res.Data!.Single(r => r.StaffId == staffBId.ToString());
+        row.RescueCount.Should().Be(1, "ticket was Breached when staff B took over");
+        row.RescueSuccessCount.Should().Be(1, "resolved within 1440 working minutes");
     }
 }

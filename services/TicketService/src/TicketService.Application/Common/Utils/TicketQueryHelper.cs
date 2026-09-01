@@ -84,8 +84,20 @@ public static class TicketQueryHelper
             ActiveIncidentEpisodeId = t.ActiveIncidentEpisodeId?.ToString(),
             CreatedAt = t.CreatedAt,
             UpdatedAt = t.UpdatedAt,
-            SlaTimer = canViewSlaTimer ? MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc, t.Status) : null,
-            ExpectedCompletionAtUtc = t.SlaTimer?.DueAt,
+            ResponseSlaTimer = canViewSlaTimer
+                ? MapToSlaTimerDTO(t.ResponseSlaTimer, slaCalculator, atUtc, t.Status)
+                : null,
+            ResolutionSlaTimer = canViewSlaTimer
+                ? MapToSlaTimerDTO(t.ResolutionSlaTimer, slaCalculator, atUtc, t.Status,
+                    rescueAssignmentCreatedAt: t.ResolutionSlaTimer?.Status == SlaTimerStatusEnum.Breached
+                        && t.Status == TicketStatusEnum.InProgress
+                        ? t.Assignments.FirstOrDefault(a => !a.IsDeleted
+                            && a.Role == AssignmentRoleEnum.PrimaryHandler)?.CreatedAt
+                        : null)
+                : null,
+            // Customer-facing deadline: Resolution DueAt when available (ticket is InProgress+),
+            // fallback to Response DueAt (ticket is still Open/Pending).
+            ExpectedCompletionAtUtc = t.ResolutionSlaTimer?.DueAt ?? t.ResponseSlaTimer?.DueAt,
             HasUnreadChat = hasUnreadChat,
             DetectedAt = t.DetectedAt,
             BatterySerialNumber = t.BatterySerialNumber,
@@ -104,7 +116,8 @@ public static class TicketQueryHelper
         SlaTimer? sla,
         ISlaCalculator slaCalculator,
         DateTime atUtc,
-        TicketStatusEnum ticketStatus = TicketStatusEnum.Open)
+        TicketStatusEnum ticketStatus = TicketStatusEnum.Open,
+        DateTime? rescueAssignmentCreatedAt = null)
     {
         if (sla is null)
             return null;
@@ -135,7 +148,10 @@ public static class TicketQueryHelper
             CalendarExtensionMinutes = calendarExtension.Minutes,
             CalendarExtensionDays = calendarExtension.NonWorkingDays is null
                 ? []
-                : [.. calendarExtension.NonWorkingDays]
+                : [.. calendarExtension.NonWorkingDays],
+            RescueRemainingMinutes = sla.Status == SlaTimerStatusEnum.Breached && rescueAssignmentCreatedAt.HasValue
+                ? Math.Max(0, 1440 - (int)slaCalculator.GetWorkingMinutesBetween(rescueAssignmentCreatedAt.Value, atUtc))
+                : null
         };
     }
 
@@ -237,21 +253,21 @@ public static class TicketQueryHelper
     public static IQueryable<Ticket> FilterBySla(IQueryable<Ticket> query, SlaFilterEnum? sla) => sla switch
     {
         SlaFilterEnum.Paused => query.Where(t =>
-            t.SlaTimer != null && t.SlaTimer.Status == SlaTimerStatusEnum.Paused),
+            t.SlaTimers.Any(s => !s.IsDeleted && s.Status == SlaTimerStatusEnum.Paused)),
 
         // Còn Running: cảnh báo đã bắn nhưng DueAt CHƯA về 0. Không chỉ xét WarningSentAt —
         // trường đó vẫn còn nguyên sau khi timer chuyển Breached, nên bỏ điều kiện Running thì
         // ticket đã quá hạn sẽ lọt vào cả hai bộ lọc.
         SlaFilterEnum.Warning => query.Where(t =>
-            t.SlaTimer != null
-            && t.SlaTimer.Status == SlaTimerStatusEnum.Running
-            && t.SlaTimer.WarningSentAt != null),
+            t.SlaTimers.Any(s => !s.IsDeleted
+                && s.Status == SlaTimerStatusEnum.Running
+                && s.WarningSentAt != null)),
 
         // "Về 0": SlaTimerBackgroundService đóng dấu Breached đúng lúc DueAt <= now.
         // Lọc theo Status chứ không so DueAt với thời điểm hiện tại — timer Paused có thể
         // vượt DueAt mà vẫn chưa vi phạm (DueAt chỉ được cộng bù lúc Resume).
         SlaFilterEnum.Breached => query.Where(t =>
-            t.SlaTimer != null && t.SlaTimer.Status == SlaTimerStatusEnum.Breached),
+            t.SlaTimers.Any(s => !s.IsDeleted && s.Status == SlaTimerStatusEnum.Breached)),
 
         _ => query
     };

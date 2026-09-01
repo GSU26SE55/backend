@@ -72,7 +72,10 @@ public class Sprint5BAmbientFlowIntegrationTests
         await using var db = CreateDbContext();
         await SeedSiteAsync(db);
 
-        var ingest = new BatchIngestAmbientReadingsCommandHandler(new UnitOfWork(db), Microsoft.Extensions.Options.Options.Create(new BatteryService.Application.Anomaly.AnomalyEngineOptions()));
+        var ingest = new BatchIngestAmbientReadingsCommandHandler(
+            new UnitOfWork(db),
+            Microsoft.Extensions.Options.Options.Create(new BatteryService.Application.Anomaly.AnomalyEngineOptions()),
+            new OutboxSignal());
         var ingestTime = DateTime.UtcNow;
         var ingestResult = await ingest.Handle(new BatchIngestAmbientReadingsCommand
         {

@@ -43,10 +43,11 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         // Trước đây là câu tiếng Anh toàn số ("Anomaly detected at ... Value: ... Threshold: ...")
         // → KHÔNG có token chung nào với mô tả Customer viết tiếng Việt ⇒ Jaccard = 0 ⇒ AI dò
         // trùng không bao giờ phát hiện được cặp (ticket auto ↔ ticket thủ công) trên cùng pin.
-        var description =
-            $"{DescribeAnomaly(saga.AnomalyType)} " +
-            $"Measured value {saga.ActualValue} {saga.Unit}, exceeding the allowed threshold {saga.ThresholdValue} {saga.Unit}. " +
-            $"Detected at {saga.DetectedAt:HH:mm dd/MM/yyyy} (UTC) on device {saga.AssetSerialNumber}.";
+        var description = saga.AnomalyType == 19
+            ? $"Water leak detected (Wet) at the site. Detected at {saga.DetectedAt:HH:mm dd/MM/yyyy} (UTC) on device {saga.AssetSerialNumber}."
+            : $"{DescribeAnomaly(saga.AnomalyType)} " +
+              $"Measured value {saga.ActualValue} {saga.Unit}, exceeding the allowed threshold {saga.ThresholdValue} {saga.Unit}. " +
+              $"Detected at {saga.DetectedAt:HH:mm dd/MM/yyyy} (UTC) on device {saga.AssetSerialNumber}.";
         // BE-AI — nếu AI có prescription (chỉ V2 từ SohPredictionBackgroundService), ghép vào
         // Description để Manager thấy khuyến nghị ngay khi ticket vào hàng chờ. Nullable → không đổi
         // ticket từ threshold engine (AiPrescription = null).

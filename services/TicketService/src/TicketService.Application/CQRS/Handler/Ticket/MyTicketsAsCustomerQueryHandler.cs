@@ -41,7 +41,7 @@ public class MyTicketsAsCustomerQueryHandler : IRequestHandler<MyTicketsAsCustom
 
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
-            .Include(t => t.SlaTimer)
+            .Include(t => t.SlaTimers)
             .Include(t => t.BatteryAssets)
             // Thiếu Include này thì t.Assignments luôn rỗng → mọi card danh sách
             // đều hiện "Chưa phân công" dù ticket đã gán Staff (detail thì đúng

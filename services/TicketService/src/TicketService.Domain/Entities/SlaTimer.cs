@@ -15,6 +15,7 @@ public class SlaTimer : AuditableEntity
     public DateTime? WarningSentAt { get; set; }
     public DateTime? BreachAt { get; set; }
     public SlaTimerStatusEnum Status { get; set; }
+    public SlaTimerTypeEnum Type { get; set; } = SlaTimerTypeEnum.Response;
 
     // Advanced SLA fields (§33.3)
     public int MaxTotalPauseMinutes { get; set; }

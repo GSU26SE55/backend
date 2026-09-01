@@ -185,6 +185,7 @@ public class TicketBatteryCascadeRiskHighConsumer : IConsumer<BatteryCascadeRisk
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Response,
             Priority = TicketPriorityEnum.P1Critical,
             StartedAt = now,
             DueAt = dueAt,

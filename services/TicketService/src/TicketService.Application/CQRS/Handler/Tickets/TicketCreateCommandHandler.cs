@@ -151,6 +151,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Response,
             Priority = priority,
             StartedAt = nowUtc,
             DueAt = responseDueAt,

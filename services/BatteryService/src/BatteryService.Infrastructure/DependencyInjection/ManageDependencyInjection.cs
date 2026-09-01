@@ -53,6 +53,9 @@ public static class ManageDependencyInjection
         services.AddScoped<IAlertEscalationService, AlertEscalationService>();
         services.AddScoped<IAlertAutoResolveService, AlertAutoResolveService>();
         services.AddScoped<IOutboxRelayService, OutboxRelayService>();
+        // Singleton: cùng một instance phải được cả handler (scoped) lẫn background service dùng
+        // chung, nếu không tín hiệu đánh thức rơi vào một semaphore mà không ai chờ.
+        services.AddSingleton<IOutboxSignal, OutboxSignal>();
         services.AddScoped<SharedContracts.Interfaces.IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
 
         // Sprint 7 B4 (§31.7) — cascade risk assessment (rule-based).
