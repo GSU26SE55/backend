@@ -41,7 +41,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
     {
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
-            .Include(t => t.SlaTimer)
+            .Include(t => t.SlaTimers)
             .Include(t => t.Assignments.Where(a => !a.IsDeleted))
             .Include(t => t.Activities.OrderByDescending(a => a.CreatedAt))
             .Include(t => t.Chats.Where(c => !c.IsDeleted).OrderByDescending(c => c.CreatedAt))
@@ -143,10 +143,18 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             ParentTicketId = ticket.ParentTicketId?.ToString(),
             // GH-1242 — SLA là chỉ số nội bộ: Customer chỉ nhận ExpectedCompletionAtUtc,
             // không thấy BreachAt/WarningSentAt/RemainingPercent.
-            SlaTimer = canViewSlaTimer
-                ? TicketQueryHelper.MapToSlaTimerDTO(ticket.SlaTimer, _slaCalculator, DateTime.UtcNow, ticket.Status)
+            ResponseSlaTimer = canViewSlaTimer
+                ? TicketQueryHelper.MapToSlaTimerDTO(ticket.ResponseSlaTimer, _slaCalculator, DateTime.UtcNow, ticket.Status)
                 : null,
-            ExpectedCompletionAtUtc = ticket.SlaTimer?.DueAt,
+            ResolutionSlaTimer = canViewSlaTimer
+                ? TicketQueryHelper.MapToSlaTimerDTO(ticket.ResolutionSlaTimer, _slaCalculator, DateTime.UtcNow, ticket.Status,
+                    rescueAssignmentCreatedAt: ticket.ResolutionSlaTimer?.Status == SlaTimerStatusEnum.Breached
+                        && ticket.Status == TicketStatusEnum.InProgress
+                        ? ticket.Assignments.FirstOrDefault(a => !a.IsDeleted
+                            && a.Role == AssignmentRoleEnum.PrimaryHandler)?.CreatedAt
+                        : null)
+                : null,
+            ExpectedCompletionAtUtc = ticket.ResolutionSlaTimer?.DueAt ?? ticket.ResponseSlaTimer?.DueAt,
             Activities = ticket.Activities
                 .Where(a => canViewInternalChats || !InternalOnlyActions.Contains(a.Action))
                 .Select(a => new TicketActivityDTO

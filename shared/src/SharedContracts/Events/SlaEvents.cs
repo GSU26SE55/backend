@@ -16,6 +16,13 @@ public record SlaBreachedEvent : IntegrationEvent
     /// thông báo cần biết ngay ticket nào để mở ra xử lý. Rỗng = event cũ còn trong hàng đợi.</para>
     /// </summary>
     public string Code { get; init; } = string.Empty;
+
+    /// <summary>
+    /// <c>true</c> when this is the second breach emitted after the post-reassignment rescue
+    /// window expires. Optional/default false keeps messages produced by older deployments
+    /// backward compatible.
+    /// </summary>
+    public bool IsRescueWindowExpired { get; init; }
 }
 
 public record SlaWarningEvent : IntegrationEvent

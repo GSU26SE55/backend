@@ -74,12 +74,16 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
         var dueAt = _slaCalculator.CalculateResponseDueDate(now, priority);
         var code = await _codeGenerator.GenerateAsync();
 
+        var incidentTypeLabel = MapIncidentTypeToLabel(evt.IncidentType);
+
         var ticket = new Ticket
         {
             Id = Guid.NewGuid(),
             Code = code,
-            Title = $"Environmental incident at {evt.SiteName}",
-            Description = $"Auto-created by the system from an environmental incident (type {evt.IncidentType}, severity {evt.Severity}) "
+            // Khuôn khớp với TicketBatteryAnomalyDetectedConsumer.BuildTitle — nêu rõ loại sự cố
+            // để Manager đọc tiêu đề là biết ngay đang xử lý gì, không phải mở ticket ra xem.
+            Title = $"Environmental incident at {evt.SiteName} - {incidentTypeLabel}",
+            Description = $"Auto-created by the system from an environmental incident ({incidentTypeLabel}, severity {evt.Severity}) "
                         + $"at site {evt.SiteName}. {evt.Description}".Trim(),
             Category = TicketCategoryEnum.Repair,
             CustomerId = evt.CustomerId,
@@ -104,6 +108,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Response,
             Priority = priority,
             StartedAt = now,
             DueAt = dueAt,
@@ -128,6 +133,19 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
             "Auto-tạo ticket {Priority} {Code} từ sự cố môi trường {IncidentId} tại site {Site}.",
             priority, ticket.Code, evt.IncidentId, evt.SiteName);
     }
+
+    // EnvironmentalIncidentTypeEnum (BatteryService): Smoke=1 · FireDetected=2 · GasLeak=3 ·
+    // Flood=4 · OverheatHazard=5 · Other=99. Giữ int thay vì tham chiếu enum để không kéo
+    // BatteryService.Domain vào TicketService (event chỉ mang int).
+    private static string MapIncidentTypeToLabel(int incidentType) => incidentType switch
+    {
+        1 => "Smoke detected",
+        2 => "Fire detected",
+        3 => "Gas leak",
+        4 => "Flood",
+        5 => "Overheat hazard",
+        _ => "Environmental hazard"
+    };
 
     private static TicketPriorityEnum MapSeverityToPriority(int severity) => severity switch
     {

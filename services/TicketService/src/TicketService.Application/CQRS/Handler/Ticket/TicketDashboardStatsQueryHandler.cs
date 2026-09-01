@@ -52,12 +52,22 @@ public class TicketDashboardStatsQueryHandler
         foreach (var group in priorityGroups)
             countByPriority[group.Priority.ToString()] = group.Count;
 
-        // ===== SLA summary theo SlaTimer.Status =====
-        var slaGroups = await ticketsQuery
-            .Where(t => t.SlaTimer != null)
-            .GroupBy(t => t.SlaTimer!.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count() })
+        // ===== SLA summary — lấy timer active nhất mỗi ticket (Resolution > Response) =====
+        // Fetch danh sách (TicketId, Type, Status) rồi gom trong memory thay vì GroupBy phức tạp trong SQL.
+        var ticketIdsWithSla = await ticketsQuery.Select(t => t.Id).ToListAsync(cancellationToken);
+        var allSlaStatuses = await _unitOfWork.SlaTimers.GetAllAsync()
+            .AsNoTracking()
+            .Where(s => !s.IsDeleted && ticketIdsWithSla.Contains(s.TicketId))
+            .Select(s => new { s.TicketId, s.Type, s.Status })
             .ToListAsync(cancellationToken);
+        var perTicketEffectiveStatus = allSlaStatuses
+            .GroupBy(s => s.TicketId)
+            .Select(g => g.OrderByDescending(s => s.Type).First().Status)
+            .ToList();
+        var slaGroups = perTicketEffectiveStatus
+            .GroupBy(status => status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToList();
 
         var sla = new SlaSummaryDto
         {
@@ -127,9 +137,9 @@ public class TicketDashboardStatsQueryHandler
             .OrderByDescending(dto => dto.ActiveCount)
             .ToList();
 
+        // SLA abuse: check Resolution timers (pause tracking is on working-hour stage)
         var slaAbuseFlaggedTickets = await ticketsQuery
-            .Where(t => t.SlaTimer != null
-                        && (t.SlaTimer.PauseEpisodesCount >= 2 || t.SlaTimer.TotalPausedMinutes >= 1440))
+            .Where(t => t.SlaTimers.Any(s => !s.IsDeleted && (s.PauseEpisodesCount >= 2 || s.TotalPausedMinutes >= 1440)))
             .Select(t => new SlaAbuseFlaggedTicketDto
             {
                 TicketId = t.Id.ToString(),
@@ -138,8 +148,16 @@ public class TicketDashboardStatsQueryHandler
                     .Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler)
                     .Select(a => a.StaffId.ToString())
                     .FirstOrDefault(),
-                PauseEpisodesCount = t.SlaTimer!.PauseEpisodesCount,
-                TotalPausedMinutes = t.SlaTimer.TotalPausedMinutes
+                PauseEpisodesCount = t.SlaTimers
+                    .Where(s => !s.IsDeleted && (s.PauseEpisodesCount >= 2 || s.TotalPausedMinutes >= 1440))
+                    .OrderByDescending(s => s.Type)
+                    .Select(s => s.PauseEpisodesCount)
+                    .FirstOrDefault(),
+                TotalPausedMinutes = t.SlaTimers
+                    .Where(s => !s.IsDeleted && (s.PauseEpisodesCount >= 2 || s.TotalPausedMinutes >= 1440))
+                    .OrderByDescending(s => s.Type)
+                    .Select(s => s.TotalPausedMinutes)
+                    .FirstOrDefault()
             })
             .OrderByDescending(t => t.TotalPausedMinutes)
             .ThenByDescending(t => t.PauseEpisodesCount)

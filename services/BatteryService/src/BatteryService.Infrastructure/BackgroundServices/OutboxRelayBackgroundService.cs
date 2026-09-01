@@ -15,14 +15,17 @@ public class OutboxRelayBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly AnomalyEngineOptions _options;
     private readonly ILogger<OutboxRelayBackgroundService> _logger;
+    private readonly IOutboxSignal _signal;
 
     public OutboxRelayBackgroundService(
         IServiceScopeFactory scopeFactory,
         IOptions<AnomalyEngineOptions> options,
+        IOutboxSignal signal,
         ILogger<OutboxRelayBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
         _options = options.Value;
+        _signal = signal;
         _logger = logger;
     }
 
@@ -54,9 +57,31 @@ public class OutboxRelayBackgroundService : BackgroundService
                 _logger.LogError(ex, "OutboxRelay tick failed");
             }
 
+            // Chờ tín hiệu HOẶC hết tick, cái nào tới trước.
+            //
+            // Trước đây chỉ có `Task.Delay(interval)`: event đã nằm sẵn trong bảng outbox ngay lúc
+            // BE chấm xong ngưỡng, nhưng vẫn phải đợi hết 5 s mới được đẩy đi — đó là phần chờ lớn
+            // nhất còn lại của chuỗi cảnh báo môi trường.
+            //
+            // Timer KHÔNG bỏ: nó là lưới an toàn cho những event ghi vào outbox mà không ai gọi
+            // `Notify()` (đường pin, consumer khác, hoặc process vừa restart giữa chừng).
+            using var cycleCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             try
-            { await Task.Delay(interval, stoppingToken); }
-            catch (OperationCanceledException) { /* shutdown */ }
+            {
+                var signalWait = _signal.WaitAsync(cycleCancellation.Token);
+                var intervalWait = Task.Delay(interval, cycleCancellation.Token);
+                await Task.WhenAny(signalWait, intervalWait);
+
+                // Cancel and observe the losing task. Otherwise every timer tick leaves an old
+                // semaphore waiter behind; a future Notify can be consumed by that abandoned
+                // waiter instead of waking the current relay cycle.
+                await cycleCancellation.CancelAsync();
+                await Task.WhenAll(signalWait, intervalWait);
+            }
+            catch (OperationCanceledException) when (cycleCancellation.IsCancellationRequested)
+            {
+                // Expected for the losing wait, or host shutdown.
+            }
         }
 
         _logger.LogInformation("OutboxRelayBackgroundService stopped");

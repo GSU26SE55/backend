@@ -27,7 +27,7 @@ public class TicketDashboardStatsQueryHandlerTests
             Priority = priority,
             Status = status,
             Origin = TicketOriginEnum.ManualByCustomer,
-            SlaTimer = slaTimer,
+            SlaTimers = slaTimer != null ? new List<SlaTimer> { slaTimer } : new List<SlaTimer>(),
             CreatedAt = createdAt ?? DateTime.UtcNow,
             IsDeleted = isDeleted
         };
@@ -52,17 +52,21 @@ public class TicketDashboardStatsQueryHandlerTests
                 StaffId = t.PrimaryHandlerStaffId!.Value,
                 Role = AssignmentRoleEnum.PrimaryHandler
             });
+        var slaTimers = tickets.SelectMany(t => t.SlaTimers.Select(s => { s.TicketId = t.Id; return s; }));
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: tickets,
-            assignmentSeed: assignments);
+            assignmentSeed: assignments,
+            slaTimerSeed: slaTimers);
         return new TicketDashboardStatsQueryHandler(uow.Object);
     }
 
     private static TicketDashboardStatsQueryHandler MakeHandlerWithoutAssignments(params Ticket[] tickets)
     {
+        var slaTimers = tickets.SelectMany(t => t.SlaTimers.Select(s => { s.TicketId = t.Id; return s; }));
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: tickets,
-            assignmentSeed: Array.Empty<TicketAssignment>());
+            assignmentSeed: Array.Empty<TicketAssignment>(),
+            slaTimerSeed: slaTimers);
 
         return new TicketDashboardStatsQueryHandler(uow.Object);
     }

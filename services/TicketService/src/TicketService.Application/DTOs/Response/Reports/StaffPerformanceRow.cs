@@ -15,4 +15,6 @@ public class StaffPerformanceRow
     /// </summary>
     public decimal? AvgRating { get; set; }
     public decimal SlaCompliance { get; set; }   // %
+    public int RescueCount { get; set; }
+    public int RescueSuccessCount { get; set; }
 }

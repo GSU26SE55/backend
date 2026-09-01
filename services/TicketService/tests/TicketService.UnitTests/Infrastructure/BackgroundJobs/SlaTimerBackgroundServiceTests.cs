@@ -348,6 +348,167 @@ public class SlaTimerBackgroundServiceTests
             Times.Once);
     }
 
+    // ── QA Bug #20 — rescue window monitoring ────────────────────────────────────
+
+    [Fact]
+    public async Task RescueWindow_Expired_StopsTimerAndFiresSecondBreachEvent()
+    {
+        // Arrange: ticket InProgress, timer Breached, assignment 3 days old (> 1440 working min)
+        // Note: AuditableEntityInterceptor overrides CreatedAt=UtcNow on EntityState.Added.
+        // We work around this with a two-step save: first Add, then Modify CreatedAt.
+        var ticketId = Guid.NewGuid();
+        var timerId = Guid.NewGuid();
+        var assignmentId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var assignmentCreatedAt = FixedNow.AddDays(-3);  // 3 days = 1800 working min > 1440
+
+        await using var provider = CreateProvider(Guid.NewGuid().ToString());
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            var ticket = new Ticket
+            {
+                Id = ticketId,
+                Code = "T-RESCUE-EXP",
+                Title = "Rescue expired",
+                Description = "d",
+                Category = TicketCategoryEnum.Other,
+                Status = TicketStatusEnum.InProgress,
+                Priority = TicketPriorityEnum.P2High,
+                Origin = TicketOriginEnum.ManualByCustomer
+            };
+            db.Tickets.Add(ticket);
+            db.SlaTimers.Add(new SlaTimer
+            {
+                Id = timerId,
+                TicketId = ticketId,
+                Ticket = ticket,
+                Type = SlaTimerTypeEnum.Resolution,
+                Priority = TicketPriorityEnum.P2High,
+                StartedAt = FixedNow.AddDays(-10),
+                DueAt = FixedNow.AddDays(-3),
+                OriginalDueAt = FixedNow.AddDays(-3),
+                BreachAt = FixedNow.AddDays(-3),
+                Status = SlaTimerStatusEnum.Breached
+            });
+            db.TicketAssignments.Add(new TicketAssignment
+            {
+                Id = assignmentId,
+                TicketId = ticketId,
+                Ticket = ticket,
+                StaffId = staffId,
+                Role = AssignmentRoleEnum.PrimaryHandler
+                // CreatedAt will be set by interceptor → overwrite in second save below
+            });
+            await db.SaveChangesAsync();
+
+            // Interceptor set CreatedAt = real UtcNow; overwrite via Modified (interceptor only
+            // touches UpdatedAt on Modified, not CreatedAt — so the value sticks).
+            var saved = db.TicketAssignments.Local.Single(a => a.Id == assignmentId);
+            saved.CreatedAt = assignmentCreatedAt;
+            await db.SaveChangesAsync();
+        }
+
+        var clock = new Mock<TimeProvider>();
+        clock.Setup(x => x.GetUtcNow()).Returns(new DateTimeOffset(FixedNow));
+        var service = new TestableSlaTimerService(
+            new Mock<ILogger<SlaTimerBackgroundService>>().Object,
+            provider.GetRequiredService<IServiceScopeFactory>(), clock.Object);
+
+        // Act
+        await service.TriggerCheck(CancellationToken.None);
+
+        // Assert — timer stopped, second SlaBreachedEvent fired
+        using var verifyScope = provider.CreateScope();
+        var db2 = verifyScope.ServiceProvider.GetRequiredService<TicketDbContext>();
+        var timer = await db2.SlaTimers.FindAsync(timerId);
+        timer!.Status.Should().Be(SlaTimerStatusEnum.Stopped, "rescue window expired → timer must be stopped");
+
+        var outbox = Mock.Get(verifyScope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>());
+        outbox.Verify(
+            x => x.WriteAsync(
+                It.Is<SlaBreachedEvent>(e =>
+                    e.TicketId == ticketId
+                    && e.Code == "T-RESCUE-EXP"
+                    && e.IsRescueWindowExpired),
+                It.IsAny<CancellationToken>()),
+            Times.Once, "second SlaBreachedEvent must be fired when rescue window expires");
+    }
+
+    [Fact]
+    public async Task RescueWindow_NotYetExpired_DoesNotStopTimer()
+    {
+        // Arrange: assignment only 30 working minutes old (< 1440) → timer must remain Breached
+        var ticketId = Guid.NewGuid();
+        var timerId = Guid.NewGuid();
+        var assignmentId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        var assignmentCreatedAt = FixedNow.AddMinutes(-30);  // 30 working min << 1440
+
+        await using var provider = CreateProvider(Guid.NewGuid().ToString());
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
+            var ticket = new Ticket
+            {
+                Id = ticketId,
+                Code = "T-RESCUE-OK",
+                Title = "Rescue active",
+                Description = "d",
+                Category = TicketCategoryEnum.Other,
+                Status = TicketStatusEnum.InProgress,
+                Priority = TicketPriorityEnum.P2High,
+                Origin = TicketOriginEnum.ManualByCustomer
+            };
+            db.Tickets.Add(ticket);
+            db.SlaTimers.Add(new SlaTimer
+            {
+                Id = timerId,
+                TicketId = ticketId,
+                Ticket = ticket,
+                Type = SlaTimerTypeEnum.Resolution,
+                Priority = TicketPriorityEnum.P2High,
+                StartedAt = FixedNow.AddDays(-10),
+                DueAt = FixedNow.AddDays(-1),
+                OriginalDueAt = FixedNow.AddDays(-1),
+                BreachAt = FixedNow.AddDays(-1),
+                Status = SlaTimerStatusEnum.Breached
+            });
+            db.TicketAssignments.Add(new TicketAssignment
+            {
+                Id = assignmentId,
+                TicketId = ticketId,
+                Ticket = ticket,
+                StaffId = staffId,
+                Role = AssignmentRoleEnum.PrimaryHandler
+                // CreatedAt overwritten below after interceptor runs
+            });
+            await db.SaveChangesAsync();
+
+            var saved = db.TicketAssignments.Local.Single(a => a.Id == assignmentId);
+            saved.CreatedAt = assignmentCreatedAt;
+            await db.SaveChangesAsync();
+        }
+
+        var clock = new Mock<TimeProvider>();
+        clock.Setup(x => x.GetUtcNow()).Returns(new DateTimeOffset(FixedNow));
+        var service = new TestableSlaTimerService(
+            new Mock<ILogger<SlaTimerBackgroundService>>().Object,
+            provider.GetRequiredService<IServiceScopeFactory>(), clock.Object);
+
+        await service.TriggerCheck(CancellationToken.None);
+
+        using var verifyScope = provider.CreateScope();
+        var db2 = verifyScope.ServiceProvider.GetRequiredService<TicketDbContext>();
+        var timer = await db2.SlaTimers.FindAsync(timerId);
+        timer!.Status.Should().Be(SlaTimerStatusEnum.Breached, "rescue window still active — timer must stay Breached");
+
+        var outbox = Mock.Get(verifyScope.ServiceProvider.GetRequiredService<IIntegrationEventOutboxWriter>());
+        outbox.Verify(
+            x => x.WriteAsync(It.IsAny<SlaBreachedEvent>(), It.IsAny<CancellationToken>()),
+            Times.Never, "no second breach event while rescue window is still active");
+    }
+
     private ServiceProvider CreateProvider(string dbName)
     {
         var mockProducer = new Mock<IIntegrationEventOutboxWriter>();
@@ -373,7 +534,7 @@ public class SlaTimerBackgroundServiceTests
         var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
 
         var ticket = new Ticket { Id = ticketId, Code = "T-FIXED", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.InProgress, Origin = TicketOriginEnum.ManualByCustomer, IsDeleted = false };
-        var slaTimer = new SlaTimer { Id = slaTimerId, TicketId = ticketId, Priority = TicketPriorityEnum.P1Critical, StartedAt = start, DueAt = due, Status = SlaTimerStatusEnum.Running, IsDeleted = false };
+        var slaTimer = new SlaTimer { Id = slaTimerId, TicketId = ticketId, Type = SlaTimerTypeEnum.Resolution, Priority = TicketPriorityEnum.P1Critical, StartedAt = start, DueAt = due, Status = SlaTimerStatusEnum.Running, IsDeleted = false };
 
         dbContext.Tickets.Add(ticket);
         dbContext.SlaTimers.Add(slaTimer);

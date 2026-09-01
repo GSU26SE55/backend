@@ -56,7 +56,8 @@ public class IotSiteScopeEnforcementTests
     private static BatchIngestAmbientReadingsCommandHandler AmbientHandler(params Site[] sites)
         => new(new MockUnitOfWorkBuilder().WithSites(sites).Build(),
                Microsoft.Extensions.Options.Options.Create(
-                   new BatteryService.Application.Anomaly.AnomalyEngineOptions()));
+                   new BatteryService.Application.Anomaly.AnomalyEngineOptions()),
+               new BatteryService.Application.Services.OutboxSignal());
 
     [Fact]
     public async Task Ambient_CrossSiteWrite_IsRejectedWith403()

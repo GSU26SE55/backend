@@ -13,6 +13,12 @@ public class TicketAutoCreateFromAlertCommand : IRequest<TicketActionResponse>, 
     /// </summary>
     public Guid OriginAlertId { get; set; }
     public string AnomalyCategory { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Giá trị thô của <c>AnomalyTypeEnum</c>. Lưu thẳng lên ticket để làm ĐỊNH DANH sự cố —
+    /// <see cref="AnomalyCategory"/> là chuỗi để map sang category, không dùng làm khoá được.
+    /// </summary>
+    public int? AnomalyType { get; set; }
     public Guid BatteryAssetId { get; set; }
 
     /// <summary>

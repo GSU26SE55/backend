@@ -32,14 +32,20 @@ public class EscalationBackgroundServiceTests
             .Returns(Task.CompletedTask);
     }
 
-    private static ConsumeContext<SlaBreachedEvent> CreateContext(Guid ticketId, DateTime breachedAt, string code = "TKT-001", string priority = "P3Normal")
+    private static ConsumeContext<SlaBreachedEvent> CreateContext(
+        Guid ticketId,
+        DateTime breachedAt,
+        string code = "TKT-001",
+        string priority = "P3Normal",
+        bool isRescueWindowExpired = false)
     {
         var msg = new SlaBreachedEvent
         {
             TicketId = ticketId,
             BreachedAt = breachedAt,
             Code = code,
-            Priority = priority
+            Priority = priority,
+            IsRescueWindowExpired = isRescueWindowExpired
         };
         var mock = new Mock<ConsumeContext<SlaBreachedEvent>>();
         mock.SetupGet(c => c.Message).Returns(msg);
@@ -49,7 +55,7 @@ public class EscalationBackgroundServiceTests
     }
 
     [Fact]
-    public async Task Consume_OpenTicket_P3Breached_BumpsToP2_KeepsOpenStatus_NoStateMachineTransition()
+    public async Task Consume_OpenTicket_ResponseSlaBreached_DoesNotEscalatePriorityOrTransition()
     {
         var ticketId = Guid.NewGuid();
         var breachedAt = DateTime.UtcNow;
@@ -68,6 +74,7 @@ public class EscalationBackgroundServiceTests
         {
             Id = Guid.NewGuid(),
             TicketId = ticketId,
+            Type = SlaTimerTypeEnum.Response,
             Priority = TicketPriorityEnum.P3Normal,
             Status = SlaTimerStatusEnum.Breached,
             StartedAt = breachedAt.AddHours(-73),
@@ -88,10 +95,11 @@ public class EscalationBackgroundServiceTests
 
         await service.Consume(CreateContext(ticketId, breachedAt, "TKT-OPEN-P3", "P3Normal"));
 
-        ticket.Status.Should().Be(TicketStatusEnum.Open, "Open tickets must NOT transition to ReAssign on breach");
-        ticket.Priority.Should().Be(TicketPriorityEnum.P2High);
-        ticket.EscalationReason.Should().Be(EscalationReasonEnum.SlaBreach);
-        ticket.EscalatedAt.Should().Be(breachedAt);
+        ticket.Status.Should().Be(TicketStatusEnum.Open);
+        ticket.Priority.Should().Be(TicketPriorityEnum.P3Normal,
+            "a Response SLA breach records the violation without escalating an unassigned ticket");
+        ticket.EscalationReason.Should().BeNull();
+        ticket.EscalatedAt.Should().BeNull();
 
         _stateMachine.Verify(
             s => s.ExecuteAsync(It.IsAny<Ticket>(), It.IsAny<TicketStatusEnum>(), It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()),
@@ -99,11 +107,11 @@ public class EscalationBackgroundServiceTests
 
         _outboxWriter.Verify(
             o => o.WriteAsync(It.Is<TicketEscalatedEvent>(e => e.TicketId == ticketId), It.IsAny<CancellationToken>()),
-            Times.Once);
+            Times.Never);
     }
 
     [Fact]
-    public async Task Consume_OpenTicket_P1Breached_DeclaresUrgentIncident_StopsSla_EmitsBatteryIsolation()
+    public async Task Consume_OpenTicket_P1ResponseSlaBreached_DoesNotDeclareIncidentOrIsolateBattery()
     {
         var ticketId = Guid.NewGuid();
         var batteryAssetId = Guid.NewGuid();
@@ -124,6 +132,7 @@ public class EscalationBackgroundServiceTests
         {
             Id = Guid.NewGuid(),
             TicketId = ticketId,
+            Type = SlaTimerTypeEnum.Response,
             Priority = TicketPriorityEnum.P1Critical,
             Status = SlaTimerStatusEnum.Breached,
             StartedAt = breachedAt.AddHours(-5),
@@ -145,11 +154,11 @@ public class EscalationBackgroundServiceTests
         await service.Consume(CreateContext(ticketId, breachedAt, "TKT-OPEN-P1", "P1Critical"));
 
         ticket.Status.Should().Be(TicketStatusEnum.Open);
-        ticket.Priority.Should().Be(TicketPriorityEnum.Urgent);
-        ticket.IsIncident.Should().BeTrue();
-        ticket.ActiveIncidentEpisodeId.Should().NotBeNull();
+        ticket.Priority.Should().Be(TicketPriorityEnum.P1Critical);
+        ticket.IsIncident.Should().BeFalse();
+        ticket.ActiveIncidentEpisodeId.Should().BeNull();
 
-        _slaTransitions.Verify(s => s.StopSlaAsync(ticket, It.IsAny<CancellationToken>()), Times.Once);
+        _slaTransitions.Verify(s => s.StopSlaAsync(ticket, It.IsAny<CancellationToken>()), Times.Never);
 
         _outboxWriter.Verify(
             o => o.WriteAsync(
@@ -157,7 +166,7 @@ public class EscalationBackgroundServiceTests
                     e.TicketId == ticketId &&
                     e.BatteryAssetIds.Contains(batteryAssetId)),
                 It.IsAny<CancellationToken>()),
-            Times.Once);
+            Times.Never);
     }
 
     [Fact]
@@ -181,6 +190,7 @@ public class EscalationBackgroundServiceTests
         {
             Id = Guid.NewGuid(),
             TicketId = ticketId,
+            Type = SlaTimerTypeEnum.Resolution,
             Priority = TicketPriorityEnum.P3Normal,
             Status = SlaTimerStatusEnum.Breached,
             StartedAt = breachedAt.AddDays(-3),
@@ -218,5 +228,69 @@ public class EscalationBackgroundServiceTests
         _stateMachine.Verify(
             s => s.ExecuteAsync(ticket, TicketStatusEnum.ReAssign, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task Consume_P1RescueWindowExpired_WithStoppedTimer_DeclaresUrgentIncident()
+    {
+        var ticketId = Guid.NewGuid();
+        var batteryAssetId = Guid.NewGuid();
+        var breachedAt = DateTime.UtcNow;
+        var ticket = new Ticket
+        {
+            Id = ticketId,
+            Code = "TKT-RESCUE-P1",
+            Status = TicketStatusEnum.InProgress,
+            Priority = TicketPriorityEnum.P1Critical,
+            BatteryAssetId = batteryAssetId,
+            Title = "Rescue expired",
+            Description = "Desc",
+            Category = TicketCategoryEnum.Repair,
+            Origin = TicketOriginEnum.ManualByCustomer
+        };
+        var timer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticketId,
+            Type = SlaTimerTypeEnum.Resolution,
+            Priority = TicketPriorityEnum.P1Critical,
+            Status = SlaTimerStatusEnum.Stopped,
+            StartedAt = breachedAt.AddDays(-3),
+            DueAt = breachedAt.AddDays(-1)
+        };
+
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: [ticket],
+            slaTimerSeed: [timer]);
+        _stateMachine.Setup(s => s.ExecuteAsync(
+                ticket,
+                TicketStatusEnum.ReAssign,
+                It.IsAny<TransitionContext>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TransitionResult { IsAllowed = true });
+
+        var service = new EscalationBackgroundService(
+            uow.Object,
+            _stateMachine.Object,
+            _activityLogger.Object,
+            _outboxWriter.Object,
+            _inboxStore.Object,
+            _slaTransitions.Object);
+
+        await service.Consume(CreateContext(
+            ticketId,
+            breachedAt,
+            "TKT-RESCUE-P1",
+            "P1Critical",
+            isRescueWindowExpired: true));
+
+        ticket.Priority.Should().Be(TicketPriorityEnum.Urgent);
+        ticket.IsIncident.Should().BeTrue();
+        ticket.ActiveIncidentEpisodeId.Should().NotBeNull();
+        _slaTransitions.Verify(s => s.StopSlaAsync(ticket, It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(o => o.WriteAsync(
+            It.Is<BatteryIsolationRequestedEvent>(e =>
+                e.TicketId == ticketId && e.BatteryAssetIds.Contains(batteryAssetId)),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -67,6 +67,9 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(e => e.SiteId)
             .HasColumnName("site_id");
 
+        builder.Property(e => e.AnomalyType)
+            .HasColumnName("anomaly_type");
+
         builder.Property(e => e.ReopenCount)
             .HasColumnName("reopen_count");
 
@@ -167,9 +170,6 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.Property(e => e.ParentTicketId)
             .HasColumnName("parent_ticket_id");
-
-        builder.Property(e => e.SiteId)
-            .HasColumnName("site_id");
 
         builder.Property(e => e.CreatedAt)
             .HasColumnName("created_at");
