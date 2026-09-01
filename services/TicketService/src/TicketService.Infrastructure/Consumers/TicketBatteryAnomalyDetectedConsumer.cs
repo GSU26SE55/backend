@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedContracts.Events;
 using TicketService.Application.CQRS.Command.Tickets;
+using TicketService.Infrastructure.Anomaly;
 using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Enums;
 
@@ -34,6 +35,16 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
     public async Task Consume(ConsumeContext<BatteryAnomalyDetectedEvent> context)
     {
         var @event = context.Message;
+
+        // Notification-only: thoát TRƯỚC dedup BR-02. Đặt sau thì một pin đang có ticket mở sẽ
+        // đi vào nhánh "đã có ticket" và không phân biệt được với ca thật.
+        if (NotificationOnlyAnomalies.Contains(@event.AnomalyType))
+        {
+            _logger.LogInformation(
+                "AnomalyType {AnomalyType} is notification-only. Skipping ticket auto-creation for alert {AlertId}.",
+                @event.AnomalyType, @event.AlertId);
+            return;
+        }
 
         var activeStatuses = new[]
         {
