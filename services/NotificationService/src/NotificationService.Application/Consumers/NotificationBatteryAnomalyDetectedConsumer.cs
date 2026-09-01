@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Linq;
+using NotificationService.Application.Services;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
@@ -27,14 +29,17 @@ public class NotificationBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnoma
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
     private readonly ILogger<NotificationBatteryAnomalyDetectedConsumer> _logger;
+    private readonly IRecipientResolver _recipientResolver;
 
     public NotificationBatteryAnomalyDetectedConsumer(
         INotificationUnitOfWork unitOfWork,
         ICacheService cache,
+        IRecipientResolver recipientResolver,
         ILogger<NotificationBatteryAnomalyDetectedConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         _cache = cache;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
@@ -47,7 +52,23 @@ public class NotificationBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnoma
         {
             var evt = context.Message;
 
+            // Alert CAP SITE (nhiet do / do am / gas cua tu) di chung event nay nhung
+            // `BatteryAssetId` la Guid.Empty vi su co nam o tu, khong thuoc vien pin nao.
+            //
+            // Truoc day danh sach nhan chi co dung khach hang: nha kho 43 do C bao cho KHACH, con
+            // Manager/Admin dang truc thi khong ai duoc bao. Man "Environmental alerts" vi the
+            // khong nhan duoc tin hieu realtime nao va roi han ve poll 30 giay.
+            //
+            // Dung dung co che cua NotificationEnvironmentalIncidentDetectedConsumer. Alert cua MOT
+            // vien pin giu nguyen hanh vi cu (chi khach) — khong bien moi canh bao pin thanh thong
+            // bao cho toan bo nguoi truc.
             var recipientIds = new[] { evt.CustomerId };
+            if (evt.BatteryAssetId == Guid.Empty)
+            {
+                var operators = await _recipientResolver.GetActiveByRoleAsync(
+                    context.CancellationToken, "Manager", "Admin");
+                recipientIds = recipientIds.Concat(operators).Distinct().ToArray();
+            }
 
             // 03/08/2026 — chữ đọc được thay cho số trần. Trước đó thân tin nhắn ghi "mức 3" và template
             // ghi "Loại: 4" vì hai enum này thuộc BatteryService.Domain, phía đây không tham chiếu được.

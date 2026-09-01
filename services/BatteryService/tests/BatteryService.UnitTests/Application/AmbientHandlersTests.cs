@@ -1,4 +1,5 @@
 using BatteryService.Application.Anomaly;
+using BatteryService.Application.Services;
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.CQRS.Handler.Ambient;
 using BatteryService.Application.CQRS.Query.Ambient;
@@ -107,12 +108,56 @@ public class AmbientHandlersTests
 
     // ===== Sprint Bonus NS-21 (#661, E1) — detect-at-ingest ambient anomalies =====
 
+    // Danh thuc relay outbox NGAY thay vi doi het tick 5 s — voi canh bao moi truong thi 5 giay
+    // do la phan cho lon nhat con lai cua ca chuoi, vi nguong da cham xong ngay trong request nay.
+    [Fact]
+    public async Task BatchIngest_WhenAlertRaised_SignalsOutboxRelay()
+    {
+        var siteId = Guid.NewGuid();
+        var (uow, _) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
+        var signal = new Mock<IOutboxSignal>();
+        var handler = new BatchIngestAmbientReadingsCommandHandler(
+            uow.Object, AmbientEngineOptions(), signal.Object);
+
+        await handler.Handle(new BatchIngestAmbientReadingsCommand
+        {
+            Items = new List<AmbientReadingItem>
+            {
+                new() { SiteId = siteId, Time = DateTime.UtcNow, AmbientTemperature = 48m, Humidity = 50m }
+            }
+        }, default);
+
+        signal.Verify(x => x.Notify(), Times.Once);
+    }
+
+    // Goi ambient ve deu dan moi 15 s. Danh thuc relay o MOI goi la bat no quet rong suot ngay
+    // ma khong nhanh them duoc gi — chi bao khi luot nay that su co ghi event.
+    [Fact]
+    public async Task BatchIngest_WhenNothingBreached_DoesNotSignalOutboxRelay()
+    {
+        var siteId = Guid.NewGuid();
+        var (uow, _) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
+        var signal = new Mock<IOutboxSignal>();
+        var handler = new BatchIngestAmbientReadingsCommandHandler(
+            uow.Object, AmbientEngineOptions(), signal.Object);
+
+        await handler.Handle(new BatchIngestAmbientReadingsCommand
+        {
+            Items = new List<AmbientReadingItem>
+            {
+                new() { SiteId = siteId, Time = DateTime.UtcNow, AmbientTemperature = 20m, Humidity = 40m }
+            }
+        }, default);
+
+        signal.Verify(x => x.Notify(), Times.Never);
+    }
+
     [Fact]
     public async Task BatchIngest_AmbientOverCritical_CreatesSiteLevelAlert()
     {
         var siteId = Guid.NewGuid();
         var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions(), new OutboxSignal());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -134,7 +179,7 @@ public class AmbientHandlersTests
     {
         var siteId = Guid.NewGuid();
         var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId) });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions(), new OutboxSignal());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -152,7 +197,7 @@ public class AmbientHandlersTests
     {
         var siteId = Guid.NewGuid();
         var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig> { Config(siteId, enabled: false) });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions(), new OutboxSignal());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -167,7 +212,7 @@ public class AmbientHandlersTests
     {
         var otherSite = Guid.NewGuid();
         var (uow, alerts) = BuildUowWithAlerts(new List<AmbientThresholdConfig>(), siteIds: otherSite); // không có config
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions(), new OutboxSignal());
 
         var result = await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -202,7 +247,7 @@ public class AmbientHandlersTests
         };
         var (uow, alerts, outbox) = BuildUowWithAlertsAndOutbox(
             new List<AmbientThresholdConfig> { Config(siteId) }, new List<Alert> { existing }, siteId);
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions(), new OutboxSignal());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -221,7 +266,7 @@ public class AmbientHandlersTests
     {
         var siteId = Guid.NewGuid();
         var (uow, alerts, outbox) = BuildUowWithAlertsAndOutbox(new List<AmbientThresholdConfig> { Config(siteId) });
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions(), new OutboxSignal());
 
         await handler.Handle(new BatchIngestAmbientReadingsCommand
         {
@@ -247,7 +292,7 @@ public class AmbientHandlersTests
     {
         var siteId = Guid.NewGuid();
         var uow = BuildUow(siteIds: siteId);
-        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions());
+        var handler = new BatchIngestAmbientReadingsCommandHandler(uow.Object, AmbientEngineOptions(), new OutboxSignal());
 
         var result = await handler.Handle(new BatchIngestAmbientReadingsCommand
         {

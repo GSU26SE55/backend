@@ -15,14 +15,17 @@ public class OutboxRelayBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly AnomalyEngineOptions _options;
     private readonly ILogger<OutboxRelayBackgroundService> _logger;
+    private readonly IOutboxSignal _signal;
 
     public OutboxRelayBackgroundService(
         IServiceScopeFactory scopeFactory,
         IOptions<AnomalyEngineOptions> options,
+        IOutboxSignal signal,
         ILogger<OutboxRelayBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
         _options = options.Value;
+        _signal = signal;
         _logger = logger;
     }
 
@@ -54,8 +57,20 @@ public class OutboxRelayBackgroundService : BackgroundService
                 _logger.LogError(ex, "OutboxRelay tick failed");
             }
 
+            // Chờ tín hiệu HOẶC hết tick, cái nào tới trước.
+            //
+            // Trước đây chỉ có `Task.Delay(interval)`: event đã nằm sẵn trong bảng outbox ngay lúc
+            // BE chấm xong ngưỡng, nhưng vẫn phải đợi hết 5 s mới được đẩy đi — đó là phần chờ lớn
+            // nhất còn lại của chuỗi cảnh báo môi trường.
+            //
+            // Timer KHÔNG bỏ: nó là lưới an toàn cho những event ghi vào outbox mà không ai gọi
+            // `Notify()` (đường pin, consumer khác, hoặc process vừa restart giữa chừng).
             try
-            { await Task.Delay(interval, stoppingToken); }
+            {
+                await Task.WhenAny(
+                    _signal.WaitAsync(stoppingToken),
+                    Task.Delay(interval, stoppingToken));
+            }
             catch (OperationCanceledException) { /* shutdown */ }
         }
 
