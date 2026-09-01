@@ -107,6 +107,77 @@ public class PartnerImportFlowTests
     }
 
     [Fact]
+    public async Task Commit_TwoSiteRowsSameNameUnderSameCustomer_OnlyTheSecondFailsGracefully()
+    {
+        // Bug thật gặp qua e2e (2026-09-01): dòng site thứ hai trùng tên với dòng thứ nhất TRONG
+        // CÙNG lô không bị truy vấn DB phát hiện (dòng đầu chưa được SaveChanges) — cả hai cùng
+        // được thêm rồi vỡ ràng buộc duy nhất (customer_id, name) lúc lưu, ném DbUpdateException
+        // đánh sập TOÀN BỘ lượt tiến độ (ImportBatchProcessorBackgroundService bắt lỗi ở mức lô,
+        // không phải mức dòng) thay vì chỉ đánh hỏng đúng dòng thứ hai như tài liệu mô tả.
+        await using var db = CreateDbContext();
+        var world = new ImportWorld(db);
+
+        const string sitesCsv =
+            "external_site_code,external_customer_code,site_name,address\n" +
+            "ST-001,KH-001,Nha may Trung Ten,KCN Long An\n" +
+            "ST-002,KH-001,Nha may Trung Ten,KCN Long An Khac\n";
+
+        var act = async () => await world.ImportEndToEndAsync(CustomersCsv, sitesCsv, string.Empty);
+        await act.Should().NotThrowAsync();
+
+        (await db.Sites.CountAsync()).Should().Be(1, "chỉ dòng đầu được tạo, dòng sau trùng tên phải bị đánh hỏng chứ không được tạo trùng");
+
+        var batch = await db.ImportBatches.SingleAsync();
+        // CreatedRows đếm trên MỌI loại dòng trong lô, không riêng site: dòng khách hàng (mới) +
+        // dòng site ST-001 = 2 dòng Created; ST-002 là dòng Failed duy nhất.
+        batch.CreatedRows.Should().Be(2);
+        batch.FailedRows.Should().Be(1);
+        batch.Status.Should().Be(ImportBatchStatusEnum.CompletedWithErrors);
+
+        var failedRow = await db.ImportRows.SingleAsync(r => r.ExternalRef == "ST-002");
+        failedRow.Status.Should().Be(ImportRowStatusEnum.Failed);
+        failedRow.ErrorsJson.Should().Contain("SiteName");
+    }
+
+    [Fact]
+    public async Task Commit_TwoAssetRowsSameNewSerialNumber_OnlyTheSecondFailsGracefully()
+    {
+        // Bug thật gặp qua e2e (2026-09-01), cùng lớp với site trùng tên ở trên nhưng chưa được
+        // vá: dòng pin thứ hai trùng serial với dòng thứ nhất TRONG CÙNG lô không bị truy vấn DB
+        // phát hiện (dòng đầu chỉ mới AddAsync, chưa SaveChanges) — cả hai cùng lọt qua kiểm tra
+        // "serial đã tồn tại" rồi vỡ ràng buộc duy nhất IX_battery_assets_serial_number lúc lưu.
+        // Hậu quả còn nặng hơn site: DbUpdateException đó không chỉ đánh sập lô này mà còn để lại
+        // entity "nhiễm độc" (Added nhưng chưa lưu) trong DbContext dùng chung cả nhịp của
+        // ImportBatchProcessorBackgroundService, kéo theo cả các lô khác xử lý CÙNG nhịp cũng vỡ
+        // theo dù dữ liệu của chúng hoàn toàn hợp lệ.
+        await using var db = CreateDbContext();
+        SeedBatteryType(db);
+        await db.SaveChangesAsync();
+
+        var world = new ImportWorld(db);
+
+        const string assetsCsv =
+            "external_asset_code,external_site_code,serial_number,battery_type_name\n" +
+            "PIN-001,ST-001,PYL-DUP-SERIAL,LFP-100\n" +
+            "PIN-002,ST-001,PYL-DUP-SERIAL,LFP-100\n";
+
+        var act = async () => await world.ImportEndToEndAsync(CustomersCsv, SitesCsv, assetsCsv);
+        await act.Should().NotThrowAsync();
+
+        (await db.BatteryAssets.CountAsync()).Should().Be(1, "chỉ dòng đầu được tạo, dòng sau trùng serial phải bị đánh hỏng chứ không được tạo trùng");
+
+        var batch = await db.ImportBatches.SingleAsync();
+        // Khách hàng (mới) + site ST-001 + asset PIN-001 = 3 dòng Created; PIN-002 là dòng Failed duy nhất.
+        batch.CreatedRows.Should().Be(3);
+        batch.FailedRows.Should().Be(1);
+        batch.Status.Should().Be(ImportBatchStatusEnum.CompletedWithErrors);
+
+        var failedRow = await db.ImportRows.SingleAsync(r => r.ExternalRef == "PIN-002");
+        failedRow.Status.Should().Be(ImportRowStatusEnum.Failed);
+        failedRow.ErrorsJson.Should().Contain("SerialNumber");
+    }
+
+    [Fact]
     public async Task Revert_AfterCompletion_RemovesTheSiteAndAssetTheBatchCreated()
     {
         await using var db = CreateDbContext();

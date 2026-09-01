@@ -71,24 +71,25 @@ public class ImportBatchProcessorBackgroundService : BackgroundService
     /// <summary>Tách riêng để test gọi thẳng được mà không phải dựng cả vòng lặp nền.</summary>
     protected virtual async Task ProcessOneBatchAsync(CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
+        List<Guid> batchIds;
+        using (var listScope = _scopeFactory.CreateScope())
+        {
+            var unitOfWork = listScope.ServiceProvider.GetRequiredService<IBatteryUnitOfWork>();
 
-        var batchIds = await unitOfWork.ImportBatches
-            .GetAllAsync()
-            .AsNoTracking()
-            .Where(batch => !batch.IsDeleted
-                            && (batch.Status == ImportBatchStatusEnum.Committing
-                                || batch.Status == ImportBatchStatusEnum.AwaitingAccountSync))
-            .OrderBy(batch => batch.CreatedAt)
-            .Take(MaxBatchesPerTick)
-            .Select(batch => batch.Id)
-            .ToListAsync(cancellationToken);
+            batchIds = await unitOfWork.ImportBatches
+                .GetAllAsync()
+                .AsNoTracking()
+                .Where(batch => !batch.IsDeleted
+                                && (batch.Status == ImportBatchStatusEnum.Committing
+                                    || batch.Status == ImportBatchStatusEnum.AwaitingAccountSync))
+                .OrderBy(batch => batch.CreatedAt)
+                .Take(MaxBatchesPerTick)
+                .Select(batch => batch.Id)
+                .ToListAsync(cancellationToken);
+        }
 
         if (batchIds.Count == 0)
             return;
-
-        var commitService = scope.ServiceProvider.GetRequiredService<IImportCommitService>();
 
         foreach (var batchId in batchIds)
         {
@@ -97,6 +98,14 @@ public class ImportBatchProcessorBackgroundService : BackgroundService
 
             try
             {
+                // Scope riêng cho MỖI lô: nếu SaveChangesAsync của một lô ném ngoại lệ (vd vỡ ràng
+                // buộc duy nhất), các entity vừa AddAsync nhưng chưa lưu vẫn còn bị DbContext theo
+                // dõi ở trạng thái Added — dùng chung một DbContext cho cả nhịp sẽ đẩy những entity
+                // "nhiễm độc" đó vào lần SaveChangesAsync của lô KẾ TIẾP, làm lô đang hoàn toàn hợp lệ
+                // cũng vỡ theo. Tách scope theo lô để một lô hỏng không bao giờ kéo lô khác theo.
+                using var batchScope = _scopeFactory.CreateScope();
+                var commitService = batchScope.ServiceProvider.GetRequiredService<IImportCommitService>();
+
                 if (await commitService.AdvanceAsync(batchId, cancellationToken))
                     _logger.LogInformation("Import batch {BatchId} finished.", batchId);
             }

@@ -34,10 +34,9 @@ public class GetImportErrorsCsvQuery : IRequest<CommonResponse<ImportFileDownloa
     public Guid BatchId { get; set; }
 }
 
-/// <summary>File CSV mẫu cho một loại dữ liệu.</summary>
+/// <summary>File Excel mẫu — một file .xlsx, ba sheet: khách hàng, site, pin.</summary>
 public class GetImportTemplateQuery : IRequest<CommonResponse<ImportFileDownloadDto>>
 {
-    public ImportEntityTypeEnum EntityType { get; set; }
 }
 
 /// <summary>Nội dung file trả về cho người dùng tải xuống.</summary>
