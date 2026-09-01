@@ -78,7 +78,12 @@ public class CsvImportFileParser : IImportFileParser
             MissingFieldFound = null,
             TrimOptions = TrimOptions.Trim,
             IgnoreBlankLines = true,
-            BadDataFound = null
+            BadDataFound = null,
+            // File mẫu tải về (GetImportTemplateQueryHandler) chèn dòng chú thích/ví dụ bắt đầu bằng
+            // '#' ở giữa và cuối file. Bật cờ này để những dòng đó bị bỏ qua nếu đối tác lỡ nộp
+            // nguyên file mẫu chưa xoá phần chú thích, thay vì bị đọc thành một dòng dữ liệu hỏng.
+            AllowComments = true,
+            Comment = '#'
         };
 
         var rows = new List<ParsedRow<T>>();
@@ -108,8 +113,10 @@ public class CsvImportFileParser : IImportFileParser
 
             while (parser.Read())
             {
-                // Dòng tiêu đề là dòng 1, nên dòng dữ liệu đầu tiên là dòng 2.
-                var rowNumber = rows.Count + 2;
+                // Lấy số dòng thật trong file (parser.Parser.Row), không phải "rows.Count + 2":
+                // file mẫu tải về và file đối tác đều có thể chứa dòng trống hoặc dòng chú thích
+                // '#' bị bỏ qua ở trên — đếm theo rows.Count sẽ báo sai dòng cho người dùng đi sửa.
+                var rowNumber = parser.Parser.Row;
 
                 if (rows.Count >= maxRows)
                 {

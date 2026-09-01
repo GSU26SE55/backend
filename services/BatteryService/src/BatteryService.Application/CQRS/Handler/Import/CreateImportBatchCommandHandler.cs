@@ -290,6 +290,16 @@ public class CreateImportBatchCommandHandler
         return new HashSet<string>(refs, StringComparer.Ordinal);
     }
 
+    // ImportRow.ExternalRef là varchar(128) (ImportRowConfiguration). Khi một dòng hỏng CHÍNH VÌ mã
+    // tham chiếu dài hơn 128 ký tự, validator trả về Value=null nên nơi gọi phải tự chuẩn hoá lại mã
+    // gốc chưa cắt — giá trị đó vẫn dài hơn cột cho phép, và INSERT sẽ ném PostgresException 22001
+    // đánh sập TOÀN BỘ lô thay vì chỉ đánh hỏng đúng 1 dòng. Dòng này đã chắc chắn Invalid (lỗi "quá
+    // 128 ký tự" đã có trong errors) nên cắt bớt giá trị lưu trữ không đổi kết quả kiểm định.
+    private const int MaxStorableExternalRefLength = 128;
+
+    private static string Truncate(string value, int maxLength) =>
+        value.Length <= maxLength ? value : value[..maxLength];
+
     private static ImportRow BuildRow(
         ImportBatch batch, ImportEntityTypeEnum entityType, int rowNumber,
         string rawJson, string externalRef, IReadOnlyList<Errors> errors)
@@ -301,7 +311,7 @@ public class CreateImportBatchCommandHandler
             RowNumber = rowNumber,
             EntityType = entityType,
             RawJson = rawJson,
-            ExternalRef = externalRef,
+            ExternalRef = Truncate(externalRef, MaxStorableExternalRefLength),
             Status = errors.Count > 0 ? ImportRowStatusEnum.Invalid : ImportRowStatusEnum.Valid,
             ErrorsJson = errors.Count > 0 ? JsonSerializer.Serialize(errors) : null
         };

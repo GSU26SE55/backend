@@ -144,6 +144,34 @@ public class CreateImportBatchHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ReferenceCodeOverMaxLength_StoresATruncatedRefInsteadOfCrashing()
+    {
+        // Bug thật gặp qua e2e (2026-09-01): dòng hỏng CHÍNH VÌ mã tham chiếu quá 128 ký tự vẫn bị
+        // lưu nguyên văn (chưa cắt) vào cột ExternalRef varchar(128) — PostgresException 22001 đánh
+        // sập TOÀN BỘ lô (500) thay vì chỉ đánh hỏng đúng 1 dòng.
+        var (handler, builder) = Build();
+        var overLongCode = new string('X', 130);
+
+        var captured = new List<ImportRow>();
+        builder.ImportRows
+            .Setup(repository => repository.AddAsync(It.IsAny<ImportRow>()))
+            .Callback<ImportRow>(row => captured.Add(row))
+            .Returns(Task.CompletedTask);
+
+        var result = await handler.Handle(new CreateImportBatchCommand
+        {
+            CustomersCsv = Bytes(
+                "external_customer_code,full_name,email\n" +
+                $"{overLongCode},Cong ty A,a@example.com\n"),
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.InvalidRows.Should().Be(1);
+        captured.Should().ContainSingle();
+        captured[0].ExternalRef.Length.Should().BeLessOrEqualTo(128);
+    }
+
+    [Fact]
     public async Task Handle_FileMissingRequiredColumn_MarksTheWholeBatchAsValidationFailed()
     {
         var (handler, _) = Build();

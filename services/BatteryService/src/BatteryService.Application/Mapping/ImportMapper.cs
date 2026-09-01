@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BatteryService.Application.DTOs.Import;
+using BatteryService.Application.Import;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using SharedContracts.Common.Responses;
@@ -57,7 +58,8 @@ public static class ImportMapper
         Status = row.Status,
         Errors = ParseErrors(row.ErrorsJson),
         CreatedEntityId = row.CreatedEntityId?.ToString(),
-        ProcessedAt = row.ProcessedAt
+        ProcessedAt = row.ProcessedAt,
+        Fields = ImportRowPayload.FromRawJson(row.RawJson).ToDictionary(cell => cell.Key, cell => cell.Value)
     };
 
 
