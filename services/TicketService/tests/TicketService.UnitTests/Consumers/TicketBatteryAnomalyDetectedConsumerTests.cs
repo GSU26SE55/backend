@@ -120,4 +120,87 @@ public class BatteryAnomalyDetectedConsumerTests
             cmd.Title.Contains("Battery Overheating")
         ), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    /// <summary>
+    /// LowSoc notification-only — pin dùng hết là vận hành bình thường của hệ solar, không phải
+    /// sự cố cần người xử lý. KHÔNG được tạo ticket dù chưa có ticket nào đang mở cho pin này.
+    /// </summary>
+    [Fact]
+    public async Task Consume_LowSoc_ShouldSkipAutoCreation_EvenWhenNoActiveTicket()
+    {
+        var ticketList = new List<Ticket>().AsQueryable().BuildMock();
+        _ticketRepoMock.Setup(r => r.GetAllAsync()).Returns(ticketList);
+
+        var message = new BatteryAnomalyDetectedEvent(
+            AlertId: Guid.NewGuid(),
+            BatteryAssetId: Guid.NewGuid(),
+            CustomerId: Guid.NewGuid(),
+            AssetSerialNumber: "SN-123",
+            AnomalyType: 4, // LowSoc
+            Severity: 3,
+            ActualValue: 5m,
+            ThresholdValue: 10m,
+            Unit: "%",
+            DetectedAt: DateTime.UtcNow
+        );
+
+        var contextMock = new Mock<ConsumeContext<BatteryAnomalyDetectedEvent>>();
+        contextMock.SetupGet(c => c.Message).Returns(message);
+        contextMock.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+
+        var consumer = new TicketBatteryAnomalyDetectedConsumer(
+            _mediatorMock.Object,
+            _uowMock.Object,
+            NullLogger<TicketBatteryAnomalyDetectedConsumer>.Instance
+        );
+
+        await consumer.Consume(contextMock.Object);
+
+        _mediatorMock.Verify(
+            m => m.Send(It.IsAny<TicketAutoCreateFromAlertCommand>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// Đường hiện có không được hỏng: mọi anomaly type KHÁC vẫn tạo ticket như cũ.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]  // Overheat
+    [InlineData(2)]  // Overvoltage
+    [InlineData(5)]  // RapidDischarge
+    [InlineData(8)]  // SohDegradation
+    public async Task Consume_OtherAnomalyTypes_ShouldStillSendAutoCreateCommand(int anomalyType)
+    {
+        var ticketList = new List<Ticket>().AsQueryable().BuildMock();
+        _ticketRepoMock.Setup(r => r.GetAllAsync()).Returns(ticketList);
+
+        var message = new BatteryAnomalyDetectedEvent(
+            AlertId: Guid.NewGuid(),
+            BatteryAssetId: Guid.NewGuid(),
+            CustomerId: Guid.NewGuid(),
+            AssetSerialNumber: "SN-123",
+            AnomalyType: anomalyType,
+            Severity: 3,
+            ActualValue: 75m,
+            ThresholdValue: 60m,
+            Unit: "C",
+            DetectedAt: DateTime.UtcNow
+        );
+
+        var contextMock = new Mock<ConsumeContext<BatteryAnomalyDetectedEvent>>();
+        contextMock.SetupGet(c => c.Message).Returns(message);
+        contextMock.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+
+        var consumer = new TicketBatteryAnomalyDetectedConsumer(
+            _mediatorMock.Object,
+            _uowMock.Object,
+            NullLogger<TicketBatteryAnomalyDetectedConsumer>.Instance
+        );
+
+        await consumer.Consume(contextMock.Object);
+
+        _mediatorMock.Verify(
+            m => m.Send(It.IsAny<TicketAutoCreateFromAlertCommand>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
 }

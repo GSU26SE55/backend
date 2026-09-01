@@ -141,14 +141,15 @@ public class MyTicketsAsStaffQueryHandlerTests
 
     private static Ticket WithTimer(Ticket ticket, DateTime dueAt)
     {
-        ticket.SlaTimer = new SlaTimer
+        ticket.SlaTimers.Add(new SlaTimer
         {
             Id = Guid.NewGuid(),
+            Type = SlaTimerTypeEnum.Resolution,
             Priority = ticket.Priority ?? TicketPriorityEnum.P3Normal,
             Status = SlaTimerStatusEnum.Running,
             StartedAt = DateTime.UtcNow.AddHours(-1),
             DueAt = dueAt
-        };
+        });
         return ticket;
     }
 

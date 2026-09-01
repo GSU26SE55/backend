@@ -48,7 +48,7 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
 
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
-            .Include(t => t.SlaTimer)
+            .Include(t => t.SlaTimers)
             .Include(t => t.BatteryAssets)
             // Thiếu Include này thì t.Assignments luôn rỗng → mọi card danh sách
             // đều hiện "Chưa phân công" dù ticket đã gán Staff (detail thì đúng
@@ -61,13 +61,18 @@ public class MyTicketsAsStaffQueryHandler : IRequestHandler<MyTicketsAsStaffQuer
 
         // Bảng SLA Monitor: chỉ lấy ticket đang trong vòng theo dõi SLA (server-side, không cap theo pageSize)
         if (request.SlaOpen == true)
-            query = query.Where(t => TicketStatusGroups.SlaMonitored.Contains(t.Status) && t.SlaTimer != null);
+            query = query.Where(t => TicketStatusGroups.SlaMonitored.Contains(t.Status) && t.SlaTimers.Any(s => !s.IsDeleted));
 
         // sortBy=slaRemaining: DueAt tăng dần ≙ thời gian SLA còn lại tăng dần (gần breach lên đầu);
         // ticket không có timer xếp cuối (MaxValue thay cho NULL để tường minh trên mọi provider).
         // .ThenBy(Id) ở cả hai nhánh: tie-breaker cố định — pagination ổn định.
         query = string.Equals(request.SortBy, "slaRemaining", StringComparison.OrdinalIgnoreCase)
-            ? query.OrderBy(t => t.SlaTimer == null ? DateTime.MaxValue : t.SlaTimer.DueAt).ThenBy(t => t.Priority).ThenBy(t => t.Id)
+            ? query.OrderBy(t => t.SlaTimers
+                    .Where(s => !s.IsDeleted)
+                    .OrderByDescending(s => (int)s.Type)
+                    .Select(s => (DateTime?)s.DueAt)
+                    .FirstOrDefault() ?? DateTime.MaxValue)
+                .ThenBy(t => t.Priority).ThenBy(t => t.Id)
             : query.OrderBy(t => t.Priority).ThenByDescending(t => t.CreatedAt).ThenBy(t => t.Id);
 
         // Phân trang trên entity: sau đó còn phải truy vấn phụ (chat chưa đọc) rồi mới dựng DTO,

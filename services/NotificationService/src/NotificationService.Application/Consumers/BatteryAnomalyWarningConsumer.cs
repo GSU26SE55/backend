@@ -1,7 +1,9 @@
+using System.Linq;
 using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
+using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;
@@ -26,14 +28,17 @@ public class BatteryAnomalyWarningConsumer : IConsumer<BatteryAnomalyWarningDete
     private readonly INotificationUnitOfWork _unitOfWork;
     private readonly ICacheService _cache;
     private readonly ILogger<BatteryAnomalyWarningConsumer> _logger;
+    private readonly IRecipientResolver _recipientResolver;
 
     public BatteryAnomalyWarningConsumer(
         INotificationUnitOfWork unitOfWork,
         ICacheService cache,
+        IRecipientResolver recipientResolver,
         ILogger<BatteryAnomalyWarningConsumer> logger)
     {
         _unitOfWork = unitOfWork;
         _cache = cache;
+        _recipientResolver = recipientResolver;
         _logger = logger;
     }
 
@@ -87,8 +92,20 @@ public class BatteryAnomalyWarningConsumer : IConsumer<BatteryAnomalyWarningDete
                 screen = "BatteryDetail"
             });
 
+            // Alert CAP SITE: `BatteryAssetId` null (duong ambient truyen null cho event Warning)
+            // vi su co nam o tu, khong thuoc vien pin nao. Bao them cho Manager/Admin dang truc —
+            // truoc day chi khach nhan, nen man Environmental alerts khong co tin hieu realtime.
+            // Alert cua MOT vien pin giu nguyen: chi khach.
+            Guid[] recipientIds = [evt.CustomerId];
+            if (evt.BatteryAssetId is null || evt.BatteryAssetId == Guid.Empty)
+            {
+                var operators = await _recipientResolver.GetActiveByRoleAsync(
+                    context.CancellationToken, "Manager", "Admin");
+                recipientIds = recipientIds.Concat(operators).Distinct().ToArray();
+            }
+
             await NotificationWriter.WriteAsync(
-                _unitOfWork, [evt.CustomerId], type, channels,
+                _unitOfWork, recipientIds, type, channels,
                 title, body, payload, "Battery", evt.BatteryAssetId, context.CancellationToken);
         });
     }

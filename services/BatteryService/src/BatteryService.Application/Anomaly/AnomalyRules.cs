@@ -11,7 +11,7 @@ namespace BatteryService.Application.Anomaly;
 /// - Overheat: đạt tới TemperatureMax → Critical, đạt tới TemperatureMin → Warning
 /// - Overvoltage: đạt tới VoltageMax → Critical, đạt tới VoltageMin → Warning
 ///   (Min/Max ở đây nghĩa là Warning/Critical — thang một chiều, KHÔNG phải dải an toàn.)
-/// - LowSoc: đạt tới SocCritical → Critical, đạt tới SocWarning → Warning
+/// - LowSoc: đạt tới SocCritical → Warning, đạt tới SocWarning → Info (notification-only, xem dưới)
 /// - SohDegradation: đạt tới SohCritical → Critical, đạt tới SohWarning → Warning
 ///
 /// Mọi so sánh đều BAO GỒM mốc (&gt;= / &lt;=): số đo đúng bằng ngưỡng Admin đặt là đã vi phạm.
@@ -69,16 +69,38 @@ public static class AnomalyRules
                 threshold.VoltageMin, reading.Voltage, "V"));
         }
 
+        // SOC — notification-only, KHÔNG bao giờ chạm mức Critical.
+        //
+        // Pin trong hệ solar xả mỗi đêm; chạm ngưỡng SOC là kết quả tất yếu của tải và chu kỳ
+        // nắng, không phải hỏng hóc. Ở mức Critical thì `AnomalyDetectionService` publish
+        // `BatteryAnomalyDetectedEvent` + V2 ⇒ Saga ⇒ ticket auto — mỗi tối một ticket rác cho
+        // mọi pin dùng cạn. Hạ một bậc (Critical→Warning, Warning→Info) đưa LowSoc sang nhánh
+        // `BatteryAnomalyWarningDetectedEvent`, event mà CHỈ NotificationService consume: alert
+        // vẫn ghi, khách vẫn được báo "pin yếu", chỉ không có ticket.
+        //
+        // ⚠️ Đây là chỗ DUY NHẤT quyết định việc đó. Nâng lại Critical là ticket rác quay lại.
+        // Ngưỡng số (`SocWarningThreshold` 20% / `SocCriticalThreshold` 10%) KHÔNG đổi — chỉ đổi
+        // mức nghiêm trọng mà chúng sinh ra. Hệ quả kênh gửi: ≤10% → InApp+Push, ≤20% → InApp.
+        //
+        // Nửa AI của cùng triệu chứng đã hạ song song: `VOLTAGE_LOW` warning→info và `VerifyTicket`
+        // thôi cộng điểm khi SOC dưới ngưỡng (ai-module, docs/be-huong-dan-tich-hop.md §10.3).
+        //
+        // Cái MẤT: không còn đường tự bắt pin xả kiệt hư cell thật. Ca đó cần lịch sử nhiều giờ
+        // ("không hồi phục sau trọn một cửa sổ sạc" / "dưới ngưỡng bảo vệ deep-discharge") mà
+        // `ThresholdConfig` chưa có cột nào diễn đạt được — `VoltageMin` là mốc Warning của thang
+        // QUÁ ÁP, không phải sàn điện áp, nên không dùng lại được. Việc đó tách riêng.
+        // Trước mắt `RapidDischarge` / `SohDegradation` / `CellImbalance` /
+        // `HighInternalResistance` vẫn Critical và vẫn đẻ ticket.
         if (reading.SocPercent <= threshold.SocCriticalThreshold)
         {
             anomalies.Add(new AnomalyDetection(
-                AnomalyTypeEnum.LowSoc, AlertSeverityEnum.Critical,
+                AnomalyTypeEnum.LowSoc, AlertSeverityEnum.Warning,
                 threshold.SocCriticalThreshold, reading.SocPercent, "%"));
         }
         else if (reading.SocPercent <= threshold.SocWarningThreshold)
         {
             anomalies.Add(new AnomalyDetection(
-                AnomalyTypeEnum.LowSoc, AlertSeverityEnum.Warning,
+                AnomalyTypeEnum.LowSoc, AlertSeverityEnum.Info,
                 threshold.SocWarningThreshold, reading.SocPercent, "%"));
         }
 
@@ -211,12 +233,12 @@ public static class AnomalyRules
                 reading.AmbientTemperature ?? 0m, "°C"));
         }
 
-        // Water leak — cảm biến báo bool (ướt/khô), không có ngưỡng số nên luôn Critical khi true.
+        // Water leak — cảm biến báo ướt/khô, không có ngưỡng số nên luôn Critical khi true.
         if (reading.WaterLeakDetected == true)
         {
             anomalies.Add(new AnomalyDetection(
                 AnomalyTypeEnum.WaterLeak, AlertSeverityEnum.Critical,
-                1m, 1m, "bool"));
+                1m, 1m, "Wet"));
         }
 
         return anomalies;

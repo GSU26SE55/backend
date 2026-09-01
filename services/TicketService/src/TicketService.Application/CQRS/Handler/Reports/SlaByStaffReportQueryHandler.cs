@@ -23,8 +23,11 @@ public class SlaByStaffReportQueryHandler
         if (request.To.HasValue)
             ticketsBase = ticketsBase.Where(t => t.CreatedAt <= request.To.Value);
 
+        // Include PreviousPrimaryHandler to attribute breach liability to the original handler (SPE O&M v4.0)
         var assignmentsBase = _uow.TicketAssignments.GetAllAsync().AsNoTracking()
-            .Where(a => !a.IsDeleted && a.Role == AssignmentRoleEnum.PrimaryHandler);
+            .Where(a => !a.IsDeleted
+                        && (a.Role == AssignmentRoleEnum.PrimaryHandler
+                            || a.Role == AssignmentRoleEnum.PreviousPrimaryHandler));
 
         var data = await (
             from a in assignmentsBase
@@ -32,21 +35,40 @@ public class SlaByStaffReportQueryHandler
             select new
             {
                 a.StaffId,
-                Status = t.SlaTimer != null ? (SlaTimerStatusEnum?)t.SlaTimer.Status : null
+                a.Role,
+                TicketId = t.Id,
+                // Resolution timer when available, else Response timer (see SlaTimerTypeEnum)
+                SlaStatus = t.SlaTimers
+                    .Where(s => !s.IsDeleted)
+                    .OrderByDescending(s => s.Type)
+                    .Select(s => (SlaTimerStatusEnum?)s.Status)
+                    .FirstOrDefault()
             }
         ).ToListAsync(ct);
 
         var names = await StaffNameLookup(ct);
 
+        // Tickets where a post-breach reassignment occurred (have a PreviousPrimaryHandler record)
+        var reassignedTicketIds = data
+            .Where(x => x.Role == AssignmentRoleEnum.PreviousPrimaryHandler)
+            .Select(x => x.TicketId)
+            .ToHashSet();
+
         var rows = data.GroupBy(x => x.StaffId).Select(g =>
         {
-            var met = g.Count(x => x.Status == SlaTimerStatusEnum.Met);
-            var breached = g.Count(x => x.Status == SlaTimerStatusEnum.Breached);
+            var met = g.Count(x => x.Role == AssignmentRoleEnum.PrimaryHandler
+                                   && x.SlaStatus == SlaTimerStatusEnum.Met);
+            // Breach liability: PreviousPrimaryHandler on a reassigned ticket,
+            // OR PrimaryHandler on a non-reassigned Breached ticket (original handler who caused the breach).
+            var breached = g.Count(x =>
+                (x.Role == AssignmentRoleEnum.PreviousPrimaryHandler && x.SlaStatus == SlaTimerStatusEnum.Breached)
+                || (x.Role == AssignmentRoleEnum.PrimaryHandler && x.SlaStatus == SlaTimerStatusEnum.Breached
+                    && !reassignedTicketIds.Contains(x.TicketId)));
             return new SlaByStaffRow
             {
                 StaffId = g.Key.ToString(),
                 Name = names.TryGetValue(g.Key, out var n) ? n : null,
-                TotalAssigned = g.Count(),
+                TotalAssigned = g.Select(x => x.TicketId).Distinct().Count(),
                 Met = met,
                 Breached = breached,
                 ComplianceRate = TicketReportHelpers.Compliance(met, breached)

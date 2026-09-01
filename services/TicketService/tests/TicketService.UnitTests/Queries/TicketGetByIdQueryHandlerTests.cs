@@ -202,16 +202,17 @@ public class TicketGetByIdQueryHandlerTests
         var customerId = Guid.NewGuid();
         var ticket = MakeTicket(customerId: customerId);
         var dueAt = DateTime.UtcNow.AddDays(2);
-        ticket.SlaTimer = new SlaTimer
+        ticket.SlaTimers.Add(new SlaTimer
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Resolution,
             Priority = TicketPriorityEnum.P3Normal,
             StartedAt = DateTime.UtcNow,
             DueAt = dueAt,
             OriginalDueAt = dueAt,
             Status = SlaTimerStatusEnum.Running
-        };
+        });
         SetupMock([ticket]);
 
         var result = await _handler.Handle(new TicketGetByIdQuery
@@ -221,7 +222,8 @@ public class TicketGetByIdQueryHandlerTests
             ActorRoles = ["Customer"]
         }, default);
 
-        result.Data!.SlaTimer.Should().BeNull();
+        result.Data!.ResponseSlaTimer.Should().BeNull();
+        result.Data!.ResolutionSlaTimer.Should().BeNull();
         result.Data.ExpectedCompletionAtUtc.Should().Be(dueAt);
     }
 
@@ -231,16 +233,17 @@ public class TicketGetByIdQueryHandlerTests
         var staffId = Guid.NewGuid();
         var ticket = MakeTicket(PrimaryHandlerStaffId: staffId);
         var dueAt = DateTime.UtcNow.AddDays(2);
-        ticket.SlaTimer = new SlaTimer
+        ticket.SlaTimers.Add(new SlaTimer
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Resolution,
             Priority = TicketPriorityEnum.P3Normal,
             StartedAt = DateTime.UtcNow,
             DueAt = dueAt,
             OriginalDueAt = dueAt,
             Status = SlaTimerStatusEnum.Running
-        };
+        });
         SetupMock([ticket]);
 
         var result = await _handler.Handle(new TicketGetByIdQuery
@@ -250,10 +253,10 @@ public class TicketGetByIdQueryHandlerTests
             ActorRoles = ["Staff"]
         }, default);
 
-        result.Data!.SlaTimer.Should().NotBeNull();
-        result.Data.SlaTimer!.SlaWorkingDays.Should().Be(2, "P3 = 2 ngày làm việc");
-        result.Data.SlaTimer.SlaWorkingHours.Should().Be(20, "2 ngày × 10h/ngày");
-        result.Data.SlaTimer.RemainingWorkingMinutes.Should().BePositive();
+        result.Data!.ResolutionSlaTimer.Should().NotBeNull();
+        result.Data.ResolutionSlaTimer!.SlaWorkingDays.Should().Be(2, "P3 = 2 ngày làm việc");
+        result.Data.ResolutionSlaTimer.SlaWorkingHours.Should().Be(20, "2 ngày × 10h/ngày");
+        result.Data.ResolutionSlaTimer.RemainingWorkingMinutes.Should().BePositive();
         result.Data.ExpectedCompletionAtUtc.Should().Be(dueAt);
     }
 }

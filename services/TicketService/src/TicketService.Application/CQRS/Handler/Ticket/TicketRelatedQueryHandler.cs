@@ -52,7 +52,7 @@ public class TicketRelatedQueryHandler
 
         var query = _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
-            .Include(t => t.SlaTimer)
+            .Include(t => t.SlaTimers)
             .Include(t => t.BatteryAssets)
             // Thiếu Include này thì Assignments rỗng và mọi dòng hiện "chưa phân công" —
             // cùng cái bẫy đã sửa ở ManagerQueueQueryHandler.

@@ -5,6 +5,7 @@ using BatteryService.Application.Import;
 using BatteryService.Application.Interfaces;
 using BatteryService.Application.Mapping;
 using BatteryService.Domain.Enums;
+using ClosedXML.Excel;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
@@ -215,6 +216,8 @@ public class GetImportErrorsCsvQueryHandler
 public class GetImportTemplateQueryHandler
     : IRequestHandler<GetImportTemplateQuery, CommonResponse<ImportFileDownloadDto>>
 {
+    private const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
     private readonly IImportFileParser _parser;
 
     public GetImportTemplateQueryHandler(IImportFileParser parser) => _parser = parser;
@@ -222,24 +225,16 @@ public class GetImportTemplateQueryHandler
     public Task<CommonResponse<ImportFileDownloadDto>> Handle(
         GetImportTemplateQuery request, CancellationToken cancellationToken)
     {
-        var columns = _parser.TemplateColumns(request.EntityType);
-        if (columns.Count == 0)
-        {
-            return Task.FromResult(new CommonResponse<ImportFileDownloadDto>
-            {
-                IsSuccess = false,
-                StatusCode = 400,
-                Message = "Unknown import entity type."
-            });
-        }
+        using var workbook = new XLWorkbook();
 
-        var required = _parser.RequiredColumns(request.EntityType);
-        var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", columns));
-        // Dòng thứ hai là chú thích cột nào bắt buộc. Người dùng xoá dòng này trước khi nhập liệu;
-        // bộ đọc cũng bỏ qua nó vì mọi ô bắt buộc đều rỗng nên dòng sẽ báo lỗi rõ ràng nếu bị bỏ sót.
-        builder.AppendLine(string.Join(",", columns.Select(column =>
-            required.Contains(column, StringComparer.Ordinal) ? "REQUIRED" : "optional")));
+        // Đúng ba tên sheet, đúng thứ tự, mà ImportWorkbookSplitter tra khi nhận file nộp lên — lệch
+        // tên/thứ tự thì bộ tách vẫn dò được qua vị trí (0/1/2), nhưng khớp tên là đường chắc nhất.
+        AddSheet(workbook, ImportWorkbookSplitter.CustomersSheetName, ImportEntityTypeEnum.Customer);
+        AddSheet(workbook, ImportWorkbookSplitter.SitesSheetName, ImportEntityTypeEnum.Site);
+        AddSheet(workbook, ImportWorkbookSplitter.AssetsSheetName, ImportEntityTypeEnum.BatteryAsset);
+
+        using var buffer = new MemoryStream();
+        workbook.SaveAs(buffer);
 
         return Task.FromResult(new CommonResponse<ImportFileDownloadDto>
         {
@@ -247,9 +242,88 @@ public class GetImportTemplateQueryHandler
             StatusCode = 200,
             Data = new ImportFileDownloadDto
             {
-                FileName = $"import-template-{request.EntityType.ToString().ToLowerInvariant()}.csv",
-                Content = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(builder.ToString())).ToArray()
+                FileName = "import-template.xlsx",
+                ContentType = XlsxContentType,
+                Content = buffer.ToArray()
             }
         });
+    }
+
+    private void AddSheet(XLWorkbook workbook, string sheetName, ImportEntityTypeEnum entityType)
+    {
+        var columns = _parser.TemplateColumns(entityType);
+        var required = _parser.RequiredColumns(entityType);
+        var example = ExampleRow(entityType, columns).ToList();
+        var marker = columns.Select(column =>
+            required.Contains(column, StringComparer.Ordinal) ? "REQUIRED" : "optional").ToList();
+
+        var sheet = workbook.Worksheets.Add(sheetName);
+
+        for (var i = 0; i < columns.Count; i++)
+            sheet.Cell(1, i + 1).SetValue(columns[i]);
+        sheet.Row(1).Style.Font.SetBold();
+        sheet.Row(1).Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+
+        // Dòng bắt buộc/tuỳ chọn và dòng ví dụ đều bắt đầu bằng '#' ở ô đầu tiên — cùng quy ước
+        // comment mà ImportWorkbookSplitter dùng để coi hai dòng này KHÔNG phải dữ liệu thật. Nếu
+        // người dùng quên xoá trước khi nộp, chúng không bao giờ biến thành khách/site/pin giả.
+        WriteReferenceRow(sheet, 2, marker);
+        WriteReferenceRow(sheet, 3, example);
+        sheet.Rows("2:3").Style.Font.SetItalic();
+        sheet.Rows("2:3").Style.Font.FontColor = XLColor.Gray;
+
+        sheet.SheetView.FreezeRows(1);
+        sheet.Columns().AdjustToContents(1, 3);
+    }
+
+    private static void WriteReferenceRow(IXLWorksheet sheet, int rowNumber, IReadOnlyList<string> values)
+    {
+        for (var i = 0; i < values.Count; i++)
+            sheet.Cell(rowNumber, i + 1).SetValue(i == 0 ? "#" + values[0] : values[i]);
+    }
+
+    /// <summary>Một dòng dữ liệu hợp lệ mẫu, đúng thứ tự cột của <paramref name="columns"/>.</summary>
+    private static IEnumerable<string> ExampleRow(ImportEntityTypeEnum entityType, IReadOnlyList<string> columns)
+    {
+        var values = entityType switch
+        {
+            ImportEntityTypeEnum.Customer => new Dictionary<string, string>
+            {
+                ["external_customer_code"] = "VIDU-KH-001",
+                ["full_name"] = "Cong Ty Vi Du TNHH (XOA DONG NAY)",
+                ["email"] = "vidu@xoa-dong-nay.example",
+                ["phone"] = "0900000000",
+            },
+            ImportEntityTypeEnum.Site => new Dictionary<string, string>
+            {
+                ["external_site_code"] = "VIDU-SITE-001",
+                ["external_customer_code"] = "VIDU-KH-001",
+                ["site_name"] = "Nha May Vi Du (XOA DONG NAY)",
+                ["address"] = "KCN Vi Du - Tinh ABC",
+                ["latitude"] = "10.7769",
+                ["longitude"] = "106.7009",
+                ["install_date"] = "2021-03-15",
+                ["contact_person_name"] = "Nguyen Van Vi Du",
+                ["contact_person_phone"] = "0912345678",
+            },
+            ImportEntityTypeEnum.BatteryAsset => new Dictionary<string, string>
+            {
+                ["external_asset_code"] = "VIDU-PIN-001",
+                ["external_site_code"] = "VIDU-SITE-001",
+                ["serial_number"] = "PYL-US3000C-88A21",
+                ["battery_type_name"] = "US3000C",
+                ["manufacturer"] = "Pylontech",
+                ["nominal_capacity_ah"] = "74",
+                ["nominal_voltage"] = "51.2",
+                ["chemistry"] = "LiFePO4",
+                ["install_date"] = "2021-06-01",
+                ["warranty_end_date"] = "2029-06-01",
+                ["location"] = "Rack A-01",
+                ["notes"] = "Vi du ghi chu (XOA DONG NAY)",
+            },
+            _ => new Dictionary<string, string>(),
+        };
+
+        return columns.Select(column => values.GetValueOrDefault(column, string.Empty));
     }
 }

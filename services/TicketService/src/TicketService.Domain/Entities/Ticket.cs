@@ -45,6 +45,21 @@ public class Ticket : AuditableEntity
     /// </summary>
     public Guid? SiteId { get; set; }
 
+    /// <summary>
+    /// Loại bất thường đã sinh ra ticket (<c>AnomalyTypeEnum</c> của BatteryService).
+    /// <c>null</c> với ticket không đến từ alert (khách tự tạo, bảo trì định kỳ).
+    /// </summary>
+    /// <remarks>
+    /// Đây là ĐỊNH DANH của sự cố, khác với <see cref="Category"/> — category chỉ nói "cần thợ
+    /// tới sửa" nên cả năm loại môi trường đều là <c>Repair</c>.
+    ///
+    /// <para>Thiếu cột này thì không có gì phân biệt được ba sự cố môi trường ở cùng một site:
+    /// chúng dùng chung <c>BatteryAssetId = Guid.Empty</c> và chung category, nên ràng buộc
+    /// unique gom cả ba vào MỘT ticket — gas nổ trước thì nước và nhiệt độ sau đó chỉ được gắn
+    /// vào ticket gas, dù là ba sự cố khác nhau cần ba cách xử lý khác nhau.</para>
+    /// </remarks>
+    public int? AnomalyType { get; set; }
+
     public int ReopenCount { get; set; }
     public string? ResolutionSummary { get; set; }
     public DateTime? ResolvedAt { get; set; }
@@ -116,7 +131,16 @@ public class Ticket : AuditableEntity
     public Guid? ParentTicketId { get; set; }
 
     // Navigation properties
-    public SlaTimer? SlaTimer { get; set; }
+    // EF Core maps this collection; callers use the two [NotMapped] props below.
+    public ICollection<SlaTimer> SlaTimers { get; set; } = new List<SlaTimer>();
+
+    [NotMapped]
+    public SlaTimer? ResponseSlaTimer
+        => SlaTimers.FirstOrDefault(t => t.Type == SlaTimerTypeEnum.Response);
+
+    [NotMapped]
+    public SlaTimer? ResolutionSlaTimer
+        => SlaTimers.FirstOrDefault(t => t.Type == SlaTimerTypeEnum.Resolution);
     public ICollection<TicketActivity> Activities { get; set; } = new List<TicketActivity>();
     public ICollection<TicketChat> Chats { get; set; } = new List<TicketChat>();
     public ICollection<MaintenanceLog> MaintenanceLogs { get; set; } = new List<MaintenanceLog>();

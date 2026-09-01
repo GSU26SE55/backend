@@ -1,6 +1,6 @@
 # Nhập dữ liệu khách hàng & thiết bị từ bên thứ ba
 
-> **Trạng thái:** đã hiện thực xong · **Cập nhật:** 2026-08-20
+> **Trạng thái:** đã hiện thực xong · **Cập nhật:** 2026-09-01
 > **Phạm vi:** BatteryService (chính) · AuthService · EmailService · ApiGateway · SharedContracts
 > **Tài liệu này thay thế** `PARTNER_DATA_IMPORT_PLAN.md` (kế hoạch cũ, đã lỗi thời sau hai lần thu hẹp phạm vi).
 
@@ -38,8 +38,8 @@ tác → thuộc quyền quản trị hệ thống, không phải điều hành 
 
 | Method | Path | Mô tả |
 |---|---|---|
-| `GET` | `/api/imports/templates/{entityType}` | File CSV mẫu (1=khách, 2=site, 3=pin) |
-| `POST` | `/api/imports/batches` | Gửi file → kiểm định. **Không ghi dữ liệu nghiệp vụ** |
+| `GET` | `/api/imports/templates` | File Excel mẫu — một file `.xlsx`, ba sheet (khách/site/pin) |
+| `POST` | `/api/imports/batches` | Gửi **một file `.xlsx`** (field `file`) → kiểm định. **Không ghi dữ liệu nghiệp vụ** |
 | `GET` | `/api/imports/batches` | Danh sách lô |
 | `GET` | `/api/imports/batches/{id}` | Chi tiết + bộ đếm tiến độ |
 | `GET` | `/api/imports/batches/{id}/rows` | Từng dòng, lọc theo trạng thái |
@@ -49,8 +49,19 @@ tác → thuộc quyền quản trị hệ thống, không phải điều hành 
 
 Giao diện: `/admin/data-import` — menu **Third-party import**.
 
-`{entityType}` nhận cả số (`1`/`2`/`3`) lẫn tên enum (`Customer`/`Site`/`BatteryAsset`); giá trị
-ngoài ba loại đó trả `400`. Giao diện gửi số.
+> **Đổi 2026-09-01:** trước đây mỗi loại (khách/site/pin) là một file CSV riêng, nộp tối đa ba lần
+> một lượt (`customersFile`/`sitesFile`/`assetsFile`). Giờ chỉ còn **một file `.xlsx`** với ba sheet
+> cố định tên `1-Customers`, `2-Sites`, `3-Assets` (đúng thứ tự ghi thật). `ImportWorkbookSplitter`
+> tách workbook thành ba luồng CSV ngay khi nhận — **toàn bộ pipeline phía sau (kiểm định, đối
+> chiếu chéo, ghi thật, hoàn tác) không đổi một dòng nào**, vẫn hoạt động trên CSV như cũ. Đổi tên
+> sheet vẫn nạp được nhờ dò theo vị trí (0=khách, 1=site, 2=pin) nếu không khớp đúng tên. Một sheet
+> không có dòng dữ liệu nào (ngoài dòng chú thích `#`) coi như không tham gia lô — giống hệt trước
+> đây không đính kèm file cho loại đó, không phải lỗi.
+>
+> Đọc ô Excel theo đúng kiểu dữ liệu (số/ngày), không đọc theo chuỗi hiển thị: một ô số luôn ra dấu
+> chấm thập phân bất kể Excel của người dùng đặt vùng miền gì (kể cả Excel tiếng Việt hiển thị dấu
+> phẩy), và một ô ngày luôn ra `yyyy-MM-dd` bất kể định dạng hiển thị của ô — né được cả lớp lỗi
+> "74,5 bị từ chối" mà trước đây người nhập CSV phải tự tránh bằng tay.
 
 ### Mã trạng thái trả về
 
@@ -70,13 +81,15 @@ Phân biệt `422` với `201`-kèm-dòng-hỏng: `422` là hỏng ở mức **f
 
 ## 3. Định dạng file
 
-| Loại | Cột bắt buộc | Cột tuỳ chọn |
-|---|---|---|
-| Khách hàng | `external_customer_code`, `full_name`, `email` | `phone` |
-| Site | `external_site_code`, `external_customer_code`, `site_name` | `address`, `latitude`, `longitude`, `install_date`, `contact_person_name`, `contact_person_phone` |
-| Pin | `external_asset_code`, `external_site_code`, `serial_number`, `battery_type_name` | `manufacturer`, `nominal_capacity_ah`, `nominal_voltage`, `chemistry`, `install_date`, `warranty_end_date`, `location`, `notes` |
+Một workbook `.xlsx`, ba sheet cố định tên và thứ tự:
 
-Các file nối nhau bằng **mã của bên thứ ba**, không bằng định danh nội bộ — lúc họ xuất file chưa
+| Sheet | Cột bắt buộc | Cột tuỳ chọn |
+|---|---|---|
+| `1-Customers` | `external_customer_code`, `full_name`, `email` | `phone` |
+| `2-Sites` | `external_site_code`, `external_customer_code`, `site_name` | `address`, `latitude`, `longitude`, `install_date`, `contact_person_name`, `contact_person_phone` |
+| `3-Assets` | `external_asset_code`, `external_site_code`, `serial_number`, `battery_type_name` | `manufacturer`, `nominal_capacity_ah`, `nominal_voltage`, `chemistry`, `install_date`, `warranty_end_date`, `location`, `notes` |
+
+Ba sheet nối nhau bằng **mã của bên thứ ba**, không bằng định danh nội bộ — lúc họ xuất file chưa
 biết ID bên mình.
 
 > **Cấm** đặt tên cột chứa `kwh`, `capacity_kw`, `co2` — bộ kiểm tra CI (`rule-checks.sh` rule 4)
@@ -237,7 +250,6 @@ Ba bảng, đều kế thừa `AuditableEntity`, đều xoá mềm.
 | Hoàn tác xoá tài khoản khách | Có thể đã dùng để đăng nhập hoặc gắn phiếu bảo trì |
 | Nhập lịch sử dữ liệu đo | Ngoài phạm vi; `SensorReadingSourceTypeEnum.External` đã sẵn nếu sau này cần |
 | Connector kéo định kỳ | Ngoài phạm vi |
-| XLSX | Chỉ CSV — dependency nhẹ, dễ test |
 | Sửa validator của đường tạo thủ công | Sẽ làm hỏng hành vi hiện có và test đang xanh |
 
 ## 13. Ba điều dễ hiểu nhầm khi vận hành

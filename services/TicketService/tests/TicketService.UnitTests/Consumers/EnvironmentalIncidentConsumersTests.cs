@@ -83,6 +83,8 @@ public class EnvironmentalIncidentConsumersTests
         // Và KHÔNG đeo mác "[Auto]": đó là khuôn tiêu đề của ticket bất thường một viên pin.
         created.Title.Should().NotContain("[Auto]");
         created.Title.Should().StartWith("Environmental incident at");
+        // Tiêu đề phải nêu rõ loại sự cố (IncidentType 1 = Smoke) chứ không dừng ở tên site.
+        created.Title.Should().EndWith("- Smoke detected");
         timer.Should().NotBeNull();
         timer!.Status.Should().Be(SlaTimerStatusEnum.Running);
         timer.DueAt.Should().Be(timer.StartedAt.AddHours(4), "P1 Response SLA = 4 giờ liên tục");
