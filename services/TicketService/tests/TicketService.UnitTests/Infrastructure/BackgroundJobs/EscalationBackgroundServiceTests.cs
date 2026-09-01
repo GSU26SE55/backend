@@ -181,6 +181,7 @@ public class EscalationBackgroundServiceTests
         {
             Id = Guid.NewGuid(),
             TicketId = ticketId,
+            Type = SlaTimerTypeEnum.Resolution,
             Priority = TicketPriorityEnum.P3Normal,
             Status = SlaTimerStatusEnum.Breached,
             StartedAt = breachedAt.AddDays(-3),

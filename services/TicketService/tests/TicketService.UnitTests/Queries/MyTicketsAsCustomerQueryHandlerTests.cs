@@ -116,16 +116,17 @@ public class MyTicketsAsCustomerQueryHandlerTests
 
         var ticket = MakeTicket(myId);
         var dueAt = DateTime.UtcNow.AddDays(2);
-        ticket.SlaTimer = new SlaTimer
+        ticket.SlaTimers.Add(new SlaTimer
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Response,
             Priority = TicketPriorityEnum.P3Normal,
             StartedAt = DateTime.UtcNow,
             DueAt = dueAt,
             OriginalDueAt = dueAt,
             Status = SlaTimerStatusEnum.Running
-        };
+        });
         SetupMock([ticket]);
 
         var result = await _handler.Handle(new MyTicketsAsCustomerQuery
@@ -134,7 +135,8 @@ public class MyTicketsAsCustomerQueryHandlerTests
             PageSize = 10
         }, default);
 
-        result.Data!.Items[0].SlaTimer.Should().BeNull();
+        result.Data!.Items[0].ResponseSlaTimer.Should().BeNull();
+        result.Data.Items[0].ResolutionSlaTimer.Should().BeNull();
         result.Data.Items[0].ExpectedCompletionAtUtc.Should().Be(dueAt);
     }
 }

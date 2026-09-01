@@ -104,6 +104,7 @@ public class TicketEnvironmentalIncidentDetectedConsumer : IConsumer<Environment
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Response,
             Priority = priority,
             StartedAt = now,
             DueAt = dueAt,
