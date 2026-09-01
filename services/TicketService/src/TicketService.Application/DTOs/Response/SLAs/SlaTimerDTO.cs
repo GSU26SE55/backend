@@ -41,6 +41,12 @@ public class SlaTimerDTO
     public int RemainingWorkingMinutes { get; set; }
 
     /// <summary>
+    /// Đồng hồ tiếp cứu nội bộ — phút làm việc còn lại trong hạn mức 24h (1440 phút) của Staff mới.
+    /// Chỉ có giá trị khi Status == Breached và ticket đang InProgress.
+    /// </summary>
+    public int? RescueRemainingMinutes { get; set; }
+
+    /// <summary>
     /// Số phút SLA calendar (ngày lễ/nghỉ) đã cộng thêm vào <see cref="DueAt"/> so với deadline
     /// nếu không có ngày nghỉ nào rơi vào khoảng chạy của timer. 0 nếu không có ngày nào bị loại.
     /// </summary>
@@ -48,10 +54,4 @@ public class SlaTimerDTO
 
     /// <summary>Các ngày (local date) trong <c>SlaNonWorkingPeriod</c> rơi vào khoảng chạy của timer.</summary>
     public List<DateOnly> CalendarExtensionDays { get; set; } = [];
-
-    /// <summary>
-    /// Đồng hồ tiếp cứu nội bộ — phút làm việc còn lại trong hạn mức 24h (1440 phút) của Staff mới.
-    /// Chỉ có giá trị khi Status == Breached và ticket đang InProgress.
-    /// </summary>
-    public int? RescueRemainingMinutes { get; set; }
 }

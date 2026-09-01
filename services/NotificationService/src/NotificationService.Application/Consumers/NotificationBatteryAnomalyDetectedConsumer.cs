@@ -1,9 +1,9 @@
 using System.Linq;
 using System.Text.Json;
+using NotificationService.Application.Services;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces.Repositories;
-using NotificationService.Application.Services;
 using NotificationService.Application.Templates;
 using NotificationService.Domain.Enums;
 using SharedContracts.Events;

@@ -145,13 +145,13 @@ public static class TicketQueryHelper
             SlaWorkingDays = slaCalculator.GetSlaWorkingDays(sla.Priority),
             SlaWorkingHours = slaCalculator.GetSlaHours(sla.Priority),
             RemainingWorkingMinutes = isStoppedOrTerminal ? 0 : ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc),
+            RescueRemainingMinutes = sla.Status == SlaTimerStatusEnum.Breached && rescueAssignmentCreatedAt.HasValue
+                ? Math.Max(0, 1440 - (int)slaCalculator.GetWorkingMinutesBetween(rescueAssignmentCreatedAt.Value, atUtc))
+                : null,
             CalendarExtensionMinutes = calendarExtension.Minutes,
             CalendarExtensionDays = calendarExtension.NonWorkingDays is null
                 ? []
                 : [.. calendarExtension.NonWorkingDays],
-            RescueRemainingMinutes = sla.Status == SlaTimerStatusEnum.Breached && rescueAssignmentCreatedAt.HasValue
-                ? Math.Max(0, 1440 - (int)slaCalculator.GetWorkingMinutesBetween(rescueAssignmentCreatedAt.Value, atUtc))
-                : null
         };
     }
 
