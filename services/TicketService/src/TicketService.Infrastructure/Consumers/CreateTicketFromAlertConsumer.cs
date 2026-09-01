@@ -89,10 +89,24 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
         // không tìm thấy ticket đã có ⇒ tạo trùng rồi vỡ unique index.
         var category = TicketAutoCreateFromAlertCommandHandler.MapAnomalyToCategory(msg.AnomalyCategory);
 
+        // Ticket MOI TRUONG doi theo (Site, loai su co); ticket PIN giu nguyen (Asset, Category).
+        //
+        // Truoc day ca hai dung chung mot dieu kien (BatteryAssetId, Category). Su co moi truong
+        // cap site deu mang `BatteryAssetId = Guid.Empty` va `Category = Repair` (ca nam loai moi
+        // truong deu map ve day), nen ba su co khac nhau o cung mot site — gas, ro nuoc, qua nhiet
+        // — bi coi la MOT: cai nao nổ truoc chiem ticket, hai cai sau chi duoc gan vao ticket do.
+        // Do la ba van de khac nhau can ba cach xu ly khac nhau, khong the gop.
+        //
+        // Dieu kien nay PHAI khop hai partial index ben DB (`ux_tickets_active_auto_per_asset_category`
+        // cho ticket pin, `ux_tickets_active_env_per_site_anomaly` cho ticket site). Lech nhau thi
+        // check cho qua roi INSERT vo 23505.
+        var isSiteLevel = msg.SiteId.HasValue;
+
         var existingActive = await _uow.Tickets.GetAllAsync()
             .Where(t =>
-                t.BatteryAssetId == msg.BatteryAssetId &&
-                t.Category == category &&
+                (isSiteLevel
+                    ? t.SiteId == msg.SiteId && t.AnomalyType == msg.AnomalyType
+                    : t.SiteId == null && t.BatteryAssetId == msg.BatteryAssetId && t.Category == category) &&
                 t.OriginAlertId != null &&
                 ActiveStatuses.Contains(t.Status) &&
                 !t.IsDeleted)
@@ -117,6 +131,7 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
             BatteryAssetId = msg.BatteryAssetId,
             CustomerId = msg.CustomerId,
             SiteId = msg.SiteId,
+            AnomalyType = msg.AnomalyType,
             AnomalyCategory = msg.AnomalyCategory,
             Title = msg.Title,
             Description = msg.Description,

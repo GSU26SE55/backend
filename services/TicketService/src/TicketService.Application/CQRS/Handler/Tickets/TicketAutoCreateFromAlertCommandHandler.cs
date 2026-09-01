@@ -74,6 +74,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             //
             // Null khi alert đến từ event V1 (không có SiteId); khi đó ticket không gom theo site.
             SiteId = request.SiteId,
+            AnomalyType = request.AnomalyType,
             ImpactScope = impact,
             UrgencyLevel = urgency,
             Priority = priority,

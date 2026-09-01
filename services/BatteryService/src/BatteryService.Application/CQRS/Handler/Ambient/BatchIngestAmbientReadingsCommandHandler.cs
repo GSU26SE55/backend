@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BatteryService.Application.Anomaly;
+using BatteryService.Application.Services;
 using BatteryService.Application.CQRS.Command.Ambient;
 using BatteryService.Application.Helpers;
 using BatteryService.Application.Interfaces;
@@ -20,12 +21,16 @@ public class BatchIngestAmbientReadingsCommandHandler
 {
     private readonly IBatteryUnitOfWork _uow;
     private readonly AnomalyEngineOptions _options;
+    private readonly IOutboxSignal _outboxSignal;
 
     public BatchIngestAmbientReadingsCommandHandler(
-        IBatteryUnitOfWork uow, IOptions<AnomalyEngineOptions> options)
+        IBatteryUnitOfWork uow,
+        IOptions<AnomalyEngineOptions> options,
+        IOutboxSignal outboxSignal)
     {
         _uow = uow;
         _options = options.Value;
+        _outboxSignal = outboxSignal;
     }
 
     public async Task<CommonResponse<int>> Handle(BatchIngestAmbientReadingsCommand request, CancellationToken cancellationToken)
@@ -91,9 +96,17 @@ public class BatchIngestAmbientReadingsCommandHandler
             await _uow.AmbientReadings.AddAsync(reading);
         }
 
-        await DetectAmbientAnomaliesAsync(readings, cancellationToken);
+        var raisedAlerts = await DetectAmbientAnomaliesAsync(readings, cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
+
+        // Đẩy event đi NGAY thay vì đợi hết tick relay (5 s) — với cảnh báo môi trường thì 5 s đó
+        // là phần chờ lớn nhất còn lại: ngưỡng đã chấm xong ngay trong chính request này.
+        //
+        // Chỉ báo khi lượt này THỰC SỰ sinh alert: gói ambient về đều đặn mỗi 15 s, đánh thức
+        // relay ở mọi gói là bắt nó quét rỗng suốt ngày mà không nhanh thêm được gì.
+        if (raisedAlerts)
+            _outboxSignal.Notify();
 
         return new CommonResponse<int>
         {
@@ -109,9 +122,14 @@ public class BatchIngestAmbientReadingsCommandHandler
     /// nhà kho 45°C + ẩm 95% (combo thoát nhiệt pin) hệ thống im lặng. Detect-at-ingest: latency thấp,
     /// ambient 1 phút/mẫu nên không nặng. Tạo Alert site-level (BatteryAssetId=null) như environmental.
     /// </summary>
-    private async Task DetectAmbientAnomaliesAsync(
+    /// <returns>
+    /// <c>true</c> nếu lượt này có ghi ít nhất một event vào outbox — caller dùng để đánh thức
+    /// relay ngay thay vì đợi hết tick.
+    /// </returns>
+    private async Task<bool> DetectAmbientAnomaliesAsync(
         IReadOnlyList<AmbientReading> readings, CancellationToken ct)
     {
+        var wroteEvent = false;
         var now = DateTime.UtcNow;
         var siteIds = readings.Select(r => r.SiteId).Distinct().ToList();
 
@@ -120,7 +138,7 @@ public class BatchIngestAmbientReadingsCommandHandler
             .ToListAsync(ct);
         var configBySite = configs.ToDictionary(c => c.SiteId);
         if (configBySite.Count == 0)
-            return;
+            return wroteEvent;
 
         // Cần CustomerId + tên site để dựng event khởi tạo saga (alert site-level không có asset).
         var siteById = await _uow.Sites.GetAllAsync()
@@ -245,7 +263,8 @@ public class BatchIngestAmbientReadingsCommandHandler
                         AnomalyTypeName: alert.AnomalyType.ToString(),
                         SeverityName: alert.Severity.ToString());
 
-                    await _uow.OutboxMessages.AddAsync(new OutboxEntity
+                    wroteEvent = true;
+                await _uow.OutboxMessages.AddAsync(new OutboxEntity
                     {
                         Id = Guid.NewGuid(),
                         AggregateId = alert.Id,
@@ -272,6 +291,7 @@ public class BatchIngestAmbientReadingsCommandHandler
                     AnomalyTypeName: alert.AnomalyType.ToString(),
                     SeverityName: alert.Severity.ToString());
 
+                wroteEvent = true;
                 await _uow.OutboxMessages.AddAsync(new OutboxEntity
                 {
                     Id = Guid.NewGuid(),
@@ -299,6 +319,7 @@ public class BatchIngestAmbientReadingsCommandHandler
                     CellVoltageDeltaMv: null,
                     EnvironmentalIncidentId: null);
 
+                wroteEvent = true;
                 await _uow.OutboxMessages.AddAsync(new OutboxEntity
                 {
                     Id = Guid.NewGuid(),
@@ -309,5 +330,7 @@ public class BatchIngestAmbientReadingsCommandHandler
                 });
             }
         }
+
+        return wroteEvent;
     }
 }
