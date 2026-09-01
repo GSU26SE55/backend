@@ -61,8 +61,11 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
 
             account.PhoneNumber = phone;
         }
-        else
+        else if (request.PhoneNumber is not null)
         {
+            // Chuỗi rỗng = user chủ động xoá số. Field vắng mặt thì giữ nguyên: form profile
+            // trên mobile không gửi khoá này, và xoá vô điều kiện sẽ thu hồi luôn trạng thái
+            // đã xác thực SMS — user phải làm lại OTP mà không hiểu vì sao.
             account.PhoneNumber = null;
             account.PhoneConfirmed = false;
         }
@@ -80,12 +83,32 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
         }
 
         account.FullName = request.FullName.Trim();
-        account.Address = request.Address?.Trim();
-        account.DateOfBirth = request.BirthDate;
 
-        profile.Address = request.Address?.Trim();
-        profile.BirthDate = request.BirthDate;
-        profile.TimeZone = request.TimeZone?.Trim();
+        // Chỉ ghi đè khi client thực sự gửi field. Form profile trên mobile chỉ PUT
+        // fullName/phoneNumber/address — ghi đè vô điều kiện là ngày sinh và timezone user
+        // đặt trên web bị xoá sạch ngay lần đầu họ sửa hồ sơ trên điện thoại.
+        if (request.Address is not null)
+        {
+            account.Address = request.Address.Trim();
+            profile.Address = request.Address.Trim();
+        }
+
+        if (request.ClearBirthDate)
+        {
+            account.DateOfBirth = null;
+            profile.BirthDate = null;
+        }
+        else if (request.BirthDate.HasValue)
+        {
+            account.DateOfBirth = request.BirthDate;
+            profile.BirthDate = request.BirthDate;
+        }
+
+        // TimeZone là hằng số của deployment (Asia/Ho_Chi_Minh), không client nào có ô sửa —
+        // nên chuỗi rỗng chỉ có thể là do client gửi nhầm, không phải ý người dùng. Ghi đè
+        // bằng "" sẽ xoá mất timezone dùng để tính quiet hours.
+        if (!string.IsNullOrWhiteSpace(request.TimeZone))
+            profile.TimeZone = request.TimeZone.Trim();
 
         await _messageProducer.PublishAsync(new AccountProfileUpdatedEvent(
             account.Id,

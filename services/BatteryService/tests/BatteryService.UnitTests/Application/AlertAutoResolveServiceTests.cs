@@ -65,9 +65,9 @@ public class AlertAutoResolveServiceTests
         {
             Id = Guid.NewGuid(),
             BatteryTypeId = batteryTypeId,
-            VoltageMin = 10m,
+            VoltageMin = 14m,
             VoltageMax = 15m,
-            TemperatureMin = -10m,
+            TemperatureMin = 45m,
             TemperatureMax = 45m,
             SocWarningThreshold = 20m,
             SocCriticalThreshold = 10m,

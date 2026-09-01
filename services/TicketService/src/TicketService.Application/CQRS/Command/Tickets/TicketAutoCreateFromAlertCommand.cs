@@ -14,6 +14,11 @@ public class TicketAutoCreateFromAlertCommand : IRequest<TicketActionResponse>, 
     public Guid OriginAlertId { get; set; }
     public string AnomalyCategory { get; set; } = string.Empty;
     public Guid BatteryAssetId { get; set; }
+
+    /// <summary>
+    /// Site của alert / pin — dùng để gom ticket này với ticket environmental cùng cabinet.
+    /// </summary>
+    public Guid? SiteId { get; set; }
     /// <summary>
     /// Customer id.
     /// </summary>

@@ -65,8 +65,8 @@ public class BatteryCommandValidationTests
         var command = new UpsertThresholdConfigCommand
         {
             BatteryTypeId = Guid.NewGuid(),
-            VoltageMin = 10,
-            VoltageMax = 14,
+            VoltageMin = 14,
+            VoltageMax = 15,
             TemperatureMin = 0,
             TemperatureMax = 60,
             SocWarningThreshold = 20,

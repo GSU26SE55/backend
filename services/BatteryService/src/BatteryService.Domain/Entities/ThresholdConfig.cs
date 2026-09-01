@@ -6,12 +6,16 @@ public class ThresholdConfig : AuditableEntity
 {
     public Guid BatteryTypeId { get; set; }
 
+    /// <summary>V — đạt tới mốc này là Warning.</summary>
     public decimal VoltageMin { get; set; }
 
+    /// <summary>V — đạt tới mốc này là Critical.</summary>
     public decimal VoltageMax { get; set; }
 
+    /// <summary>°C — đạt tới mốc này là Critical.</summary>
     public decimal TemperatureMax { get; set; }
 
+    /// <summary>°C — đạt tới mốc này là Warning.</summary>
     public decimal TemperatureMin { get; set; }
 
     public decimal SocWarningThreshold { get; set; }

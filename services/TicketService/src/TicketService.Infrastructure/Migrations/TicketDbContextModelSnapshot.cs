@@ -1259,6 +1259,14 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("merged_into_ticket_id");
 
+                    b.Property<Guid?>("ParentTicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_ticket_id");
+
+                    b.Property<Guid?>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
                     b.Property<int>("Origin")
                         .HasColumnType("integer")
                         .HasColumnName("origin");
@@ -1345,6 +1353,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("scheduled_start_at_utc");
 
+                    b.Property<Guid?>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
@@ -1385,6 +1397,10 @@ namespace TicketService.Infrastructure.Migrations
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("MergedIntoTicketId");
+
+                    b.HasIndex("ParentTicketId");
+
+                    b.HasIndex("SiteId");
 
                     b.HasIndex("Priority");
 

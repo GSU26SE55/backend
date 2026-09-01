@@ -201,43 +201,16 @@ public class TicketChatsController : ControllerBase
 
         var result = await _mediator.Send(query, ct);
 
-        // Auto mark-read trang hiện tại (#541) — Command riêng, không ảnh hưởng response của Query.
-        var chatIds = result.Data?.Items?
-            .Where(c => Guid.TryParse(c.Id, out _))
-            .Select(c => Guid.Parse(c.Id))
-            .ToList();
-
-        if (chatIds != null && chatIds.Count > 0)
-        {
-            try
-            {
-                var markResult = await _mediator.Send(new ChatMarkAsReadCommand
-                {
-                    TicketId = ticketId,
-                    UserId = actorId.Value,
-                    UserRole = ResolveActorRole(_currentUser.Role),
-                    ActorRoles = GetCurrentRoles(),
-                    ChatIds = chatIds
-                }, ct);
-
-                // Handler trả 503 (hàng đợi đầy) bằng GIÁ TRỊ, không ném exception — catch bên dưới
-                // không thấy. Nuốt im lặng thì client tưởng đã đọc hết, không gọi lại, unread kẹt.
-                // Không đổi status của response chính (đây là side-effect), nhưng báo qua header
-                // để client biết đường POST mark-read lại.
-                if (!markResult.IsSuccess)
-                {
-                    Response.Headers["X-Mark-Read-Incomplete"] = "true";
-                    _logger.LogWarning(
-                        "[GetChats] Auto mark-read incomplete for ticket {TicketId}, user {UserId}: {StatusCode} {Message}",
-                        ticketId, actorId.Value, markResult.StatusCode, markResult.Message);
-                }
-            }
-            catch (Exception ex)
-            {
-                Response.Headers["X-Mark-Read-Incomplete"] = "true";
-                _logger.LogWarning(ex, "[GetChats] Auto mark-read failed for ticket {TicketId}, user {UserId}", ticketId, actorId.Value);
-            }
-        }
+        // KHÔNG auto mark-read ở đây nữa (bỏ #541).
+        //
+        // GET này chạy mỗi lần danh sách chat được invalidate — trong đó có cả realtime
+        // ChatAdded, vốn được đăng ký ở CẤP TRANG chi tiết ticket chứ không riêng tab Chat.
+        // Hệ quả: tin nhắn vừa tới bị đánh dấu đã đọc ngay giây đó (read_at == created_at),
+        // dù người dùng đang ở tab Info và chưa hề nhìn thấy nó — người gửi thấy "đã xem" giả.
+        //
+        // Đánh dấu đã đọc giờ do client chủ động gọi POST /chats/mark-read khi thread thực sự
+        // được render (TicketCommentThread ở web, CommentThread ở mobile). Đó cũng là nơi duy
+        // nhất biết được người dùng có đang nhìn tin hay không — GET thì không thể biết.
 
         return StatusCode(result.StatusCode, result);
     }
@@ -568,13 +541,13 @@ public class TicketChatsController : ControllerBase
     }
 
     /// <summary>
-    /// Pin 1 bình luận — chỉ Staff/Manager/Admin. Tối đa 3 bình luận pin/ticket.
+    /// Pin 1 bình luận — chỉ Staff/Manager/Admin. Tối đa 5 bình luận pin/ticket.
     /// </summary>
     /// <param name="ticketId">ID của Ticket.</param>
     /// <param name="id">ID của bình luận cần pin.</param>
     /// <param name="ct">Token hủy request.</param>
     /// <response code="200">Pin bình luận thành công.</response>
-    /// <response code="400">Bình luận đã được pin hoặc đã đạt giới hạn 3 pin/ticket.</response>
+    /// <response code="400">Bình luận đã được pin hoặc đã đạt giới hạn 5 pin/ticket.</response>
     /// <response code="403">Không có quyền pin bình luận.</response>
     /// <response code="404">Không tìm thấy ticket hoặc bình luận.</response>
     [HttpPost("{id}/pin")]

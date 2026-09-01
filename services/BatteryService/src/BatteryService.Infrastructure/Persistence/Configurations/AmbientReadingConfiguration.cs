@@ -24,8 +24,7 @@ public class AmbientReadingConfiguration : IEntityTypeConfiguration<AmbientReadi
 
         builder.Property(a => a.AmbientTemperature)
             .HasColumnName("ambient_temperature_celsius")
-            .HasPrecision(6, 2)
-            .IsRequired();
+            .HasPrecision(6, 2);
 
         builder.Property(a => a.Humidity)
             .HasColumnName("humidity_percent")
@@ -34,6 +33,13 @@ public class AmbientReadingConfiguration : IEntityTypeConfiguration<AmbientReadi
         builder.Property(a => a.SolarIrradiance)
             .HasColumnName("solar_irradiance_wm2")
             .HasPrecision(8, 2);
+
+        builder.Property(a => a.GasConcentration)
+            .HasColumnName("gas_concentration_percent")
+            .HasPrecision(5, 2);
+
+        builder.Property(a => a.WaterLeakDetected)
+            .HasColumnName("water_leak_detected");
 
         builder.Property(a => a.Source)
             .HasColumnName("source")

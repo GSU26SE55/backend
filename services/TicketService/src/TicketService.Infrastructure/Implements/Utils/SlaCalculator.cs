@@ -44,6 +44,18 @@ public class SlaCalculator : ISlaCalculator
         return CalculateDueDate(ticket.CreatedAt, ticket.Priority.Value);
     }
 
+    public DateTime CalculateResponseDueDate(DateTime startedAt, TicketPriorityEnum priority)
+    {
+        var hours = priority switch
+        {
+            TicketPriorityEnum.P1Critical => 4,
+            TicketPriorityEnum.P2High => 24,
+            TicketPriorityEnum.P3Normal => 72,
+            _ => 72
+        };
+        return EnsureUtc(startedAt).AddHours(hours);
+    }
+
     public DateTime CalculateDueDate(DateTime startedAt, TicketPriorityEnum priority)
         => AddWorkingMinutes(startedAt, GetSlaMinutes(priority));
 
@@ -51,9 +63,9 @@ public class SlaCalculator : ISlaCalculator
     {
         return priority switch
         {
-            TicketPriorityEnum.P1Critical => 1,
+            TicketPriorityEnum.P1Critical => 14,
             TicketPriorityEnum.P2High => 3,
-            TicketPriorityEnum.P3Normal => 7,
+            TicketPriorityEnum.P3Normal => 2,
             _ => throw new ArgumentOutOfRangeException(nameof(priority),
                 $"Priority value {priority} is not supported for SLA calculation.")
         };
@@ -157,7 +169,8 @@ public class SlaCalculator : ISlaCalculator
             : atUtc;
         var remaining = GetWorkingMinutesBetween(observedAt, timer.DueAt);
         var budget = GetSlaMinutes(timer.Priority);
-        return Math.Clamp(remaining / budget * 100d, 0d, 100d);
+        var percent = Math.Clamp(remaining / budget * 100d, 0d, 100d);
+        return Math.Round(percent, 2, MidpointRounding.AwayFromZero);
     }
 
     public bool ShouldSendNextSessionReminder(DateTime warningSentAtUtc, DateTime atUtc)
@@ -173,6 +186,26 @@ public class SlaCalculator : ISlaCalculator
         var nextOpeningUtc = NormalizeToNextWorkingInstant(ToUtc(warningLocal.Date.Add(_end)));
         var now = EnsureUtc(atUtc);
         return now >= nextOpeningUtc && IsWorkingTime(now);
+    }
+
+    public (int Minutes, IReadOnlyList<DateOnly> NonWorkingDays) GetCalendarExtension(DateTime startedAtUtc, DateTime dueAtUtc)
+    {
+        var start = EnsureUtc(startedAtUtc);
+        var due = EnsureUtc(dueAtUtc);
+        if (_calendarProvider is null || due <= start)
+            return (0, []);
+
+        var firstDate = ToLocal(start).Date;
+        var lastDate = ToLocal(due).Date;
+        var nonWorkingDays = new List<DateOnly>();
+
+        for (var date = firstDate; date <= lastDate; date = date.AddDays(1))
+        {
+            if (_workingDays.Contains(date.DayOfWeek) && _calendarProvider.IsNonWorkingDate(DateOnly.FromDateTime(date)))
+                nonWorkingDays.Add(DateOnly.FromDateTime(date));
+        }
+
+        return (checked(nonWorkingDays.Count * _workingMinutesPerDay), nonWorkingDays);
     }
 
     private bool IsWorkingLocal(DateTime local) =>

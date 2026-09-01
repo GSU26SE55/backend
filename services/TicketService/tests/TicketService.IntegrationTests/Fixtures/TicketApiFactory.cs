@@ -118,6 +118,12 @@ public class TicketApiFactory : WebApplicationFactory<Program>
 
 internal class StubBatteryLookupClient : IBatteryLookupClient
 {
+    /// Site cố định để test kiểm được SiteId có được ghi vào ticket hay không.
+    public static readonly Guid StubSiteId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
     public Task<string?> GetSerialAsync(Guid assetId, CancellationToken ct) =>
         Task.FromResult<string?>("TEST-BATTERY-001");
+
+    public Task<BatteryLookupResult> GetSnapshotAsync(Guid assetId, CancellationToken ct) =>
+        Task.FromResult(new BatteryLookupResult("TEST-BATTERY-001", StubSiteId));
 }

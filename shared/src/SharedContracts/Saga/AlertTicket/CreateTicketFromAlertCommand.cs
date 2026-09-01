@@ -41,5 +41,7 @@ public record CreateTicketFromAlertCommand(
     bool? AiBlocked = null,
     bool? AiEnriched = null,
     string? AiLlmProvider = null,
-    string? AiPrescriptionId = null
+    string? AiPrescriptionId = null,
+    // Site của pin / alert, forward từ BatteryAnomalyDetectedV2Event.SiteId.
+    Guid? SiteId = null
 ) : IntegrationEvent;

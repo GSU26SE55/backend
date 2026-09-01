@@ -66,8 +66,20 @@ public class GetBmsSwitchStateQueryHandler
             .ToListAsync(cancellationToken);
 
         var dto = new BmsSwitchStateDto();
+
+        // Nhận state từ CẢ `Failed`, không chỉ `Ok`.
+        //
+        // Hợp đồng với firmware: `state` là trạng thái ĐỌC LẠI từ BMS, `status` chỉ nói lệnh có
+        // trọn vẹn hay không. Khi chỉ một MOSFET đổi được, firmware phải trả `failed` kèm state
+        // lệch thật (vd charge=false, discharge=true). Trước đây chỗ này chỉ lấy state của lệnh
+        // `Ok`, nên state thật đó bị lưu vào `ResultJson` rồi bỏ xó, còn UI tiếp tục hiển thị
+        // state của một lệnh `Ok` CŨ HƠN — tức là báo cả hai MOSFET đã tắt trong khi pin vẫn
+        // đang cấp điện cho tải. Đây là điều khiển điện lực, sai lệch kiểu này nguy hiểm.
+        //
+        // Vẫn loại `TimedOut` (không có ack nên `ResultJson` rỗng) và `Unknown` (firmware không
+        // hiểu lệnh ⇒ state nó gửi kèm không đáng tin).
         var lastVerified = commands.FirstOrDefault(command =>
-            command.Status == IotDeviceCommandStatusEnum.Ok
+            command.Status is IotDeviceCommandStatusEnum.Ok or IotDeviceCommandStatusEnum.Failed
             && !string.IsNullOrWhiteSpace(command.ResultJson));
         if (lastVerified is not null && TryReadState(lastVerified.ResultJson!, out var charge, out var discharge))
         {
@@ -98,6 +110,7 @@ public class GetBmsSwitchStateQueryHandler
                 Enable = enable,
                 Status = lastCompleted.Status,
                 Error = NormalizeCommandError(lastCompleted.Status, lastCompleted.AckError),
+                DeviceReason = lastCompleted.AckError,
                 AckedAt = lastCompleted.AckedAt
             };
         }

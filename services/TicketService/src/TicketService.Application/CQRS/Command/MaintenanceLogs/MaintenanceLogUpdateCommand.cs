@@ -53,6 +53,8 @@ public class MaintenanceLogUpdateCommand : IRequest<TicketActionResponse>, IVali
 
         if (Summary != null && string.IsNullOrWhiteSpace(Summary))
             response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary must not be empty when updated." });
+        else if (Summary != null && Summary.Trim().Length > 500)
+            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary must be at most 500 characters." });
 
         if (DurationMinutes.HasValue && DurationMinutes < 0)
             response.ListErrors.Add(new Errors { Field = "DurationMinutes", Detail = "Invalid duration." });

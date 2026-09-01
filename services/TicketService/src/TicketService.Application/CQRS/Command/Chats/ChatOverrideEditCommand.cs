@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using TicketService.Application.Common.Helpers;
 using TicketService.Application.DTOs.Response.Tickets;
 using TicketService.Domain.Enums;
 
@@ -49,10 +50,7 @@ public class ChatOverrideEditCommand : IRequest<TicketActionResponse>, IValidata
         if (UserId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = "UserId", Detail = "Invalid UserId." });
 
-        if (string.IsNullOrWhiteSpace(Body))
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Comment content is required." });
-        else if (Body.Length > 10000)
-            response.ListErrors.Add(new Errors { Field = "Body", Detail = "Comment content must be at most 10000 characters." });
+        ChatBodyPolicy.AddBodyErrors(response.ListErrors, Body);
 
         if (string.IsNullOrWhiteSpace(OverrideReason))
             response.ListErrors.Add(new Errors { Field = "OverrideReason", Detail = "An override reason is required when the ticket is closed." });

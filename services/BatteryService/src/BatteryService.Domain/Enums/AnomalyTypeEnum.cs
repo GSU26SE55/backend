@@ -37,5 +37,8 @@ public enum AnomalyTypeEnum
     /// IoT gateway was automatically decommissioned after repeatedly submitting impossible
     /// sensor values. This is a data-integrity/security incident, not a connectivity outage.
     /// </summary>
-    IotDataIntegrityViolation = 17
+    IotDataIntegrityViolation = 17,
+
+    /// <summary>Nồng độ khí gas (MQ-2, %) vượt <c>AmbientThresholdConfig.HighGasWarning/Critical</c>.</summary>
+    HighGasConcentration = 18
 }

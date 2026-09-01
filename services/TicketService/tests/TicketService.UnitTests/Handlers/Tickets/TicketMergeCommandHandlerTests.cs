@@ -107,6 +107,77 @@ public class TicketMergeCommandHandlerTests
         uow.Verify(x => x.ExecuteInTransactionAsync(It.IsAny<Func<CancellationToken, Task>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task Handle_SourceHasParentLink_ClearsParentTicketId()
+    {
+        // Merging a ticket that was itself linked as a CHILD of some other parent must not
+        // leave that link pointing at a Closed+Merged ticket — the parent's Related-tickets
+        // panel would otherwise keep citing a dead end.
+        var customerId = Guid.NewGuid();
+        var grandParent = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-ENV");
+        var source = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-SOURCE");
+        source.ParentTicketId = grandParent.Id;
+        var master = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-MASTER");
+        var (uow, _, activities, _, _, _, _, _, _, _, _, _, _, _) =
+            MockTicketUnitOfWork.BuildExtended(ticketSeed: new[] { grandParent, source, master });
+        var sharedBatteryId = Guid.NewGuid();
+        uow.SetupGet(x => x.TicketBatteryAssets).Returns(BuildBatteryRepository(new[]
+        {
+            new TicketBatteryAsset { Id = Guid.NewGuid(), TicketId = source.Id, BatteryAssetId = sharedBatteryId },
+            new TicketBatteryAsset { Id = Guid.NewGuid(), TicketId = master.Id, BatteryAssetId = sharedBatteryId }
+        }).Object);
+        activities.Setup(x => x.AddAsync(It.IsAny<TicketActivity>())).Returns(Task.CompletedTask);
+
+        var result = await new TicketMergeCommandHandler(uow.Object, Mock.Of<IIntegrationEventOutboxWriter>()).Handle(
+            new TicketMergeCommand { TicketId = source.Id, TargetTicketId = master.Id, ManagerId = Guid.NewGuid() },
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        source.ParentTicketId.Should().BeNull();
+        // Two timeline entries: the merge itself, plus the unlink side effect.
+        activities.Verify(
+            x => x.AddAsync(It.Is<TicketActivity>(a => a.TicketId == source.Id)),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Handle_SourceHasChildren_ClearsChildrenParentTicketId()
+    {
+        // The other direction: `source` is itself a PARENT with children pointing at it.
+        // TicketLinkParentCommandHandler refuses to let a ticket-with-children become a child,
+        // but Merge has no such gate — so nothing previously stopped a parent from being merged
+        // away, leaving every child citing a dead ticket as its parent.
+        var customerId = Guid.NewGuid();
+        var source = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-SOURCE");
+        var master = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-MASTER");
+        var child1 = CreateTicket(TicketStatusEnum.Open, customerId, "TKT-CHILD1");
+        child1.ParentTicketId = source.Id;
+        var child2 = CreateTicket(TicketStatusEnum.InProgress, customerId, "TKT-CHILD2");
+        child2.ParentTicketId = source.Id;
+        var (uow, tickets, activities, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended(
+            ticketSeed: new[] { source, master, child1, child2 });
+        var sharedBatteryId = Guid.NewGuid();
+        uow.SetupGet(x => x.TicketBatteryAssets).Returns(BuildBatteryRepository(new[]
+        {
+            new TicketBatteryAsset { Id = Guid.NewGuid(), TicketId = source.Id, BatteryAssetId = sharedBatteryId },
+            new TicketBatteryAsset { Id = Guid.NewGuid(), TicketId = master.Id, BatteryAssetId = sharedBatteryId }
+        }).Object);
+        activities.Setup(x => x.AddAsync(It.IsAny<TicketActivity>())).Returns(Task.CompletedTask);
+
+        var result = await new TicketMergeCommandHandler(uow.Object, Mock.Of<IIntegrationEventOutboxWriter>()).Handle(
+            new TicketMergeCommand { TicketId = source.Id, TargetTicketId = master.Id, ManagerId = Guid.NewGuid() },
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        child1.ParentTicketId.Should().BeNull();
+        child2.ParentTicketId.Should().BeNull();
+        // The children's own status/SLA must NOT change — only the link is cleared.
+        child1.Status.Should().Be(TicketStatusEnum.Open);
+        child2.Status.Should().Be(TicketStatusEnum.InProgress);
+        tickets.Verify(x => x.UpdateAsync(child1), Times.Once);
+        tickets.Verify(x => x.UpdateAsync(child2), Times.Once);
+    }
+
     private static Ticket CreateTicket(TicketStatusEnum status, Guid customerId, string code) => new()
     {
         Id = Guid.NewGuid(),

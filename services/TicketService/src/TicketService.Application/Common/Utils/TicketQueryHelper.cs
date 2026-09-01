@@ -8,6 +8,24 @@ namespace TicketService.Application.Common.Utils;
 
 public static class TicketQueryHelper
 {
+    /// <summary>
+    /// Thứ tự nghiêm trọng của Priority để ORDER BY: Urgent → P1 → P2 → P3 → chưa gán.
+    ///
+    /// KHÔNG sort thẳng theo <c>t.Priority</c>: enum đánh số P1Critical=1..Urgent=4, nên
+    /// ORDER BY trên giá trị enum đẩy Urgent — mức nghiêm trọng NHẤT — xuống cuối bảng.
+    /// Ticket chưa triage (Priority null) xếp sau cùng, khớp NULLS LAST của Postgres.
+    ///
+    /// Là Expression để EF Core dịch được sang SQL (sort chạy trước phân trang, trên toàn bộ
+    /// dataset). Dùng chung cho hàng chờ (ManagerQueueQueryHandler) và danh sách ticket
+    /// (TicketGetListQueryHandler) để hai nơi không lệch thứ tự.
+    /// </summary>
+    internal static readonly System.Linq.Expressions.Expression<Func<Ticket, int>> PriorityRank =
+        t => t.Priority == TicketPriorityEnum.Urgent ? 0
+           : t.Priority == TicketPriorityEnum.P1Critical ? 1
+           : t.Priority == TicketPriorityEnum.P2High ? 2
+           : t.Priority == TicketPriorityEnum.P3Normal ? 3
+           : 4;
+
     /// <param name="t">Entity Ticket nguồn.</param>
     /// <param name="slaCalculator">Business clock dùng để tính SLA còn lại.</param>
     /// <param name="atUtc">Thời điểm UTC dùng cho phép tính SLA.</param>
@@ -66,7 +84,7 @@ public static class TicketQueryHelper
             ActiveIncidentEpisodeId = t.ActiveIncidentEpisodeId?.ToString(),
             CreatedAt = t.CreatedAt,
             UpdatedAt = t.UpdatedAt,
-            SlaTimer = canViewSlaTimer ? MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc) : null,
+            SlaTimer = canViewSlaTimer ? MapToSlaTimerDTO(t.SlaTimer, slaCalculator, atUtc, t.Status) : null,
             ExpectedCompletionAtUtc = t.SlaTimer?.DueAt,
             HasUnreadChat = hasUnreadChat,
             DetectedAt = t.DetectedAt,
@@ -77,16 +95,27 @@ public static class TicketQueryHelper
             SuspectedDuplicateOfTicketId = t.SuspectedDuplicateOfTicketId?.ToString(),
             DuplicateReason = t.DuplicateReason,
             MergedIntoTicketId = t.MergedIntoTicketId?.ToString(),
+            SiteId = t.SiteId?.ToString(),
+            ParentTicketId = t.ParentTicketId?.ToString(),
             CloseReason = t.CloseReason
         };
 
     internal static SlaTimerDTO? MapToSlaTimerDTO(
         SlaTimer? sla,
         ISlaCalculator slaCalculator,
-        DateTime atUtc)
+        DateTime atUtc,
+        TicketStatusEnum ticketStatus = TicketStatusEnum.Open)
     {
         if (sla is null)
             return null;
+
+        var isStoppedOrTerminal = sla.Status == SlaTimerStatusEnum.Stopped || TicketStatusGroups.Terminal.Contains(ticketStatus);
+        // Stage 1 (Open) response SLA runs 24/7 and never consults the calendar — asking for an
+        // extension there would just count non-working days that had no effect on its DueAt.
+        var isStage1Open = ticketStatus == TicketStatusEnum.Open;
+        (int Minutes, IReadOnlyList<DateOnly> NonWorkingDays) calendarExtension = isStage1Open
+            ? (0, [])
+            : slaCalculator.GetCalendarExtension(sla.StartedAt, sla.DueAt);
         return new SlaTimerDTO
         {
             Id = sla.Id.ToString(),
@@ -99,10 +128,14 @@ public static class TicketQueryHelper
             WarningSentAt = sla.WarningSentAt,
             BreachAt = sla.BreachAt,
             Status = sla.Status,
-            RemainingPercent = ComputeRemainingPercent(slaCalculator, sla, atUtc),
+            RemainingPercent = isStoppedOrTerminal ? 0d : ComputeRemainingPercent(slaCalculator, sla, atUtc),
             SlaWorkingDays = slaCalculator.GetSlaWorkingDays(sla.Priority),
             SlaWorkingHours = slaCalculator.GetSlaHours(sla.Priority),
-            RemainingWorkingMinutes = ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc)
+            RemainingWorkingMinutes = isStoppedOrTerminal ? 0 : ComputeRemainingWorkingMinutes(slaCalculator, sla, atUtc),
+            CalendarExtensionMinutes = calendarExtension.Minutes,
+            CalendarExtensionDays = calendarExtension.NonWorkingDays is null
+                ? []
+                : [.. calendarExtension.NonWorkingDays]
         };
     }
 
@@ -236,18 +269,28 @@ public static class TicketQueryHelper
         TicketSourceFilterEnum.Customer => query.Where(t =>
             t.Origin == TicketOriginEnum.ManualByCustomer),
 
-        // AI dự đoán: alert bất thường do AI module chấm, hoặc điểm cascade risk cao
-        // (System nhưng không phải sự cố môi trường / bảo trì định kỳ).
+        // AI dự đoán: alert bất thường của MỘT viên pin do AI module chấm, hoặc điểm cascade
+        // risk cao (System nhưng không phải bảo trì định kỳ).
+        //
+        // Không còn phải loại trừ `ImpactScope == Site` ở đây: sự cố môi trường nay mang
+        // `AutoFromEnvironment` chứ không dùng ké `AutoFromAlert` nữa.
         TicketSourceFilterEnum.AiPredicted => query.Where(t =>
             t.Origin == TicketOriginEnum.AutoFromAlert
             || (t.Origin == TicketOriginEnum.System
+                // Dòng CŨ chưa qua backfill vẫn là `System` + có IncidentId — vẫn phải loại,
+                // cùng lưới an toàn với nhánh Environmental ngay dưới.
                 && t.EnvironmentalIncidentId == null
                 && t.PeriodicMaintenanceDueAtUtc == null)),
 
-        // Xét trước Origin: ticket sự cố môi trường luôn có IncidentId, và đây là dấu hiệu
-        // duy nhất tách nó khỏi luồng System còn lại.
+        // Sự cố môi trường — đọc thẳng origin. Hai đường (thiết bị tự báo qua
+        // EnvironmentalIncident, và backend chấm số đo ambient) nay cùng một origin.
+        //
+        // `EnvironmentalIncidentId != null` giữ lại cho DÒNG CŨ: ticket tạo trước khi có
+        // `AutoFromEnvironment` vẫn mang `System`, migration backfill lo phần còn lại nhưng
+        // điều kiện này là lưới an toàn nếu backfill chưa chạy.
         TicketSourceFilterEnum.Environmental => query.Where(t =>
-            t.EnvironmentalIncidentId != null),
+            t.Origin == TicketOriginEnum.AutoFromEnvironment
+            || t.EnvironmentalIncidentId != null),
 
         TicketSourceFilterEnum.PeriodicMaintenance => query.Where(t =>
             t.PeriodicMaintenanceDueAtUtc != null),

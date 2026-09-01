@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Command.Chats;
@@ -13,19 +14,29 @@ namespace TicketService.Application.CQRS.Handler.Chats;
 
 public class ChatPinCommandHandler : IRequestHandler<ChatPinCommand, TicketActionResponse>
 {
-    private const int MaxPinnedPerTicket = 3;
+    private const int MaxPinnedPerTicket = 5;
 
     private readonly ITicketUnitOfWork _uow;
     private readonly IActivityLogger _activityLogger;
     private readonly IChatAuthorizationService _chatAuthorizationService;
     private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.pin
+    private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly ILogger<ChatPinCommandHandler> _logger;
 
-    public ChatPinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IChatAuthorizationService chatAuthorizationService, IPublisher publisher)
+    public ChatPinCommandHandler(
+        ITicketUnitOfWork uow,
+        IActivityLogger activityLogger,
+        IChatAuthorizationService chatAuthorizationService,
+        IPublisher publisher,
+        ITicketChatRealtimeNotifier realtimeNotifier,
+        ILogger<ChatPinCommandHandler> logger)
     {
         _uow = uow;
         _activityLogger = activityLogger;
         _chatAuthorizationService = chatAuthorizationService;
         _publisher = publisher;
+        _realtimeNotifier = realtimeNotifier;
+        _logger = logger;
     }
 
     public async Task<TicketActionResponse> Handle(ChatPinCommand request, CancellationToken ct)
@@ -87,6 +98,18 @@ public class ChatPinCommandHandler : IRequestHandler<ChatPinCommand, TicketActio
         {
             await _uow.RollbackTransactionAsync();
             throw;
+        }
+
+        // After the commit, and never inside it: a SignalR failure must not roll back a pin that
+        // is already persisted. Same shape as ChatDelete.
+        try
+        {
+            await _realtimeNotifier.NotifyChatPinChangedAsync(
+                ticket.Id, chat.Id, isPinned: true, chat.IsInternal, request.UserDisplayName, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ChatPin] Failed to broadcast ChatPinChanged SignalR event for ticket {TicketId}", ticket.Id);
         }
 
         return new TicketActionResponse

@@ -50,7 +50,7 @@ public class IotDeviceWentOfflineConsumer : IConsumer<IotDeviceWentOfflineEvent>
                 async () =>
             {
                 var recipientIds = (await _recipientResolver.GetActiveByRoleAsync(
-                        context.CancellationToken, "Manager", "Admin", "Staff"))
+                        context.CancellationToken, "Manager", "Admin"))
                     .Where(id => id != Guid.Empty)
                     .ToList();
                 if (evt.CustomerId is { } customerId && customerId != Guid.Empty)

@@ -16,6 +16,9 @@ public class BatteryLookupHttpClient : IBatteryLookupClient
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<BatteryLookupHttpClient> _logger;
 
+    /// Lookup hỏng KHÔNG được chặn việc tạo ticket — mọi nhánh lỗi trả về snapshot rỗng.
+    private static readonly BatteryLookupResult Empty = new(null, null);
+
     public BatteryLookupHttpClient(
         HttpClient http,
         IHttpContextAccessor httpContextAccessor,
@@ -27,6 +30,9 @@ public class BatteryLookupHttpClient : IBatteryLookupClient
     }
 
     public async Task<string?> GetSerialAsync(Guid assetId, CancellationToken ct)
+        => (await GetSnapshotAsync(assetId, ct)).SerialNumber;
+
+    public async Task<BatteryLookupResult> GetSnapshotAsync(Guid assetId, CancellationToken ct)
     {
         try
         {
@@ -40,28 +46,37 @@ public class BatteryLookupHttpClient : IBatteryLookupClient
             using var response = await _http.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Battery lookup {AssetId} returned {Status} — serial snapshot bỏ trống.",
+                _logger.LogWarning("Battery lookup {AssetId} returned {Status} — snapshot bỏ trống.",
                     assetId, (int)response.StatusCode);
-                return null;
+                return Empty;
             }
 
             var json = await response.Content.ReadAsStringAsync(ct);
             using var doc = JsonDocument.Parse(json);
             if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
-                return null;
+                return Empty;
 
+            string? serial = null;
             if (data.TryGetProperty("serialNumber", out var serialProp) && serialProp.ValueKind == JsonValueKind.String)
             {
-                var serial = serialProp.GetString();
-                return string.IsNullOrWhiteSpace(serial) ? null : serial;
+                var value = serialProp.GetString();
+                serial = string.IsNullOrWhiteSpace(value) ? null : value;
             }
 
-            return null;
+            Guid? siteId = null;
+            if (data.TryGetProperty("siteId", out var siteProp)
+                && siteProp.ValueKind == JsonValueKind.String
+                && Guid.TryParse(siteProp.GetString(), out var parsedSite))
+            {
+                siteId = parsedSite;
+            }
+
+            return new BatteryLookupResult(serial, siteId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Battery lookup {AssetId} thất bại — serial snapshot bỏ trống.", assetId);
-            return null;
+            _logger.LogWarning(ex, "Battery lookup {AssetId} thất bại — snapshot bỏ trống.", assetId);
+            return Empty;
         }
     }
 }

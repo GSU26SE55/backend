@@ -32,6 +32,19 @@ public class Ticket : AuditableEntity
     /// </summary>
     public Guid? EnvironmentalIncidentId { get; set; }
 
+    /// <summary>
+    /// Site nơi ticket phát sinh. Ticket site-level (environmental) lấy thẳng từ event; ticket pin
+    /// lấy site của battery asset lúc tạo.
+    ///
+    /// Trước đây ticket chỉ có BatteryAssetId + CustomerId, nên "các ticket cùng một site" không
+    /// truy vấn được nếu không hỏi vòng sang BatteryService — mà ticket environmental thì
+    /// BatteryAssetId = Guid.Empty, tức không có đường nào lần ra site. Lưu thẳng ở đây để
+    /// gom ticket theo site (sự cố môi trường + các ticket pin cùng cabinet) bằng 1 query.
+    ///
+    /// Null với ticket cũ tạo trước migration này, và với ticket không xác định được site.
+    /// </summary>
+    public Guid? SiteId { get; set; }
+
     public int ReopenCount { get; set; }
     public string? ResolutionSummary { get; set; }
     public DateTime? ResolvedAt { get; set; }
@@ -86,6 +99,21 @@ public class Ticket : AuditableEntity
     public string? DuplicateReason { get; set; }
     /// <summary>Set khi Manager gộp ticket NÀY vào ticket khác — ticket này coi như đã gộp (ẩn khỏi queue).</summary>
     public Guid? MergedIntoTicketId { get; set; }
+
+    // ── Quan hệ cha–con (KHÁC merge) ──
+    /// <summary>
+    /// Ticket cha — dùng khi nhiều ticket cùng MỘT nguyên nhân gốc: sự cố môi trường ở cabinet
+    /// (ticket cha) kéo theo các ticket pin do Customer báo (ticket con).
+    ///
+    /// KHÁC <see cref="MergedIntoTicketId"/> một cách có chủ đích. Merge nghĩa là "trùng lặp":
+    /// nó ĐÓNG ticket nguồn với CloseReason = MergedDuplicate và DỪNG SLA timer. Với tình huống
+    /// này thì sai — 4 cục pin vẫn phải được kiểm tra sau khi dập xong sự cố môi trường, nên
+    /// ticket con phải SỐNG và giữ SLA riêng. Link chỉ nói "cùng nguyên nhân", không nói
+    /// "cùng khối lượng công việc".
+    ///
+    /// Vì vậy đóng ticket cha KHÔNG đóng ticket con.
+    /// </summary>
+    public Guid? ParentTicketId { get; set; }
 
     // Navigation properties
     public SlaTimer? SlaTimer { get; set; }

@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using TicketService.Application.Common.Helpers;
 using TicketService.Application.DTOs.Response.KnowledgeBases;
 using TicketService.Domain.Enums;
 
@@ -50,9 +51,8 @@ public class UpdateKbArticleCommand : IRequest<CommonResponse<KbArticleDTO>>, IV
         else if (Title.Length > 200)
             response.ListErrors.Add(new Errors { Field = "Title", Detail = "Title must be at most 200 characters." });
 
-        if (string.IsNullOrWhiteSpace(Content))
-            response.ListErrors.Add(new Errors { Field = "Content", Detail = "Content is required." });
-        else if (Content.Length > 50000)
+        RichTextPolicy.AddContentErrors(response.ListErrors, Content, "Content");
+        if (!string.IsNullOrWhiteSpace(Content) && Content.Length > 50000)
             response.ListErrors.Add(new Errors { Field = "Content", Detail = "Content must be at most 50000 characters." });
 
         if (!Enum.IsDefined(typeof(TicketCategoryEnum), Category))

@@ -813,6 +813,12 @@ public class TicketDataSeeder
             var status = ticket.Status switch
             {
                 TicketStatusEnum.Completed or TicketStatusEnum.Closed => SlaTimerStatusEnum.Met,
+                // ClosedRejected là trạng thái KẾT THÚC nhưng KHÔNG phải SLA đạt: ticket bị từ chối
+                // nên đồng hồ bị huỷ, đúng như StopSlaAsync làm ở TicketTriageRejectCommandHandler.
+                // Trước đây nhánh này rơi vào `_ => Running`, khiến ticket đã đóng vẫn hiện đồng hồ
+                // đếm ngược trên UI và vẫn bị SlaTimerBackgroundService (chỉ lọc Status == Running)
+                // quét rồi đánh Breached, làm sai luôn báo cáo SLA compliance.
+                TicketStatusEnum.ClosedRejected => SlaTimerStatusEnum.Stopped,
                 TicketStatusEnum.Pending => SlaTimerStatusEnum.Paused,
                 _ => SlaTimerStatusEnum.Running
             };

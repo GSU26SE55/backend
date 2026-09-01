@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
+using TicketService.Application.Common.Helpers;
 using TicketService.Application.DTOs.Response.Blog;
 
 namespace TicketService.Application.CQRS.Command.Blog;
@@ -30,12 +31,17 @@ public class CreateBlogPostCommand : IRequest<CommonResponse<BlogPostActionDTO>>
             response.ListErrors.Add(new Errors { Field = "Slug", Detail = "Slug is required." });
         else if (Slug.Length > 300)
             response.ListErrors.Add(new Errors { Field = "Slug", Detail = "Slug must be at most 300 characters." });
+        else if (!BlogSlugPolicy.IsValid(Slug))
+            response.ListErrors.Add(new Errors { Field = "Slug", Detail = BlogSlugPolicy.FormatMessage });
 
         if (string.IsNullOrWhiteSpace(Summary))
             response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary is required." });
+        // Title (256) và Slug (300) đều có cap, riêng Summary thì không — summary 5000 ký tự
+        // lưu được qua API rồi sau đó chặn chính editor lại.
+        else if (Summary.Trim().Length > 1000)
+            response.ListErrors.Add(new Errors { Field = "Summary", Detail = "Summary must be at most 1000 characters." });
 
-        if (string.IsNullOrWhiteSpace(ContentHtml))
-            response.ListErrors.Add(new Errors { Field = "ContentHtml", Detail = "Content is required." });
+        RichTextPolicy.AddContentErrors(response.ListErrors, ContentHtml, "ContentHtml", "Content");
 
         if (response.ListErrors.Count > 0)
         {

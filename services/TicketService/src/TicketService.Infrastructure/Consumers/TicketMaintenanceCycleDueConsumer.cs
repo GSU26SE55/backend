@@ -25,8 +25,9 @@ namespace TicketService.Infrastructure.Consumers;
 /// consumer này.
 /// </para>
 /// <para>
-/// Ticket mở ở trạng thái <c>Open</c> và <b>chưa gán priority</b>: priority tính từ ma trận
-/// Impact × Urgency lúc Manager triage, không nhập thẳng.
+/// Ticket mở ở trạng thái <c>Open</c> với priority cố định <c>P3Normal</c>: kỳ bảo trì là
+/// việc theo lịch, không phải sự cố, nên không có Impact × Urgency để triage. Manager vẫn
+/// nâng/hạ được sau nếu hiện trường cho thấy khác.
 /// </para>
 /// <para>
 /// <b>Chống trùng hai lớp.</b> Inbox chặn theo Id sự kiện — mà Id là tất định theo (pin, hạn
@@ -103,7 +104,7 @@ public class TicketMaintenanceCycleDueConsumer : IConsumer<MaintenanceCycleDueEv
                     $"Scheduled {evt.IntervalMonths}-month maintenance cycle #{evt.CycleNo} "
                     + $"for battery {evt.SerialNumber ?? evt.BatteryAssetId.ToString()}.",
                 Category = TicketCategoryEnum.Repair,
-                Priority = null,
+                Priority = TicketPriorityEnum.P3Normal,
                 Status = TicketStatusEnum.Open,
                 Origin = TicketOriginEnum.System,
                 ReopenCount = 0,

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Command.Chats;
@@ -17,13 +18,23 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
     private readonly IChatAuthorizationService _chatAuthorizationService;
 
     private readonly IPublisher _publisher;   // Sprint Chat DoD — audit chat.unpin
+    private readonly ITicketChatRealtimeNotifier _realtimeNotifier;
+    private readonly ILogger<ChatUnpinCommandHandler> _logger;
 
-    public ChatUnpinCommandHandler(ITicketUnitOfWork uow, IActivityLogger activityLogger, IChatAuthorizationService chatAuthorizationService, IPublisher publisher)
+    public ChatUnpinCommandHandler(
+        ITicketUnitOfWork uow,
+        IActivityLogger activityLogger,
+        IChatAuthorizationService chatAuthorizationService,
+        IPublisher publisher,
+        ITicketChatRealtimeNotifier realtimeNotifier,
+        ILogger<ChatUnpinCommandHandler> logger)
     {
         _publisher = publisher;
         _uow = uow;
         _activityLogger = activityLogger;
         _chatAuthorizationService = chatAuthorizationService;
+        _realtimeNotifier = realtimeNotifier;
+        _logger = logger;
     }
 
     public async Task<TicketActionResponse> Handle(ChatUnpinCommand request, CancellationToken ct)
@@ -66,6 +77,18 @@ public class ChatUnpinCommandHandler : IRequestHandler<ChatUnpinCommand, TicketA
             metadata: new Dictionary<string, object?> { ["chatId"] = chat.Id }), ct);
 
         await _uow.SaveChangesAsync(ct);
+
+        // After the save, and never inside it: a SignalR failure must not undo an unpin that is
+        // already persisted. Same shape as ChatDelete.
+        try
+        {
+            await _realtimeNotifier.NotifyChatPinChangedAsync(
+                ticket.Id, chat.Id, isPinned: false, chat.IsInternal, request.UserDisplayName, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ChatUnpin] Failed to broadcast ChatPinChanged SignalR event for ticket {TicketId}", ticket.Id);
+        }
 
         return new TicketActionResponse
         {

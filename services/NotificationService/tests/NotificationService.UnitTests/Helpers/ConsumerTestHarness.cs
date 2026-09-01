@@ -51,7 +51,8 @@ public static class ConsumerTestHarness
     public static async Task<(ITestHarness harness, List<Notification> written, Mock<INotificationUnitOfWork> uow)> StartAsync<TConsumer>(
         IReadOnlyList<Guid>? recipients = null,
         ICacheService? cache = null,
-        Func<int, bool>? failWriteOnAttempt = null)
+        Func<int, bool>? failWriteOnAttempt = null,
+        List<string[]>? rolesRequested = null)
         where TConsumer : class, IConsumer
     {
         var written = new List<Notification>();
@@ -79,6 +80,16 @@ public static class ConsumerTestHarness
         var resolved = recipients ?? new[] { DefaultRecipient };
         var resolver = new Mock<IRecipientResolver>();
         resolver.Setup(r => r.GetActiveByRoleAsync(It.IsAny<CancellationToken>(), It.IsAny<string[]>()))
+            .Callback<CancellationToken, string[]>((_, roles) =>
+            {
+                // Seam để test khẳng định consumer hỏi ĐÚNG những role nào. Không có nó thì mock
+                // nuốt mọi string[] và việc thêm/bớt một role ở consumer không làm test nào đỏ.
+                if (rolesRequested is not null)
+                {
+                    lock (rolesRequested)
+                        rolesRequested.Add(roles);
+                }
+            })
             .ReturnsAsync(resolved);
 
         var provider = new ServiceCollection()

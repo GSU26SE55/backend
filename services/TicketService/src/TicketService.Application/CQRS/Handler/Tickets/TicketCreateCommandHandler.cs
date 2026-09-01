@@ -24,6 +24,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-26
     private readonly IBatteryLookupClient _batteryLookup;
+    private readonly ISlaCalculator _slaCalculator;
 
     public TicketCreateCommandHandler(
         ITicketUnitOfWork uow,
@@ -31,7 +32,8 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
         IPublisher publisher,
-        IBatteryLookupClient batteryLookup)
+        IBatteryLookupClient batteryLookup,
+        ISlaCalculator slaCalculator)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
@@ -39,6 +41,7 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
         _outboxWriter = producer;
         _publisher = publisher;
         _batteryLookup = batteryLookup;
+        _slaCalculator = slaCalculator;
     }
 
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
@@ -54,13 +57,18 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             return Fail(403, "The customer account is locked or disabled.");
 
         var batterySerialNumbers = new Dictionary<Guid, string>();
+        // Site của ticket lấy từ pin đầu tiên tra được. Ticket nhiều pin trên thực tế đều cùng một
+        // cabinet, nên site đầu tiên là đủ; nếu lookup không trả site thì để null chứ không chặn
+        // tạo ticket — SiteId chỉ dùng để gom ticket, không phải dữ liệu bắt buộc.
+        Guid? siteId = null;
         foreach (var batteryAssetId in request.BatteryAssetIds)
         {
-            var serialNumber = await _batteryLookup.GetSerialAsync(batteryAssetId, ct);
-            if (string.IsNullOrWhiteSpace(serialNumber))
+            var snapshot = await _batteryLookup.GetSnapshotAsync(batteryAssetId, ct);
+            if (string.IsNullOrWhiteSpace(snapshot.SerialNumber))
                 return Fail(403, "The selected battery does not exist or you do not have access to it.");
 
-            batterySerialNumbers[batteryAssetId] = serialNumber;
+            batterySerialNumbers[batteryAssetId] = snapshot.SerialNumber;
+            siteId ??= snapshot.SiteId;
         }
 
         var code = await _codeGenerator.GenerateAsync();
@@ -80,6 +88,8 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             CustomerId = request.CustomerId,
             BatteryAssetId = primaryBatteryAssetId,
             BatterySerialNumber = batterySerialNumber,
+            // Cho phép gom ticket này với ticket environmental cùng cabinet.
+            SiteId = siteId,
             Status = TicketStatusEnum.Open,
             Priority = TicketPriorityEnum.P1Critical,
             Origin = TicketOriginEnum.ManualByCustomer,
@@ -131,6 +141,21 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
             CanViewInternal = false,
             AddedByUserId = request.CustomerId,
             AddedAt = DateTime.UtcNow
+        });
+
+        // Stage 1: Khởi tạo Response SLA Timer khi tạo ticket ở Open
+        var nowUtc = DateTime.UtcNow;
+        var priority = ticket.Priority ?? TicketPriorityEnum.P1Critical;
+        var responseDueAt = _slaCalculator.CalculateResponseDueDate(nowUtc, priority);
+        await _uow.SlaTimers.AddAsync(new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Priority = priority,
+            StartedAt = nowUtc,
+            DueAt = responseDueAt,
+            OriginalDueAt = responseDueAt,
+            Status = SlaTimerStatusEnum.Running
         });
 
         await _outboxWriter.WriteAsync(

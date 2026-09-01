@@ -22,6 +22,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
     private readonly IActivityLogger _activityLogger;
     private readonly IIntegrationEventOutboxWriter _outboxWriter;
     private readonly IPublisher _publisher;   // Sprint audit #AUDIT-27
+    private readonly ISlaCalculator _slaCalculator;
 
     public TicketAutoCreateFromAlertCommandHandler(
         ITicketUnitOfWork uow,
@@ -29,7 +30,8 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         IPriorityCalculator priorityCalculator,
         IActivityLogger activityLogger,
         IIntegrationEventOutboxWriter producer,
-        IPublisher publisher)
+        IPublisher publisher,
+        ISlaCalculator slaCalculator)
     {
         _uow = uow;
         _codeGenerator = codeGenerator;
@@ -37,6 +39,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         _activityLogger = activityLogger;
         _outboxWriter = producer;
         _publisher = publisher;
+        _slaCalculator = slaCalculator;
     }
 
     public async Task<TicketActionResponse> Handle(TicketAutoCreateFromAlertCommand request, CancellationToken ct)
@@ -55,12 +58,22 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
             CustomerId = request.CustomerId,
             BatteryAssetId = request.BatteryAssetId,
             Status = TicketStatusEnum.Open,
-            Origin = TicketOriginEnum.AutoFromAlert,
+            Origin = IsEnvironmentalAnomaly(request.AnomalyCategory)
+                ? TicketOriginEnum.AutoFromEnvironment
+                : TicketOriginEnum.AutoFromAlert,
             OriginAlertId = request.OriginAlertId,
             // Thời điểm anomaly được phát hiện + serial pin — để FE hiện panel "Bằng chứng
             // cảnh báo (lúc phát hiện)" và cột Serial giống ticket do Customer tạo.
             DetectedAt = request.DetectedAt,
             BatterySerialNumber = request.BatterySerialNumber,
+            // Site đi kèm event chứ KHÔNG gọi ngược BatteryService: handler này chạy từ
+            // MassTransit consumer, không có HTTP context nên IBatteryLookupClient không forward
+            // được JWT và sẽ luôn trả null. BatteryAnomalyDetectedV2Event vốn đã mang SiteId,
+            // saga hydrate rồi forward qua CreateTicketFromAlertCommand — cùng khuôn
+            // denormalize snapshot như BatterySerialNumber.
+            //
+            // Null khi alert đến từ event V1 (không có SiteId); khi đó ticket không gom theo site.
+            SiteId = request.SiteId,
             ImpactScope = impact,
             UrgencyLevel = urgency,
             Priority = priority,
@@ -68,6 +81,20 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         };
 
         await _uow.Tickets.AddAsync(ticket);
+
+        var nowUtc = DateTime.UtcNow;
+        var responseDueAt = _slaCalculator.CalculateResponseDueDate(nowUtc, priority);
+        var slaTimer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Priority = priority,
+            Status = SlaTimerStatusEnum.Running,
+            StartedAt = nowUtc,
+            OriginalDueAt = responseDueAt,
+            DueAt = responseDueAt
+        };
+        await _uow.SlaTimers.AddAsync(slaTimer);
 
         if (request.BatteryAssetId != Guid.Empty)
         {
@@ -180,13 +207,25 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
     /// Anomaly không map được sang category nghiệp vụ (DeviceOffline, SensorMismatch, …)
     /// vẫn về <c>Repair</c> — đúng bản chất "cần kỹ thuật viên xử lý".
     /// </summary>
+    /// <summary>
+    /// Anomaly này là sự cố MÔI TRƯỜNG của site, không phải bất thường của một viên pin.
+    /// </summary>
+    /// <remarks>
+    /// Cùng danh sách với nhánh môi trường trong <see cref="MapAnomalyToCategory"/> và
+    /// <c>MapAnomalyToB3</c> — ba chỗ phải khớp nhau, nếu không một loại anomaly sẽ mang origin
+    /// môi trường mà lại có category/scope của pin.
+    /// </remarks>
+    public static bool IsEnvironmentalAnomaly(string anomalyCategory) => anomalyCategory
+        is "HighAmbientTemp" or "HighHumidity" or "HighTempHumidityCombo"
+        or "HighGasConcentration" or "EnvironmentalIncident";
+
     public static TicketCategoryEnum MapAnomalyToCategory(string anomalyCategory) => anomalyCategory switch
     {
         // Nhiệt độ — cả hai chiều. Undertemp trước đây rơi vào `_ => Repair`, và vì
         // `ux_tickets_active_auto_per_asset_category` là UNIQUE trên (asset, category), nó
         // chiếm mất slot Repair của cả nhóm: alert Overvoltage ngay sau đó không insert được,
         // saga kẹt ở `TicketRequested` không log lỗi, và ticket biến mất trong im lặng.
-        "Overheat" or "HighAmbientTemp" or "HighTempHumidityCombo" or "Undertemp"
+        "Overheat" or "Undertemp"
             => TicketCategoryEnum.Overheat,
 
         // Sạc — dòng sạc bất thường và quá áp đều là sự cố của đường nạp.
@@ -202,7 +241,21 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         "SensorMismatch" or "DeviceOffline" or "IotDataIntegrityViolation"
             => TicketCategoryEnum.Other,
 
-        // Còn lại (EnvironmentalIncident, HighHumidity…) — cần kỹ thuật viên tới xử lý.
+        // Su co MOI TRUONG cua site — hong hoc o tu/phong, khong phai o vien pin. Xep chung
+        // `Repair` voi ticket do thiet bi tu bao (khoi, ro khi, ngap) de ca nhom doc nhat quan
+        // tren hang doi. Truoc day `HighAmbientTemp` va `HighTempHumidityCombo` nam trong nhanh
+        // `Overheat` — mot hang muc LOI PIN — nen ticket nhiet do cua ca site hien y het ticket
+        // qua nhiet cua mot vien pin, du hai thu chang lien quan gi nhau.
+        //
+        // Khong anomaly nao cua pin xep vao `Repair`, nen o (asset, Repair) cua
+        // `ux_tickets_active_auto_per_asset_category` la cua rieng nhom nay: gom lai day KHONG
+        // tranh slot voi ticket pin, chi khien moi site co mot ticket moi truong dang mo tai
+        // mot thoi diem — dung y nghia, vi do la mot su co cua mot cai tu.
+        "HighAmbientTemp" or "HighHumidity" or "HighTempHumidityCombo"
+            or "HighGasConcentration" or "EnvironmentalIncident"
+            => TicketCategoryEnum.Repair,
+
+        // Con lai — can ky thuat vien toi xu ly.
         _ => TicketCategoryEnum.Repair
     };
 
@@ -212,7 +265,14 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         {
             "EnvironmentalIncident" => (ImpactScopeEnum.Site, UrgencyLevelEnum.High),
             "Overheat" => (ImpactScopeEnum.SingleAsset, UrgencyLevelEnum.High),
-            "HighAmbientTemp" => (ImpactScopeEnum.Site, UrgencyLevelEnum.Medium),
+
+            // Cac anomaly do cam bien MOI TRUONG cua site sinh ra: hong hoc nam o tu/phong,
+            // khong phai o mot vien pin. Truoc day chi `HighAmbientTemp` duoc xep Site, ba loai
+            // con lai roi vao nhanh `_` thanh SingleAsset — ticket ro khi bi gan vao mot vien pin
+            // va bi phan loai nhu su co pin. `ImpactScope = Site` cung la dau hieu ma
+            // `TicketQueryHelper.FilterBySource` dung de nhan ra nhom nay.
+            "HighAmbientTemp" or "HighHumidity" or "HighTempHumidityCombo" or "HighGasConcentration"
+                => (ImpactScopeEnum.Site, UrgencyLevelEnum.Medium),
             "SohDegradation" => (ImpactScopeEnum.SingleAsset, UrgencyLevelEnum.Low),
             "SensorMismatch" => (ImpactScopeEnum.SingleAsset, UrgencyLevelEnum.Medium),
             _ => (ImpactScopeEnum.SingleAsset, UrgencyLevelEnum.Medium)

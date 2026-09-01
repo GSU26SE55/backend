@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Moq;
 using SharedKernels.Interfaces;
 using TicketService.Application.Common.Models;
@@ -6,6 +7,7 @@ using TicketService.Application.CQRS.Command.Chats;
 using TicketService.Application.CQRS.Handler.Chats;
 using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
+using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
@@ -17,6 +19,8 @@ public class ChatUnpinCommandHandlerTests
 {
     // Sprint Chat DoD — bắt notification audit để khẳng định handler THỰC SỰ ghi vết.
     private readonly Mock<IPublisher> _publisher = new();
+    private readonly Mock<ITicketChatRealtimeNotifier> _realtimeNotifier = new();
+    private readonly Mock<ILogger<ChatUnpinCommandHandler>> _logger = new();
     private readonly Mock<IGenericRepository<Ticket>> _ticketsRepo = new();
     private readonly Mock<IGenericRepository<TicketChat>> _chatsRepo = new();
     private readonly Mock<ITicketUnitOfWork> _uow = new();
@@ -29,7 +33,7 @@ public class ChatUnpinCommandHandlerTests
         _uow.SetupGet(u => u.Tickets).Returns(_ticketsRepo.Object);
         _uow.SetupGet(u => u.TicketChats).Returns(_chatsRepo.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new ChatUnpinCommandHandler(_uow.Object, _activityLogger.Object, new ChatAuthorizationService(_uow.Object), _publisher.Object);
+        return new ChatUnpinCommandHandler(_uow.Object, _activityLogger.Object, new ChatAuthorizationService(_uow.Object), _publisher.Object, _realtimeNotifier.Object, _logger.Object);
     }
 
     private static Ticket MakeTicket(Guid id) => new()

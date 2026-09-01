@@ -116,6 +116,7 @@ public class CreateTicketFromAlertConsumer : IConsumer<CreateTicketFromAlertComm
             OriginAlertId = msg.AlertId,
             BatteryAssetId = msg.BatteryAssetId,
             CustomerId = msg.CustomerId,
+            SiteId = msg.SiteId,
             AnomalyCategory = msg.AnomalyCategory,
             Title = msg.Title,
             Description = msg.Description,

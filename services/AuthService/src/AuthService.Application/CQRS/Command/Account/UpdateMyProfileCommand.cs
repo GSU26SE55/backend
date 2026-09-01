@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using AuthService.Application.DTOs.Response.Account;
+using AuthService.Application.Validation;
 using MediatR;
 using SharedContracts.Common.Responses;
 using SharedContracts.Interfaces;
@@ -19,6 +20,13 @@ public class UpdateMyProfileCommand : IRequest<AccountResponse>, IValidatable<Ac
 
     public DateTime? BirthDate { get; set; }
 
+    /// <summary>
+    /// Xoá ngày sinh đang lưu. Cần cờ riêng vì <see cref="BirthDate"/> null nghĩa là
+    /// "client không gửi field này" (giữ nguyên giá trị cũ) — nếu không có cờ thì client
+    /// nào không render ô ngày sinh sẽ vô tình xoá mất dữ liệu người dùng đặt ở nơi khác.
+    /// </summary>
+    public bool ClearBirthDate { get; set; }
+
     public string? TimeZone { get; set; }
 
     public Task<AccountResponse> ValidateAsync()
@@ -28,24 +36,10 @@ public class UpdateMyProfileCommand : IRequest<AccountResponse>, IValidatable<Ac
         if (AccountId == Guid.Empty)
             response.ListErrors.Add(new Errors { Field = nameof(AccountId), Detail = "Invalid AccountId." });
 
-        if (string.IsNullOrWhiteSpace(FullName))
-            response.ListErrors.Add(new Errors { Field = nameof(FullName), Detail = "Full name is required." });
-        else if (FullName.Trim().Length > 150)
-            response.ListErrors.Add(new Errors { Field = nameof(FullName), Detail = "Full name must not exceed 150 characters." });
-
-        if (!string.IsNullOrWhiteSpace(PhoneNumber) && PhoneNumber.Trim().Length > 20)
-            response.ListErrors.Add(new Errors { Field = nameof(PhoneNumber), Detail = "Phone number must not exceed 20 characters." });
-
-        if (!string.IsNullOrWhiteSpace(Address) && Address.Trim().Length > 500)
-            response.ListErrors.Add(new Errors { Field = nameof(Address), Detail = "Address must not exceed 500 characters." });
-
-        if (BirthDate.HasValue)
-        {
-            if (BirthDate.Value > DateTime.UtcNow)
-                response.ListErrors.Add(new Errors { Field = nameof(BirthDate), Detail = "Invalid date of birth." });
-            else if (BirthDate.Value.Year < 1900)
-                response.ListErrors.Add(new Errors { Field = nameof(BirthDate), Detail = "Invalid birth year." });
-        }
+        AccountFieldPolicy.AddFullNameErrors(response.ListErrors, FullName, nameof(FullName));
+        AccountFieldPolicy.AddPhoneErrors(response.ListErrors, PhoneNumber, nameof(PhoneNumber));
+        AccountFieldPolicy.AddAddressErrors(response.ListErrors, Address, nameof(Address));
+        AccountFieldPolicy.AddDateOfBirthErrors(response.ListErrors, BirthDate, nameof(BirthDate));
 
         if (!string.IsNullOrWhiteSpace(TimeZone) && TimeZone.Trim().Length > 100)
             response.ListErrors.Add(new Errors { Field = nameof(TimeZone), Detail = "TimeZone must not exceed 100 characters." });

@@ -1,6 +1,7 @@
 using BatteryService.Application.CQRS.Command.BatteryAsset;
 using BatteryService.Application.CQRS.Handler.BatteryAsset;
 using BatteryService.Application.DTOs;
+using BatteryService.Application.Interfaces;
 using BatteryService.Application.Services;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
@@ -127,8 +128,63 @@ public class BatteryIsolationRequestedConsumerTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private static BatteryIsolationRequestedConsumer Consumer(IMediator mediator) =>
-        new(mediator, NullLogger<BatteryIsolationRequestedConsumer>.Instance);
+    [Fact]
+    public async Task Consume_EnvironmentalTicketWithNoBattery_CutsEveryActiveBatteryOnTheSite()
+    {
+        var incidentId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var onSiteA = new BatteryAsset { Id = Guid.NewGuid(), SiteId = siteId, Status = BatteryStatusEnum.Active };
+        var onSiteB = new BatteryAsset { Id = Guid.NewGuid(), SiteId = siteId, Status = BatteryStatusEnum.Active };
+        // Không được đụng tới: pin đã ngừng hoạt động và pin của site khác.
+        var decommissioned = new BatteryAsset { Id = Guid.NewGuid(), SiteId = siteId, Status = BatteryStatusEnum.Decommissioned };
+        var otherSite = new BatteryAsset { Id = Guid.NewGuid(), SiteId = Guid.NewGuid(), Status = BatteryStatusEnum.Active };
+
+        var unitOfWork = new MockUnitOfWorkBuilder()
+            .WithEnvironmentalIncidents(new EnvironmentalIncident { Id = incidentId, SiteId = siteId })
+            .WithBatteryAssets(onSiteA, onSiteB, decommissioned, otherSite)
+            .Build();
+        var mediator = MediatorReturning(Accepted());
+
+        await Consumer(mediator.Object, unitOfWork).Consume(Context(new BatteryIsolationRequestedEvent(
+            incidentId, Guid.NewGuid(), Array.Empty<Guid>(), DateTime.UtcNow, Guid.NewGuid())));
+
+        foreach (var asset in new[] { onSiteA, onSiteB })
+        {
+            mediator.Verify(m => m.Send(
+                It.Is<SetBmsSwitchCommand>(c => c.BatteryAssetId == asset.Id && c.Target == "discharge" && !c.Enable),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        foreach (var asset in new[] { decommissioned, otherSite })
+        {
+            mediator.Verify(m => m.Send(
+                It.Is<SetBmsSwitchCommand>(c => c.BatteryAssetId == asset.Id),
+                It.IsAny<CancellationToken>()), Times.Never);
+        }
+    }
+
+    [Fact]
+    public async Task Consume_NoBatteryAndNoIncidentRecord_SendsNothing()
+    {
+        var mediator = MediatorReturning(Accepted());
+        var unitOfWork = new MockUnitOfWorkBuilder().Build();
+
+        await Consumer(mediator.Object, unitOfWork).Consume(Context(new BatteryIsolationRequestedEvent(
+            Guid.NewGuid(), Guid.NewGuid(), Array.Empty<Guid>(), DateTime.UtcNow, Guid.NewGuid())));
+
+        mediator.Verify(m => m.Send(It.IsAny<SetBmsSwitchCommand>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <param name="unitOfWork">
+    /// Chỉ dùng khi sự kiện không mang pin nào — consumer khi đó suy pin ra từ site của incident.
+    /// Mặc định là builder rỗng: mọi test truyền sẵn BatteryAssetIds không chạm tới nhánh này.
+    /// </param>
+    private static BatteryIsolationRequestedConsumer Consumer(
+        IMediator mediator,
+        IBatteryUnitOfWork? unitOfWork = null) =>
+        new(mediator,
+            unitOfWork ?? new MockUnitOfWorkBuilder().Build(),
+            NullLogger<BatteryIsolationRequestedConsumer>.Instance);
 
     private static Mock<IMediator> MediatorReturning(CommonResponse<BmsSwitchCommandAcceptedDto> response)
     {

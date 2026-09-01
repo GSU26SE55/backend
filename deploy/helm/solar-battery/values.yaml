@@ -46,7 +46,8 @@ global:
   #   extraCorsOrigins:
   #     - "https://admin.capstonegsu26se55.mooo.com"
   #     - "http://localhost:5173"
-  extraCorsOrigins: []
+  extraCorsOrigins:
+    - "https://unflinching-collative-eddy.ngrok-free.dev"
 
   # cert-manager ClusterIssuer — staging dùng letsencrypt-staging (rate limit cao),
   # production dùng letsencrypt-prod.
