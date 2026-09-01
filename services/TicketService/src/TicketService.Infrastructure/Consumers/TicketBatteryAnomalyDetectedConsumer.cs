@@ -95,6 +95,7 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
             11 => "HighTempHumidityCombo",
             14 => "EnvironmentalIncident",
             18 => "HighGasConcentration",
+            19 => "WaterLeak",
             _ => "GenericAnomaly"
         };
     }
@@ -103,7 +104,7 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
     /// Sự cố MÔI TRƯỜNG của site — cùng danh sách với `SendCreateTicketActivity.IsEnvironmental`
     /// và `TicketAutoCreateFromAlertCommandHandler.IsEnvironmentalAnomaly`.
     /// </summary>
-    private static bool IsEnvironmental(int anomalyType) => anomalyType is 9 or 10 or 11 or 14 or 18;
+    private static bool IsEnvironmental(int anomalyType) => anomalyType is 9 or 10 or 11 or 14 or 18 or 19;
 
     /// <summary>
     /// Ticket môi trường KHÔNG đeo mác <c>[Auto]</c> và không lấy khuôn "{serial} - {lỗi}" của
@@ -137,6 +138,7 @@ public class TicketBatteryAnomalyDetectedConsumer : IConsumer<BatteryAnomalyDete
             11 => "High Temperature + Humidity",
             14 => "Environmental Incident",
             18 => "High Gas Concentration",
+            19 => "Water Leak Detected",
             _ => "Critical Battery Anomaly"
         };
     }

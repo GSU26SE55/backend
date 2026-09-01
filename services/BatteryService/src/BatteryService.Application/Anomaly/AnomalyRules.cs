@@ -233,6 +233,14 @@ public static class AnomalyRules
                 reading.AmbientTemperature ?? 0m, "°C"));
         }
 
+        // Water leak — cảm biến báo bool (ướt/khô), không có ngưỡng số nên luôn Critical khi true.
+        if (reading.WaterLeakDetected == true)
+        {
+            anomalies.Add(new AnomalyDetection(
+                AnomalyTypeEnum.WaterLeak, AlertSeverityEnum.Critical,
+                1m, 1m, "bool"));
+        }
+
         return anomalies;
     }
 

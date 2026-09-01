@@ -135,6 +135,7 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         16 => "Ambient temperature has dropped below the safe threshold.",
         17 => "The IoT gateway was decommissioned after sending impossible sensor values.",
         18 => "Gas concentration at the site exceeded the safe threshold.",
+        19 => "Water leak detected at the site.",
         _ => "An anomaly was detected on the battery."
     };
 
@@ -163,6 +164,7 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         16 => "Undertemp",
         17 => "IotDataIntegrityViolation",
         18 => "HighGasConcentration",
+        19 => "WaterLeak",
         _ => "GenericAnomaly"
     };
 
@@ -171,9 +173,9 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
     /// Cùng danh sách với <c>TicketAutoCreateFromAlertCommandHandler.IsEnvironmentalAnomaly</c>,
     /// nhưng theo GIÁ TRỊ enum vì tầng này chưa map sang chuỗi category.
     /// 9 HighAmbientTemp · 10 HighHumidity · 11 HighTempHumidityCombo · 14 EnvironmentalIncident
-    /// · 18 HighGasConcentration.
+    /// · 18 HighGasConcentration · 19 WaterLeak.
     /// </summary>
-    private static bool IsEnvironmental(int anomalyType) => anomalyType is 9 or 10 or 11 or 14 or 18;
+    private static bool IsEnvironmental(int anomalyType) => anomalyType is 9 or 10 or 11 or 14 or 18 or 19;
 
     /// <summary>
     /// Tiêu đề ticket. Sự cố môi trường đọc như sự cố môi trường, KHÔNG đeo mác <c>[Auto]</c> và
@@ -219,6 +221,7 @@ public class SendCreateTicketActivity : IStateMachineActivity<AlertTicketSagaSta
         16 => "Low Temperature",
         17 => "IoT Data Integrity Violation",
         18 => "High Gas Concentration",
+        19 => "Water Leak Detected",
         _ => "Critical Battery Anomaly"
     };
 }
