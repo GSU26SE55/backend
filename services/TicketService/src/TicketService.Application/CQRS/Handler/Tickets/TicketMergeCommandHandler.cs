@@ -78,9 +78,10 @@ public class TicketMergeCommandHandler : IRequestHandler<TicketMergeCommand, Tic
                     _uow.TicketAttachments.UpdateAsync(attachment);
                 }
 
-                var sourceTimer = await _uow.SlaTimers.GetAllAsync()
-                    .FirstOrDefaultAsync(t => t.TicketId == source.Id && !t.IsDeleted, transactionCt);
-                if (sourceTimer is not null)
+                var sourceTimers = await _uow.SlaTimers.GetAllAsync()
+                    .Where(t => t.TicketId == source.Id && !t.IsDeleted && t.Status != SlaTimerStatusEnum.Stopped)
+                    .ToListAsync(transactionCt);
+                foreach (var sourceTimer in sourceTimers)
                 {
                     sourceTimer.Status = SlaTimerStatusEnum.Stopped;
                     sourceTimer.CurrentPauseStartedAt = null;

@@ -146,8 +146,8 @@ public class TicketReportHandlersTests
         var staffAId = Guid.NewGuid();
         var staffBId = Guid.NewGuid();
 
-        var timer = new SlaTimer { Id = Guid.NewGuid(), TicketId = ticketId, Priority = TicketPriorityEnum.P2High, Status = SlaTimerStatusEnum.Breached };
-        var ticket = new Ticket { Id = ticketId, Code = "T-BREACH", Title = "t", Description = "d", SlaTimer = timer };
+        var timer = new SlaTimer { Id = Guid.NewGuid(), TicketId = ticketId, Priority = TicketPriorityEnum.P2High, Status = SlaTimerStatusEnum.Breached, Type = SlaTimerTypeEnum.Resolution };
+        var ticket = new Ticket { Id = ticketId, Code = "T-BREACH", Title = "t", Description = "d", SlaTimers = new List<SlaTimer> { timer } };
 
         var assignments = new List<TicketAssignment>
         {
@@ -184,7 +184,7 @@ public class TicketReportHandlersTests
         var assignmentCreatedAt = new DateTime(2026, 8, 11, 7, 0, 0, DateTimeKind.Utc);  // 14:00 HCM — trong giờ làm
         var resolvedAt = assignmentCreatedAt.AddMinutes(60);
 
-        var timer = new SlaTimer { Id = Guid.NewGuid(), TicketId = ticketId, Priority = TicketPriorityEnum.P2High, Status = SlaTimerStatusEnum.Breached, BreachAt = assignmentCreatedAt.AddHours(-1) };
+        var timer = new SlaTimer { Id = Guid.NewGuid(), TicketId = ticketId, Priority = TicketPriorityEnum.P2High, Status = SlaTimerStatusEnum.Breached, BreachAt = assignmentCreatedAt.AddHours(-1), Type = SlaTimerTypeEnum.Resolution };
         var ticket = new Ticket
         {
             Id = ticketId,
@@ -194,7 +194,7 @@ public class TicketReportHandlersTests
             Status = TicketStatusEnum.Completed,
             CreatedAt = assignmentCreatedAt.AddHours(-5),
             ResolvedAt = resolvedAt,
-            SlaTimer = timer
+            SlaTimers = new List<SlaTimer> { timer }
         };
         var assignments = new List<TicketAssignment>
         {

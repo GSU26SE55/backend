@@ -73,12 +73,21 @@ public class MyTicketDashboardStatsAsStaffQueryHandler
             .Where(g => TicketStatusGroups.ResolvedGroup.Contains(g.Status))
             .Sum(g => g.Count);
 
-        // ===== SLA summary trên toàn bộ ticket được gán cho staff =====
-        var slaGroups = await ticketsQuery
-            .Where(t => t.SlaTimer != null)
-            .GroupBy(t => t.SlaTimer!.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count() })
+        // ===== SLA summary — lấy timer active nhất mỗi ticket (Resolution > Response) =====
+        var staffTicketIds = await ticketsQuery.Select(t => t.Id).ToListAsync(cancellationToken);
+        var allSlaStatuses = await _unitOfWork.SlaTimers.GetAllAsync()
+            .AsNoTracking()
+            .Where(s => !s.IsDeleted && staffTicketIds.Contains(s.TicketId))
+            .Select(s => new { s.TicketId, s.Type, s.Status })
             .ToListAsync(cancellationToken);
+        var perTicketEffectiveStatus = allSlaStatuses
+            .GroupBy(s => s.TicketId)
+            .Select(g => g.OrderByDescending(s => s.Type).First().Status)
+            .ToList();
+        var slaGroups = perTicketEffectiveStatus
+            .GroupBy(status => status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToList();
 
         var sla = new SlaSummaryDto
         {
@@ -95,16 +104,21 @@ public class MyTicketDashboardStatsAsStaffQueryHandler
         // ===== Rủi ro SLA trên nhóm đang theo dõi =====
         // Cần tính RemainingPercent (phụ thuộc UtcNow) nên fetch các trường timer về memory —
         // tập monitored giới hạn theo 1 staff nên khối lượng nhỏ.
-        var monitoredTimers = await ticketsQuery
-            .Where(t => TicketStatusGroups.SlaMonitored.Contains(t.Status) && t.SlaTimer != null)
-            .Select(t => new
-            {
-                t.SlaTimer!.Status,
-                t.SlaTimer.Priority,
-                t.SlaTimer.DueAt,
-                t.SlaTimer.CurrentPauseStartedAt
-            })
+        var monitoredTicketIds = await ticketsQuery
+            .Where(t => TicketStatusGroups.SlaMonitored.Contains(t.Status))
+            .Select(t => t.Id)
             .ToListAsync(cancellationToken);
+        var monitoredSlaRaw = await _unitOfWork.SlaTimers.GetAllAsync()
+            .AsNoTracking()
+            .Where(s => !s.IsDeleted && monitoredTicketIds.Contains(s.TicketId))
+            .Select(s => new { s.TicketId, s.Type, s.Status, s.Priority, s.DueAt, s.CurrentPauseStartedAt })
+            .ToListAsync(cancellationToken);
+        // Per ticket: use Resolution timer (Type=2) if available, else Response timer (Type=1).
+        var monitoredTimers = monitoredSlaRaw
+            .GroupBy(s => s.TicketId)
+            .Select(g => g.OrderByDescending(s => s.Type).First())
+            .Select(s => new { s.Status, s.Priority, s.DueAt, s.CurrentPauseStartedAt })
+            .ToList();
 
         var slaMonitoredCount = monitoredTimers.Count;
         var breachedCount = monitoredTimers.Count(x => x.Status == SlaTimerStatusEnum.Breached);

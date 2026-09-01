@@ -383,6 +383,7 @@ public class SlaTimerBackgroundServiceTests
                 Id = timerId,
                 TicketId = ticketId,
                 Ticket = ticket,
+                Type = SlaTimerTypeEnum.Resolution,
                 Priority = TicketPriorityEnum.P2High,
                 StartedAt = FixedNow.AddDays(-10),
                 DueAt = FixedNow.AddDays(-3),
@@ -462,6 +463,7 @@ public class SlaTimerBackgroundServiceTests
                 Id = timerId,
                 TicketId = ticketId,
                 Ticket = ticket,
+                Type = SlaTimerTypeEnum.Resolution,
                 Priority = TicketPriorityEnum.P2High,
                 StartedAt = FixedNow.AddDays(-10),
                 DueAt = FixedNow.AddDays(-1),
@@ -529,7 +531,7 @@ public class SlaTimerBackgroundServiceTests
         var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
 
         var ticket = new Ticket { Id = ticketId, Code = "T-FIXED", Title = "Test", Description = "Test", Category = TicketCategoryEnum.Other, Status = TicketStatusEnum.InProgress, Origin = TicketOriginEnum.ManualByCustomer, IsDeleted = false };
-        var slaTimer = new SlaTimer { Id = slaTimerId, TicketId = ticketId, Priority = TicketPriorityEnum.P1Critical, StartedAt = start, DueAt = due, Status = SlaTimerStatusEnum.Running, IsDeleted = false };
+        var slaTimer = new SlaTimer { Id = slaTimerId, TicketId = ticketId, Type = SlaTimerTypeEnum.Resolution, Priority = TicketPriorityEnum.P1Critical, StartedAt = start, DueAt = due, Status = SlaTimerStatusEnum.Running, IsDeleted = false };
 
         dbContext.Tickets.Add(ticket);
         dbContext.SlaTimers.Add(slaTimer);

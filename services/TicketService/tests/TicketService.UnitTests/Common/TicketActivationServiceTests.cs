@@ -1,6 +1,7 @@
 using FluentAssertions;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
+using SharedKernels.Interfaces;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Application.Interfaces.Utils;
 using TicketService.Application.StateMachine;
@@ -20,16 +21,25 @@ public class TicketActivationServiceTests
     [Fact]
     public async Task Activate_ScheduledReassignmentWithPausedPreviousCycle_ResetsFullCycle()
     {
+        // Fresh Pending/Scheduled → InProgress: Branch 3 always creates a NEW Resolution timer.
+        // The original Response timer (fixture.Timer) is preserved unchanged.
         var fixture = CreateFixture(PendingContextEnum.Scheduled);
+        SlaTimer? newResolutionTimer = null;
+        fixture.SlaTimersMock.Setup(r => r.AddAsync(It.IsAny<SlaTimer>()))
+            .Callback<SlaTimer>(t => newResolutionTimer = t)
+            .Returns(Task.CompletedTask);
 
         var result = await fixture.Service.ActivateAsync(
             fixture.Request(ActivationReason.ScheduledDue), CancellationToken.None);
 
         result.Activated.Should().BeTrue();
-        fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running);
-        fixture.Timer.StartedAt.Should().Be(NowUtc);
-        fixture.Timer.DueAt.Should().Be(
+        newResolutionTimer.Should().NotBeNull("Branch 3 must create a new Resolution timer for fresh activation");
+        newResolutionTimer!.Type.Should().Be(SlaTimerTypeEnum.Resolution);
+        newResolutionTimer.Status.Should().Be(SlaTimerStatusEnum.Running);
+        newResolutionTimer.StartedAt.Should().Be(NowUtc);
+        newResolutionTimer.DueAt.Should().Be(
             new SlaCalculator().CalculateDueDate(NowUtc, TicketPriorityEnum.P3Normal));
+        fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Paused, "original Response timer must not be modified");
         fixture.Pause.ResumedAt.Should().BeNull();
     }
 
@@ -40,15 +50,20 @@ public class TicketActivationServiceTests
         var monday0600Local = new DateTime(2026, 8, 16, 23, 0, 0, DateTimeKind.Utc);
         fixture.Ticket.ScheduledStartAtUtc = monday0600Local;
         var request = fixture.Request(ActivationReason.ScheduledDue) with { NowUtc = monday0600Local };
+        SlaTimer? newResolutionTimer = null;
+        fixture.SlaTimersMock.Setup(r => r.AddAsync(It.IsAny<SlaTimer>()))
+            .Callback<SlaTimer>(t => newResolutionTimer = t)
+            .Returns(Task.CompletedTask);
 
         var result = await fixture.Service.ActivateAsync(request, CancellationToken.None);
 
         result.Activated.Should().BeTrue();
-        fixture.Timer.StartedAt.Should().Be(
+        newResolutionTimer.Should().NotBeNull();
+        newResolutionTimer!.StartedAt.Should().Be(
             new DateTime(2026, 8, 17, 0, 0, 0, DateTimeKind.Utc));
-        fixture.Timer.DueAt.Should().Be(
+        newResolutionTimer.DueAt.Should().Be(
             new SlaCalculator().CalculateDueDate(
-                fixture.Timer.StartedAt, TicketPriorityEnum.P3Normal));
+                newResolutionTimer.StartedAt, TicketPriorityEnum.P3Normal));
     }
 
     [Theory]
@@ -56,7 +71,9 @@ public class TicketActivationServiceTests
     [InlineData(ActivationReason.EarlyResume)]
     public async Task Activate_HeldTicket_ResumesRemainingCycle(ActivationReason reason)
     {
-        var fixture = CreateFixture(PendingContextEnum.Held);
+        // A Held ticket previously had a Resolution timer that was paused when it went Held.
+        // Branch 1 resumes that existing Resolution timer.
+        var fixture = CreateFixture(PendingContextEnum.Held, SlaTimerTypeEnum.Resolution);
         var originalDueAt = fixture.Timer.DueAt;
 
         var result = await fixture.Service.ActivateAsync(fixture.Request(reason), CancellationToken.None);
@@ -106,7 +123,8 @@ public class TicketActivationServiceTests
     [Fact]
     public async Task CompleteSla_RunningCycle_MarksMet()
     {
-        var fixture = CreateFixture(PendingContextEnum.Scheduled);
+        // CompleteSlaAsync queries for the Resolution timer — must be seeded as Resolution type.
+        var fixture = CreateFixture(PendingContextEnum.Scheduled, SlaTimerTypeEnum.Resolution);
         fixture.Timer.Status = SlaTimerStatusEnum.Running;
 
         await fixture.Service.CompleteSlaAsync(fixture.Ticket, CancellationToken.None);
@@ -129,21 +147,29 @@ public class TicketActivationServiceTests
     [Fact]
     public async Task StartCorrectionSla_NormalPriority_ResetsFullCycle()
     {
+        // StartCorrectionSla triggers Branch 3 — creates a new Resolution timer.
         var fixture = CreateFixture(PendingContextEnum.Scheduled);
         fixture.Timer.Status = SlaTimerStatusEnum.Met;
+        SlaTimer? newResolutionTimer = null;
+        fixture.SlaTimersMock.Setup(r => r.AddAsync(It.IsAny<SlaTimer>()))
+            .Callback<SlaTimer>(t => newResolutionTimer = t)
+            .Returns(Task.CompletedTask);
 
         await fixture.Service.StartCorrectionSlaAsync(fixture.Ticket, NowUtc, CancellationToken.None);
 
-        fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running);
-        fixture.Timer.StartedAt.Should().Be(NowUtc);
-        fixture.Timer.DueAt.Should().Be(
+        newResolutionTimer.Should().NotBeNull("correction SLA must create a new Resolution timer");
+        newResolutionTimer!.Type.Should().Be(SlaTimerTypeEnum.Resolution);
+        newResolutionTimer.Status.Should().Be(SlaTimerStatusEnum.Running);
+        newResolutionTimer.StartedAt.Should().Be(NowUtc);
+        newResolutionTimer.DueAt.Should().Be(
             new SlaCalculator().CalculateDueDate(NowUtc, TicketPriorityEnum.P3Normal));
     }
 
     [Fact]
     public async Task StartCorrectionSla_UrgentPriority_RemainsStopped()
     {
-        var fixture = CreateFixture(PendingContextEnum.Scheduled);
+        // For Urgent tickets, StartCorrectionSla stops the existing Resolution timer instead.
+        var fixture = CreateFixture(PendingContextEnum.Scheduled, SlaTimerTypeEnum.Resolution);
         fixture.Ticket.Priority = TicketPriorityEnum.Urgent;
         fixture.Timer.Status = SlaTimerStatusEnum.Met;
 
@@ -225,6 +251,7 @@ public class TicketActivationServiceTests
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Resolution,
             Priority = TicketPriorityEnum.P2High,
             StartedAt = NowUtc.AddHours(-34),
             DueAt = originalDueAt,
@@ -252,7 +279,7 @@ public class TicketActivationServiceTests
             IsAvailable = true,
             SkillTier = StaffSkillTierEnum.ModuleSpecialist  // P2High requires >= ModuleSpecialist
         };
-        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+        var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff },
             slaTimerSeed: new[] { timer },
@@ -272,10 +299,12 @@ public class TicketActivationServiceTests
             activity.Object,
             outbox.Object);
 
-        return new ActivationFixture(service, ticket, timer, pause, staffId, activity);
+        return new ActivationFixture(service, ticket, timer, pause, staffId, activity, slaTimers);
     }
 
-    private static ActivationFixture CreateFixture(PendingContextEnum context)
+    private static ActivationFixture CreateFixture(
+        PendingContextEnum context,
+        SlaTimerTypeEnum timerType = SlaTimerTypeEnum.Response)
     {
         var staffId = Guid.NewGuid();
         var ticket = new Ticket
@@ -296,6 +325,7 @@ public class TicketActivationServiceTests
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = timerType,
             Priority = TicketPriorityEnum.P3Normal,
             StartedAt = NowUtc.AddHours(-10),
             DueAt = NowUtc.AddHours(62),
@@ -318,11 +348,12 @@ public class TicketActivationServiceTests
             IsAvailable = true,
             SkillTier = StaffSkillTierEnum.Generalist
         };
-        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
+        var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(
             ticketSeed: new[] { ticket },
             staffSeed: new[] { staff },
             slaTimerSeed: new[] { timer },
             slaPauseEventSeed: new[] { pause });
+        slaTimers.Setup(r => r.AddAsync(It.IsAny<SlaTimer>())).Returns(Task.CompletedTask);
         var activity = new Mock<IActivityLogger>();
         activity.Setup(x => x.LogAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ActorRoleEnum>(), It.IsAny<string?>(),
@@ -338,7 +369,7 @@ public class TicketActivationServiceTests
             activity.Object,
             outbox.Object);
 
-        return new ActivationFixture(service, ticket, timer, pause, staffId, activity);
+        return new ActivationFixture(service, ticket, timer, pause, staffId, activity, slaTimers);
     }
 
     private record ActivationFixture(
@@ -347,7 +378,8 @@ public class TicketActivationServiceTests
         SlaTimer Timer,
         SlaPauseEvent Pause,
         Guid StaffId,
-        Mock<IActivityLogger> Activity)
+        Mock<IActivityLogger> Activity,
+        Mock<IGenericRepository<SlaTimer>> SlaTimersMock)
     {
         public ActivationRequest Request(
             ActivationReason reason,

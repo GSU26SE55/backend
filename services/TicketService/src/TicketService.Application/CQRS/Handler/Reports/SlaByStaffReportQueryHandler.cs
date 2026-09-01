@@ -37,7 +37,12 @@ public class SlaByStaffReportQueryHandler
                 a.StaffId,
                 a.Role,
                 TicketId = t.Id,
-                SlaStatus = t.SlaTimer != null ? (SlaTimerStatusEnum?)t.SlaTimer.Status : null
+                // Resolution timer when available, else Response timer (see SlaTimerTypeEnum)
+                SlaStatus = t.SlaTimers
+                    .Where(s => !s.IsDeleted)
+                    .OrderByDescending(s => s.Type)
+                    .Select(s => (SlaTimerStatusEnum?)s.Status)
+                    .FirstOrDefault()
             }
         ).ToListAsync(ct);
 

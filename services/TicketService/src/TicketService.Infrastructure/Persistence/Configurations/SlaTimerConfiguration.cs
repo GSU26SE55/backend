@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Domain.Enums;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
@@ -49,6 +50,11 @@ public class SlaTimerConfiguration : IEntityTypeConfiguration<SlaTimer>
             .HasConversion<int>()
             .IsConcurrencyToken();
 
+        builder.Property(e => e.Type)
+            .HasColumnName("type")
+            .HasConversion<int>()
+            .HasDefaultValue(SlaTimerTypeEnum.Response);
+
         builder.Property(e => e.MaxTotalPauseMinutes)
             .HasColumnName("max_total_pause_minutes");
 
@@ -66,10 +72,13 @@ public class SlaTimerConfiguration : IEntityTypeConfiguration<SlaTimer>
 
         builder.HasIndex(e => e.TicketId);
         builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => new { e.TicketId, e.Type })
+            .IsUnique()
+            .HasDatabaseName("ux_sla_timers_ticket_type");
 
         builder.HasOne(e => e.Ticket)
-            .WithOne(e => e.SlaTimer)
-            .HasForeignKey<SlaTimer>(e => e.TicketId)
+            .WithMany("SlaTimers")
+            .HasForeignKey(e => e.TicketId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

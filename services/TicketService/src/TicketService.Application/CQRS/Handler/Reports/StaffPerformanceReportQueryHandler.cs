@@ -44,8 +44,17 @@ public class StaffPerformanceReportQueryHandler
                 t.CreatedAt,
                 t.ResolvedAt,
                 t.Rating,
-                SlaStatus = t.SlaTimer != null ? (SlaTimerStatusEnum?)t.SlaTimer.Status : null,
-                SlaBreachAt = t.SlaTimer != null ? t.SlaTimer.BreachAt : (DateTime?)null
+                // Resolution timer when available, else Response timer (see SlaTimerTypeEnum)
+                SlaStatus = t.SlaTimers
+                    .Where(s => !s.IsDeleted)
+                    .OrderByDescending(s => s.Type)
+                    .Select(s => (SlaTimerStatusEnum?)s.Status)
+                    .FirstOrDefault(),
+                SlaBreachAt = t.SlaTimers
+                    .Where(s => !s.IsDeleted)
+                    .OrderByDescending(s => s.Type)
+                    .Select(s => s.BreachAt)
+                    .FirstOrDefault()
             }
         ).ToListAsync(ct);
 

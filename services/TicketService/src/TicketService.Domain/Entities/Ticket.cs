@@ -131,7 +131,16 @@ public class Ticket : AuditableEntity
     public Guid? ParentTicketId { get; set; }
 
     // Navigation properties
-    public SlaTimer? SlaTimer { get; set; }
+    // EF Core maps this collection; callers use the two [NotMapped] props below.
+    public ICollection<SlaTimer> SlaTimers { get; set; } = new List<SlaTimer>();
+
+    [NotMapped]
+    public SlaTimer? ResponseSlaTimer
+        => SlaTimers.FirstOrDefault(t => t.Type == SlaTimerTypeEnum.Response);
+
+    [NotMapped]
+    public SlaTimer? ResolutionSlaTimer
+        => SlaTimers.FirstOrDefault(t => t.Type == SlaTimerTypeEnum.Resolution);
     public ICollection<TicketActivity> Activities { get; set; } = new List<TicketActivity>();
     public ICollection<TicketChat> Chats { get; set; } = new List<TicketChat>();
     public ICollection<MaintenanceLog> MaintenanceLogs { get; set; } = new List<MaintenanceLog>();

@@ -823,26 +823,48 @@ public class TicketDataSeeder
                 _ => SlaTimerStatusEnum.Running
             };
 
-            // GH-1242 — dùng chung business clock với production thay vì cộng thẳng giờ đồng hồ,
-            // để data seed phản ánh đúng SLA theo ngày làm việc.
             var startedAt = ticket.CreatedAt;
-            var dueAt = _slaCalculator.CalculateDueDate(startedAt, ticket.Priority!.Value);
+            var responseDueAt = _slaCalculator.CalculateResponseDueDate(startedAt, ticket.Priority!.Value);
+            var resolutionDueAt = _slaCalculator.CalculateDueDate(startedAt, ticket.Priority!.Value);
 
+            var isOpenOrPending = ticket.Status is TicketStatusEnum.Open or TicketStatusEnum.Pending;
+
+            // 1. Response SLA Timer (Stage 1)
             timers.Add(new SlaTimer
             {
                 Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
+                Type = SlaTimerTypeEnum.Response,
                 Priority = ticket.Priority.Value,
                 StartedAt = startedAt,
-                DueAt = dueAt,
-                OriginalDueAt = dueAt,
-                Status = status,
+                DueAt = responseDueAt,
+                OriginalDueAt = responseDueAt,
+                Status = isOpenOrPending ? status : SlaTimerStatusEnum.Met,
                 MaxTotalPauseMinutes = 1440,
                 MaxPauseEpisodes = 3,
-                PauseEpisodesCount = status == SlaTimerStatusEnum.Paused ? 1 : 0,
-                CurrentPauseStartedAt = status == SlaTimerStatusEnum.Paused ? DateTime.UtcNow.AddHours(-2) : null,
                 CreatedAt = startedAt
             });
+
+            // 2. Resolution SLA Timer (Stage 2) — for tickets that have passed Open/Pending stage
+            if (!isOpenOrPending)
+            {
+                timers.Add(new SlaTimer
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = ticket.Id,
+                    Type = SlaTimerTypeEnum.Resolution,
+                    Priority = ticket.Priority.Value,
+                    StartedAt = startedAt,
+                    DueAt = resolutionDueAt,
+                    OriginalDueAt = resolutionDueAt,
+                    Status = status,
+                    MaxTotalPauseMinutes = 1440,
+                    MaxPauseEpisodes = 3,
+                    PauseEpisodesCount = status == SlaTimerStatusEnum.Paused ? 1 : 0,
+                    CurrentPauseStartedAt = status == SlaTimerStatusEnum.Paused ? DateTime.UtcNow.AddHours(-2) : null,
+                    CreatedAt = startedAt
+                });
+            }
         }
 
         _context.SlaTimers.AddRange(timers);
