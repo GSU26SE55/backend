@@ -87,19 +87,8 @@ public class TicketReprioritizeCommandHandler : IRequestHandler<TicketReprioriti
             ticket.UrgencyLevel = request.Urgency;
             ticket.Priority = priority;
 
-            var timer = await _uow.SlaTimers.GetAllAsync()
-                .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, token);
-
-            // Khi đổi mức ưu tiên ở Open (Stage 1), tính lại hạn chót Response SLA (24/7 calendar) theo priority mới.
-            if (timer is not null)
-            {
-                timer.Priority = priority;
-                timer.OriginalDueAt = ticket.Status == TicketStatusEnum.Open
-                    ? _slaCalculator.CalculateResponseDueDate(timer.StartedAt, priority)
-                    : _slaCalculator.CalculateDueDate(timer.StartedAt, priority);
-                timer.DueAt = timer.OriginalDueAt;
-                _uow.SlaTimers.UpdateAsync(timer);
-            }
+            // Mức ưu tiên được cập nhật cho Ticket để phục vụ cho Resolution SLA khi chuyển InProgress.
+            // Response SLA (Stage 1) giữ nguyên mức ưu tiên ban đầu từ lúc tạo phiếu.
 
             _uow.Tickets.UpdateAsync(ticket);
             await _activityLogger.LogAsync(

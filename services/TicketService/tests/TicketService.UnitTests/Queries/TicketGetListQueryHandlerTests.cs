@@ -306,9 +306,10 @@ public class TicketGetListQueryHandlerTests
         // Priority phải là P1/P2/P3 thật ở CẢ ticket lẫn timer: SlaCalculator.GetSlaWorkingDays
         // ném ArgumentOutOfRange với giá trị mặc định (0) khi map sang SlaTimerDTO.
         var ticket = MakeTicket(TicketStatusEnum.InProgress, TicketPriorityEnum.P2High, code: code);
-        ticket.SlaTimer = new SlaTimer
+        ticket.SlaTimers.Add(new SlaTimer
         {
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Resolution,
             Priority = TicketPriorityEnum.P2High,
             StartedAt = DateTime.UtcNow.AddHours(-4),
             DueAt = DateTime.UtcNow.AddHours(1),
@@ -316,7 +317,7 @@ public class TicketGetListQueryHandlerTests
             Status = status,
             WarningSentAt = warningSentAt,
             CurrentPauseStartedAt = status == SlaTimerStatusEnum.Paused ? DateTime.UtcNow : null
-        };
+        });
         return ticket;
     }
 

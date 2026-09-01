@@ -26,7 +26,7 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
             Priority = TicketPriorityEnum.P3Normal,
             Status = status,
             Origin = TicketOriginEnum.ManualByCustomer,
-            SlaTimer = slaTimer,
+            SlaTimers = slaTimer != null ? new List<SlaTimer> { slaTimer } : new List<SlaTimer>(),
             CreatedAt = createdAt ?? DateTime.UtcNow
         };
 
@@ -75,9 +75,11 @@ public class MyTicketDashboardStatsAsStaffQueryHandlerTests
         Ticket[] tickets,
         TicketAssignment[]? assignments = null)
     {
+        var slaTimers = tickets.SelectMany(t => t.SlaTimers.Select(s => { s.TicketId = t.Id; return s; }));
         var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(
             ticketSeed: tickets,
-            assignmentSeed: assignments);
+            assignmentSeed: assignments,
+            slaTimerSeed: slaTimers);
         return new MyTicketDashboardStatsAsStaffQueryHandler(
             uow.Object, _mockCurrentUserService.Object,
             new TicketService.Infrastructure.Implements.Utils.SlaCalculator());

@@ -86,6 +86,7 @@ public class TicketAutoCreateFromAlertCommandHandler : IRequestHandler<TicketAut
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Response,
             Priority = priority,
             Status = SlaTimerStatusEnum.Running,
             StartedAt = nowUtc,

@@ -43,20 +43,10 @@ public class PR1277MigrationTests : IAsyncLifetime
         await migrator.MigrateAsync(PreviousMigrationId);
 
         var ticketId = Guid.NewGuid();
-        db.Tickets.Add(new Ticket
-        {
-            Id = ticketId,
-            Code = $"MIG-{ticketId:N}"[..20],
-            BatteryAssetId = Guid.NewGuid(),
-            CustomerId = Guid.NewGuid(),
-            Title = "Legacy staff-created ticket",
-            Description = "Migration verification",
-            Category = TicketCategoryEnum.Other,
-            Status = TicketStatusEnum.Pending,
-            Origin = (TicketOriginEnum)3,
-            CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        var code = $"MIG-{ticketId:N}"[..20];
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO tickets (id, code, battery_asset_id, customer_id, title, description, category, status, origin, reopen_count, is_incident, schedule_version, created_at, is_deleted) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, 0, false, 0, {9}, false);",
+            ticketId, code, Guid.NewGuid(), Guid.NewGuid(), "Legacy staff-created ticket", "Migration verification", (int)TicketCategoryEnum.Other, (int)TicketStatusEnum.Pending, 3, DateTime.UtcNow);
 
         await migrator.MigrateAsync(OriginMigrationId);
         db.ChangeTracker.Clear();

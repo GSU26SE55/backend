@@ -112,6 +112,7 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
                 newAssignment.Role = AssignmentRoleEnum.PrimaryHandler;
                 newAssignment.IsDeleted = false;
                 newAssignment.DeletedAt = null;
+                newAssignment.CreatedAt = nowUtc; // reset rescue window anchor on reassign
                 _uow.TicketAssignments.UpdateAsync(newAssignment);
             }
             else
@@ -121,7 +122,8 @@ public class TicketReassignCommandHandler : IRequestHandler<TicketReassignComman
                     Id = Guid.NewGuid(),
                     TicketId = ticket.Id,
                     StaffId = request.NewPrimaryHandlerStaffId,
-                    Role = AssignmentRoleEnum.PrimaryHandler
+                    Role = AssignmentRoleEnum.PrimaryHandler,
+                    CreatedAt = nowUtc  // anchor rescue window to reassign time (mirrors upsert branch)
                 });
             }
 

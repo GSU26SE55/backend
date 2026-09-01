@@ -58,13 +58,16 @@ public class SlaTimerBackgroundService : BackgroundService
             var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
             ids = await db.SlaTimers.AsNoTracking()
                 .Where(timer => !timer.IsDeleted
-                                && (timer.Status == SlaTimerStatusEnum.Running
-                                    || (timer.Status == SlaTimerStatusEnum.Breached
-                                        && timer.Ticket.Status == TicketStatusEnum.InProgress))
                                 && !timer.Ticket.IsDeleted
                                 && !TicketStatusGroups.Terminal.Contains(timer.Ticket.Status)
                                 && timer.Ticket.Status != TicketStatusEnum.Completed
-                                && timer.Ticket.Priority != TicketPriorityEnum.Urgent)
+                                && timer.Ticket.Priority != TicketPriorityEnum.Urgent
+                                && (timer.Status == SlaTimerStatusEnum.Running
+                                    // Rescue window only applies to Resolution timers —
+                                    // a Breached Response timer must not trigger rescue logic.
+                                    || (timer.Status == SlaTimerStatusEnum.Breached
+                                        && timer.Type == SlaTimerTypeEnum.Resolution
+                                        && timer.Ticket.Status == TicketStatusEnum.InProgress)))
                 .OrderBy(timer => timer.DueAt)
                 .Select(timer => timer.Id)
                 .ToListAsync(ct);

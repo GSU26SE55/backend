@@ -28,7 +28,7 @@ public class TicketByIncidentQueryHandler
         // nhất để nếu dữ liệu cũ có trùng thì vẫn trả về ticket gốc chứ không phải cái ngẫu nhiên.
         var ticket = await _unitOfWork.Tickets.GetAllAsync()
             .AsNoTracking()
-            .Include(t => t.SlaTimer)
+            .Include(t => t.SlaTimers)
             .Include(t => t.BatteryAssets)
             .Include(t => t.Assignments.Where(a => !a.IsDeleted))
             .Where(t => !t.IsDeleted

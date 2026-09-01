@@ -257,9 +257,11 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
         SeedChat(isPinned: true);
         SeedChat(isPinned: true);
         SeedChat(isPinned: true);
-        var fourthChat = SeedChat();
+        SeedChat(isPinned: true);
+        SeedChat(isPinned: true);
+        var sixthChat = SeedChat();
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/tickets/{_ticketId}/chats/{fourthChat.Id}/pin")
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/tickets/{_ticketId}/chats/{sixthChat.Id}/pin")
         {
             Content = new StringContent(string.Empty)
         };
@@ -268,8 +270,8 @@ public class TicketChatPhase4ApiTests : IClassFixture<TicketApiFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        await _db.Entry(fourthChat).ReloadAsync();
-        fourthChat.IsPinned.Should().BeFalse();
+        await _db.Entry(sixthChat).ReloadAsync();
+        sixthChat.IsPinned.Should().BeFalse();
     }
 
     [Fact]

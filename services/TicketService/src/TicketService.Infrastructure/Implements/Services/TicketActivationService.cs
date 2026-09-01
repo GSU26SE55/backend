@@ -81,8 +81,12 @@ public class TicketActivationService : ITicketActivationService
 
     public async Task CompleteSlaAsync(Ticket ticket, CancellationToken ct)
     {
+        // Mark the Resolution timer as Met when the ticket is resolved.
+        // The Response timer was already settled (Met/Breached) when staff was first assigned.
         var timer = await _uow.SlaTimers.GetAllAsync()
-            .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, ct);
+            .FirstOrDefaultAsync(x => x.TicketId == ticket.Id
+                                   && x.Type == SlaTimerTypeEnum.Resolution
+                                   && !x.IsDeleted, ct);
         if (timer?.Status != SlaTimerStatusEnum.Running)
             return;
 
@@ -96,14 +100,18 @@ public class TicketActivationService : ITicketActivationService
 
     public async Task StopSlaAsync(Ticket ticket, CancellationToken ct)
     {
-        var timer = await _uow.SlaTimers.GetAllAsync()
-            .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, ct);
-        if (timer is null)
-            return;
-
-        timer.Status = SlaTimerStatusEnum.Stopped;
-        timer.CurrentPauseStartedAt = null;
-        _uow.SlaTimers.UpdateAsync(timer);
+        // Stop all active timers — covers both Response (Open tickets) and Resolution (InProgress).
+        var timers = await _uow.SlaTimers.GetAllAsync()
+            .Where(x => x.TicketId == ticket.Id
+                     && !x.IsDeleted
+                     && x.Status != SlaTimerStatusEnum.Stopped)
+            .ToListAsync(ct);
+        foreach (var timer in timers)
+        {
+            timer.Status = SlaTimerStatusEnum.Stopped;
+            timer.CurrentPauseStartedAt = null;
+            _uow.SlaTimers.UpdateAsync(timer);
+        }
     }
 
     private async Task ApplySlaAsync(
@@ -113,17 +121,21 @@ public class TicketActivationService : ITicketActivationService
         bool resumesHeldCycle,
         CancellationToken ct)
     {
-        var timer = await _uow.SlaTimers.GetAllAsync()
-            .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, ct);
+        // ApplySlaAsync operates on the Resolution stage — it is called when a ticket
+        // moves to InProgress. The Response timer is never touched here.
+        var resolutionTimer = await _uow.SlaTimers.GetAllAsync()
+            .FirstOrDefaultAsync(x => x.TicketId == ticket.Id
+                                   && x.Type == SlaTimerTypeEnum.Resolution
+                                   && !x.IsDeleted, ct);
 
-        // Urgent: always stop SLA clock
+        // Urgent: stop any existing Resolution timer; no new timer is created.
         if (ticket.Priority == TicketPriorityEnum.Urgent)
         {
-            if (timer is not null)
+            if (resolutionTimer is not null)
             {
-                timer.Status = SlaTimerStatusEnum.Stopped;
-                timer.CurrentPauseStartedAt = null;
-                _uow.SlaTimers.UpdateAsync(timer);
+                resolutionTimer.Status = SlaTimerStatusEnum.Stopped;
+                resolutionTimer.CurrentPauseStartedAt = null;
+                _uow.SlaTimers.UpdateAsync(resolutionTimer);
             }
             return;
         }
@@ -132,9 +144,9 @@ public class TicketActivationService : ITicketActivationService
 
         // Nhánh 1 — Resume a held-and-paused cycle (Pending/Held → InProgress)
         if (resumesHeldCycle &&
-            timer?.Status == SlaTimerStatusEnum.Paused && timer.Priority == priority)
+            resolutionTimer?.Status == SlaTimerStatusEnum.Paused && resolutionTimer.Priority == priority)
         {
-            await ResumePausedTimerAsync(timer!, nowUtc, ct);
+            await ResumePausedTimerAsync(resolutionTimer, nowUtc, ct);
             return;
         }
 
@@ -142,46 +154,60 @@ public class TicketActivationService : ITicketActivationService
         // preserve the contractual clock — OriginalDueAt, BreachAt, DueAt must not be reset.
         if (fromStatus is TicketStatusEnum.ReAssign or TicketStatusEnum.InProgress)
         {
-            if (timer is null)
-                return;  // no existing timer — nothing to preserve, skip
-            timer.Priority = priority;
-            if (timer.Status != SlaTimerStatusEnum.Breached)
-                timer.Status = SlaTimerStatusEnum.Running;
+            if (resolutionTimer is null)
+                return;  // no existing Resolution timer — nothing to preserve, skip
+            resolutionTimer.Priority = priority;
+            if (resolutionTimer.Status != SlaTimerStatusEnum.Breached)
+                resolutionTimer.Status = SlaTimerStatusEnum.Running;
             // DueAt, OriginalDueAt, BreachAt, TotalPausedMinutes, PauseEpisodesCount, WarningSentAt
             // are intentionally left unchanged — SPE O&M v4.0 § Record Control
-            _uow.SlaTimers.UpdateAsync(timer);
+            _uow.SlaTimers.UpdateAsync(resolutionTimer);
             return;
         }
 
-        // Nhánh 3 — Fresh activation (Open/Pending → InProgress): full reset or new timer
-        var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(nowUtc);
-        var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, priority);
-        if (timer is null)
+        // Settle Response timer if still Running: moving Open/Pending -> InProgress means first response is done
+        var responseTimer = await _uow.SlaTimers.GetAllAsync()
+            .FirstOrDefaultAsync(x => x.TicketId == ticket.Id
+                                   && x.Type == SlaTimerTypeEnum.Response
+                                   && !x.IsDeleted, ct);
+        if (responseTimer is not null && responseTimer.Status == SlaTimerStatusEnum.Running)
         {
-            await _uow.SlaTimers.AddAsync(new SlaTimer
+            responseTimer.Status = SlaTimerStatusEnum.Met;
+            _uow.SlaTimers.UpdateAsync(responseTimer);
+        }
+
+        // Nhánh 3 — Fresh activation (Open/Pending → InProgress):
+        // If a Resolution timer already exists for this ticket (e.g. from seeder or prior transition), update it.
+        // Otherwise, insert a new Resolution timer.
+        if (resolutionTimer is not null)
+        {
+            resolutionTimer.Priority = priority;
+            if (resolutionTimer.Status != SlaTimerStatusEnum.Breached)
             {
-                Id = Guid.NewGuid(),
-                TicketId = ticket.Id,
-                Priority = priority,
-                StartedAt = effectiveStartedAt,
-                DueAt = dueAt,
-                OriginalDueAt = dueAt,
-                Status = SlaTimerStatusEnum.Running
-            });
+                var effectiveStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(nowUtc);
+                var dueAt = _slaCalculator.CalculateDueDate(effectiveStartedAt, priority);
+                resolutionTimer.StartedAt = effectiveStartedAt;
+                resolutionTimer.DueAt = dueAt;
+                resolutionTimer.OriginalDueAt = dueAt;
+                resolutionTimer.Status = SlaTimerStatusEnum.Running;
+            }
+            _uow.SlaTimers.UpdateAsync(resolutionTimer);
             return;
         }
 
-        timer.Priority = priority;
-        timer.StartedAt = effectiveStartedAt;
-        timer.DueAt = dueAt;
-        timer.OriginalDueAt = dueAt;
-        timer.TotalPausedMinutes = 0;
-        timer.CurrentPauseStartedAt = null;
-        timer.WarningSentAt = null;
-        timer.BreachAt = null;
-        timer.Status = SlaTimerStatusEnum.Running;
-        timer.PauseEpisodesCount = 0;
-        _uow.SlaTimers.UpdateAsync(timer);
+        var newStartedAt = _slaCalculator.NormalizeToNextWorkingInstant(nowUtc);
+        var newDueAt = _slaCalculator.CalculateDueDate(newStartedAt, priority);
+        await _uow.SlaTimers.AddAsync(new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Resolution,
+            Priority = priority,
+            StartedAt = newStartedAt,
+            DueAt = newDueAt,
+            OriginalDueAt = newDueAt,
+            Status = SlaTimerStatusEnum.Running
+        });
     }
 
     private async Task ResumePausedTimerAsync(SlaTimer timer, DateTime nowUtc, CancellationToken ct)

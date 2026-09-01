@@ -41,8 +41,9 @@ public class EscalationBackgroundService : IConsumer<SlaBreachedEvent>
                     ticket.CloseReason == TicketCloseReasonEnum.MergedDuplicate)
                     return;
 
+                var timerType = ticket.Status == TicketStatusEnum.Open ? SlaTimerTypeEnum.Response : SlaTimerTypeEnum.Resolution;
                 var timer = await _uow.SlaTimers.GetAllAsync()
-                    .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && !x.IsDeleted, ct);
+                    .FirstOrDefaultAsync(x => x.TicketId == ticket.Id && x.Type == timerType && !x.IsDeleted, ct);
                 if (timer?.Status != SlaTimerStatusEnum.Breached)
                     return;
 

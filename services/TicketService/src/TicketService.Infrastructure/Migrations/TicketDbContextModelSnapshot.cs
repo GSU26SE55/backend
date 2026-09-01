@@ -1015,6 +1015,12 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("total_paused_minutes");
 
+                    b.Property<int>("Type")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("type");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1033,8 +1039,11 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("TicketId")
-                        .IsUnique();
+                    b.HasIndex("TicketId");
+
+                    b.HasIndex("TicketId", "Type")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sla_timers_ticket_type");
 
                     b.ToTable("sla_timers", (string)null);
                 });
@@ -1259,14 +1268,6 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("merged_into_ticket_id");
 
-                    b.Property<Guid?>("ParentTicketId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("parent_ticket_id");
-
-                    b.Property<Guid?>("SiteId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("site_id");
-
                     b.Property<int>("Origin")
                         .HasColumnType("integer")
                         .HasColumnName("origin");
@@ -1274,6 +1275,10 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<Guid?>("OriginAlertId")
                         .HasColumnType("uuid")
                         .HasColumnName("origin_alert_id");
+
+                    b.Property<Guid?>("ParentTicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_ticket_id");
 
                     b.Property<int?>("PendingContext")
                         .HasColumnType("integer")
@@ -1353,6 +1358,10 @@ namespace TicketService.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("scheduled_start_at_utc");
 
+                    b.Property<Guid?>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
@@ -1396,9 +1405,9 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.HasIndex("ParentTicketId");
 
-                    b.HasIndex("SiteId");
-
                     b.HasIndex("Priority");
+
+                    b.HasIndex("SiteId");
 
                     b.HasIndex("Status");
 
@@ -3045,8 +3054,8 @@ namespace TicketService.Infrastructure.Migrations
             modelBuilder.Entity("TicketService.Domain.Entities.SlaTimer", b =>
                 {
                     b.HasOne("TicketService.Domain.Entities.Ticket", "Ticket")
-                        .WithOne("SlaTimer")
-                        .HasForeignKey("TicketService.Domain.Entities.SlaTimer", "TicketId")
+                        .WithMany("SlaTimers")
+                        .HasForeignKey("TicketId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -3263,7 +3272,7 @@ namespace TicketService.Infrastructure.Migrations
 
                     b.Navigation("Participants");
 
-                    b.Navigation("SlaTimer");
+                    b.Navigation("SlaTimers");
                 });
 
             modelBuilder.Entity("TicketService.Domain.Entities.TicketChatTranslation", b =>

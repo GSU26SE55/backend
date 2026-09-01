@@ -1,6 +1,6 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedContracts.Common.Responses;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.CQRS.Command.Chats;
