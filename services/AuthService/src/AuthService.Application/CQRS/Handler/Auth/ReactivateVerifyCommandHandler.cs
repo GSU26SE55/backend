@@ -56,12 +56,15 @@ public class ReactivateVerifyCommandHandler : IRequestHandler<ReactivateVerifyCo
         if (account == null)
             return Fail(404, "Account not found within the restore window, or the OTP is invalid.");
 
+        // #38 QA solars.io.vn 2026-08-29: 401 ở 2 nhánh này từng bị axios.ts coi là hết phiên
+        // (mọi 401 != TOKEN_EXPIRED ⇒ auto-logout) ⇒ kích hoạt lại với OTP sai/hết hạn là bị
+        // văng thẳng về /login mất cả luồng, không hiện thông báo gì.
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value <= DateTime.UtcNow
             || string.IsNullOrEmpty(account.OtpCode))
-            return Fail(401, "OTP has expired. Please request a new OTP.");
+            return Fail(400, "OTP has expired. Please request a new OTP.");
 
         if (!SecureCompareHelper.FixedTimeEquals(account.OtpCode, request.Otp.Trim()))
-            return Fail(401, "Incorrect OTP.");
+            return Fail(400, "Incorrect OTP.");
 
         // Restore: clear soft-delete + reset auth state.
         var oldStatus = account.Status;   // GH-766 — bắt trước khi ghi đè.

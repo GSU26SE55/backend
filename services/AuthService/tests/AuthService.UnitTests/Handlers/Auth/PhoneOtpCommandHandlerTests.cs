@@ -141,7 +141,9 @@ public class VerifyPhoneOtpCommandHandlerTests
 
         var resp = await handler.Handle(new VerifyPhoneOtpCommand { AccountId = account.Id, Otp = "111111" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng đã đăng nhập không được dùng
+        // 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        resp.StatusCode.Should().Be(400);
         account.FailedLoginAttempts.Should().Be(1);
         account.PhoneConfirmed.Should().BeFalse();
     }

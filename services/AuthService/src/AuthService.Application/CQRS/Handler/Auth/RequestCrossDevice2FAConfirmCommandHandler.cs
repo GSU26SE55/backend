@@ -86,7 +86,9 @@ public class RequestCrossDevice2FAConfirmCommandHandler
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var issuer = _configuration["JwtSettings:Issuer"] ?? "GSU26SE55 Auth";
+        // #28 QA solars.io.vn 2026-08-29: JwtSettings:Issuer là URL API (vd "https://api.solaris.io.vn")
+        // dùng để validate claim `iss` của JWT — KHÔNG phải tên hiển thị cho authenticator app.
+        var issuer = "Solar Battery Maintenance";
         var otpAuthUri = _totp.BuildOtpAuthUri(secret, account.Email, issuer);
 
         return new CommonResponse<RequestCrossDevice2FAConfirmResponseDto>

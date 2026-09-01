@@ -130,6 +130,93 @@ public class ChangeAccountRoleCommandHandlerTests
         account.RoleId.Should().Be(role.Id);
         account.RoleAssignedAt.Should().Be(originalAssignedAt, "no change → RoleAssignedAt giữ nguyên");
     }
+
+    // #50 QA solars.io.vn 2026-08-29 — "Change role" bấm phát ăn ngay, không có chốt chặn
+    // "Admin cuối cùng". Đổi role account Admin duy nhất còn lại là khoá cửa vĩnh viễn.
+    [Fact]
+    public async Task ChangeRole_LastAdmin_Returns409_DoesNotChangeRole()
+    {
+        var adminRole = new global::AuthService.Domain.Entities.Role
+        {
+            Id = Guid.NewGuid(),
+            Name = "Admin",
+            NormalizedName = "ADMIN",
+            Status = RoleStatusEnum.Active
+        };
+        var managerRole = new global::AuthService.Domain.Entities.Role
+        {
+            Id = Guid.NewGuid(),
+            Name = "Manager",
+            NormalizedName = "MANAGER",
+            Status = RoleStatusEnum.Active
+        };
+        var lastAdmin = new global::AuthService.Domain.Entities.Account
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@e.com",
+            PasswordHash = "x",
+            FullName = "Admin",
+            RoleId = adminRole.Id
+        };
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { lastAdmin }, roleSeed: new[] { adminRole, managerRole });
+        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object, _producer.Object);
+
+        var resp = await handler.Handle(new ChangeAccountRoleCommand
+        {
+            AccountId = lastAdmin.Id,
+            RoleId = managerRole.Id
+        }, CancellationToken.None);
+
+        resp.IsSuccess.Should().BeFalse();
+        resp.StatusCode.Should().Be(409);
+        lastAdmin.RoleId.Should().Be(adminRole.Id, "role của Admin cuối cùng phải giữ nguyên");
+    }
+
+    [Fact]
+    public async Task ChangeRole_AdminWithAnotherAdminExisting_Succeeds()
+    {
+        var adminRole = new global::AuthService.Domain.Entities.Role
+        {
+            Id = Guid.NewGuid(),
+            Name = "Admin",
+            NormalizedName = "ADMIN",
+            Status = RoleStatusEnum.Active
+        };
+        var managerRole = new global::AuthService.Domain.Entities.Role
+        {
+            Id = Guid.NewGuid(),
+            Name = "Manager",
+            NormalizedName = "MANAGER",
+            Status = RoleStatusEnum.Active
+        };
+        var admin1 = new global::AuthService.Domain.Entities.Account
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin1@e.com",
+            PasswordHash = "x",
+            FullName = "Admin1",
+            RoleId = adminRole.Id
+        };
+        var admin2 = new global::AuthService.Domain.Entities.Account
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin2@e.com",
+            PasswordHash = "x",
+            FullName = "Admin2",
+            RoleId = adminRole.Id
+        };
+        var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { admin1, admin2 }, roleSeed: new[] { adminRole, managerRole });
+        var handler = new ChangeAccountRoleCommandHandler(uow.Object, MockPublisher.NoOp().Object, _producer.Object);
+
+        var resp = await handler.Handle(new ChangeAccountRoleCommand
+        {
+            AccountId = admin1.Id,
+            RoleId = managerRole.Id
+        }, CancellationToken.None);
+
+        resp.IsSuccess.Should().BeTrue();
+        admin1.RoleId.Should().Be(managerRole.Id);
+    }
 }
 
 public class UnlockAccountCommandHandlerTests

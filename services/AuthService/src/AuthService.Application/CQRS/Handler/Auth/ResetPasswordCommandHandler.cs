@@ -40,9 +40,12 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
 
     public async Task<CommonResponse<string>> Handle(ResetPasswordCommand request, CancellationToken cancellationToken)
     {
+        // #38 QA solars.io.vn 2026-08-29: 401 ở 3 nhánh dưới đây từng bị axios.ts coi là hết phiên
+        // (mọi 401 != TOKEN_EXPIRED ⇒ auto-logout) ⇒ quên mật khẩu với resetToken sai/hết hạn/đã
+        // dùng là bị văng thẳng về /login mất cả luồng, không hiện thông báo gì.
         var (accountId, jti, expiresAtUtc, error) = _jwtHelper.ValidateResetTokenDetailed(request.ResetToken);
         if (error != null || !accountId.HasValue)
-            return Fail(401, error ?? "Invalid reset token.");
+            return Fail(400, error ?? "Invalid reset token.");
 
         // #AUTH-06: enforce single-use bằng Redis SET NX.
         // TTL = thời gian còn lại của token để key tự dọn sau khi token expire.
@@ -54,11 +57,11 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
                 ? expiresAtUtc.Value - DateTime.UtcNow
                 : TimeSpan.FromMinutes(15);
             if (ttl <= TimeSpan.Zero)
-                return Fail(401, "Reset token has expired.");
+                return Fail(400, "Reset token has expired.");
 
             var acquired = await db.StringSetAsync(key, "1", ttl, When.NotExists);
             if (!acquired)
-                return Fail(401, "Reset token has already been used. Please request a new OTP.");
+                return Fail(400, "Reset token has already been used. Please request a new OTP.");
         }
 
         var account = await _unitOfWork.Accounts

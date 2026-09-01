@@ -1,3 +1,4 @@
+using FileStorageService.Application.CQRS.Notification.Audit;
 using FileStorageService.Application.CQRS.Query;
 using FileStorageService.Application.Interfaces;
 using FileStorageService.Domain.Enums;
@@ -12,15 +13,18 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
     private readonly IObjectStorageService _objectStorageService;
     private readonly IFileStorageUnitOfWork _unitOfWork;
     private readonly IFileAuthorizationService _fileAuthorizationService;
+    private readonly IPublisher _publisher;
 
     public GetFilePresignedUrlByIdQueryHandler(
         IObjectStorageService objectStorageService,
         IFileStorageUnitOfWork unitOfWork,
-        IFileAuthorizationService fileAuthorizationService)
+        IFileAuthorizationService fileAuthorizationService,
+        IPublisher publisher)
     {
         _objectStorageService = objectStorageService;
         _unitOfWork = unitOfWork;
         _fileAuthorizationService = fileAuthorizationService;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<string>> Handle(GetFilePresignedUrlByIdQuery request, CancellationToken cancellationToken)
@@ -38,7 +42,15 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
             return NotFound();
 
         if (!_fileAuthorizationService.CanRead(file))
+        {
+            // #46 QA solars.io.vn 2026-08-29 — hạ tầng FileAuditLog có đủ nhưng chưa handler nào
+            // từng ghi vào đó.
+            await _publisher.Publish(FileAuditTrailNotification.For(
+                FileAuditActionEnum.AccessDenied, file.Id, file.OriginalFileName, isSuccess: false,
+                reason: "Not authorized to create a presigned URL for this file"), cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Forbidden();
+        }
 
         if (file.Status == FileStatusEnum.Quarantined)
         {
@@ -64,6 +76,10 @@ public class GetFilePresignedUrlByIdQueryHandler : IRequestHandler<GetFilePresig
             file.ObjectKey,
             TimeSpan.FromMinutes(request.ExpiresInMinutes),
             cancellationToken);
+
+        await _publisher.Publish(FileAuditTrailNotification.For(
+            FileAuditActionEnum.PresignedUrlGenerated, file.Id, file.OriginalFileName), cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CommonResponse<string>
         {

@@ -58,7 +58,9 @@ public class VerifyPhoneOtpCommandHandler : IRequestHandler<VerifyPhoneOtpComman
                 account.LockoutEndAt = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
             _unitOfWork.Accounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Fail(401, "Incorrect OTP.");
+            // #38 QA solars.io.vn 2026-08-29: 401 ở đây từng bị axios.ts coi là hết phiên
+            // (mọi 401 != TOKEN_EXPIRED ⇒ auto-logout) ⇒ gõ sai OTP là bị đăng xuất luôn.
+            return Fail(400, "Incorrect OTP.");
         }
 
         account.PhoneConfirmed = true;

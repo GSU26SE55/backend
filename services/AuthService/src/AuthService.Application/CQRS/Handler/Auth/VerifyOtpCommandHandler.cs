@@ -54,8 +54,11 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
         }
 
         // #AUTH-27: dùng <= để chặn edge case on-exact-expiry.
+        // #38 QA solars.io.vn 2026-08-29: 401 ở đây từng bị axios.ts coi là hết phiên (mọi 401
+        // != TOKEN_EXPIRED ⇒ auto-logout) ⇒ đăng ký với OTP hết hạn là bị văng thẳng về /login
+        // mất cả luồng, không hiện thông báo gì.
         if (!account.OtpExpiredAt.HasValue || account.OtpExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(401, "OTP has expired. Please request a new one.");
+            return Fail(400, "OTP has expired. Please request a new one.");
 
         if (account.OtpPurpose != OtpPurposeEnum.Register)
             return Fail(422, "This OTP is not for registration.");
@@ -75,7 +78,9 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, CommonR
                 return Fail(423, $"Incorrect OTP entered {MaxFailedAttempts} times. Account locked for {LockoutDurationMinutes} minutes.");
 
             var remaining = MaxFailedAttempts - account.FailedLoginAttempts;
-            return Fail(401, $"Incorrect OTP. {remaining} attempt(s) remaining.");
+            // #38 QA solars.io.vn 2026-08-29: 401 ở đây từng bị axios.ts coi là hết phiên
+            // (mọi 401 != TOKEN_EXPIRED ⇒ auto-logout) ⇒ gõ sai OTP 1 lần là bị đăng xuất luôn.
+            return Fail(400, $"Incorrect OTP. {remaining} attempt(s) remaining.");
         }
 
         AppMetrics.AuthOtpUsageTotal.WithLabels("register", "verified").Inc(); // #AUTH-78

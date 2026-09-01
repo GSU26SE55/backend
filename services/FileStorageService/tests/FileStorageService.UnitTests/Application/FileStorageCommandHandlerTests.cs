@@ -2,11 +2,13 @@ using System.Linq.Expressions;
 using FileStorageService.Application.Authorization;
 using FileStorageService.Application.CQRS.Command;
 using FileStorageService.Application.CQRS.Handler;
+using FileStorageService.Application.CQRS.Notification.Audit;
 using FileStorageService.Application.CQRS.Query;
 using FileStorageService.Application.DTOs;
 using FileStorageService.Application.Interfaces;
 using FileStorageService.Domain.Entities;
 using FileStorageService.Domain.Enums;
+using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore.Query;
 using SharedKernels.Interfaces;
@@ -34,7 +36,7 @@ public class FileStorageCommandHandlerTests
         var storage = new Mock<IObjectStorageService>();
         var (uow, _) = BuildFileStorageUnitOfWork();
         var auth = BuildFileAuthorizationService();
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new UploadFileCommand { File = null }, CancellationToken.None);
 
@@ -88,7 +90,8 @@ public class FileStorageCommandHandlerTests
             ContentType = "image/png"
         };
 
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var publisher = new Mock<IPublisher>();
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, publisher.Object);
 
         var result = await handler.Handle(new UploadFileCommand
         {
@@ -107,6 +110,11 @@ public class FileStorageCommandHandlerTests
             file.Status == FileStatusEnum.Ready &&
             file.CreatedBy == currentUserId)), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        // #46 QA solars.io.vn 2026-08-29: hạ tầng FileAuditLog có đủ nhưng chưa handler nào từng
+        // ghi vào đó — khoá lại bằng test để không tái phát.
+        publisher.Verify(p => p.Publish(
+            It.Is<FileAuditTrailNotification>(n => n.ActionCode == nameof(FileAuditActionEnum.FileUploaded) && n.IsSuccess),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -122,7 +130,7 @@ public class FileStorageCommandHandlerTests
             ContentType = "application/pdf"
         };
 
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new UploadFileCommand
         {
@@ -157,7 +165,7 @@ public class FileStorageCommandHandlerTests
             ContentType = "image/jpeg"
         };
 
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new UploadFileCommand
         {
@@ -203,7 +211,7 @@ public class FileStorageCommandHandlerTests
             ContentType = "application/octet-stream"
         };
 
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new UploadFileCommand
         {
@@ -247,7 +255,7 @@ public class FileStorageCommandHandlerTests
             ContentType = "application/octet-stream"
         };
 
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new UploadFileCommand
         {
@@ -273,7 +281,7 @@ public class FileStorageCommandHandlerTests
             ContentType = "image/png"
         };
 
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new UploadFileCommand
         {
@@ -307,7 +315,7 @@ public class FileStorageCommandHandlerTests
             ContentType = "application/octet-stream"
         };
 
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new UploadFileCommand
         {
@@ -360,7 +368,7 @@ public class FileStorageCommandHandlerTests
             ContentType = "image/png"
         };
 
-        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new UploadFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var act = async () => await handler.Handle(new UploadFileCommand
         {
@@ -389,7 +397,7 @@ public class FileStorageCommandHandlerTests
         var storage = new Mock<IObjectStorageService>();
         var (uow, files) = BuildFileStorageUnitOfWork([file]);
         var auth = BuildFileAuthorizationService();
-        var handler = new DeleteFileCommandHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new DeleteFileCommandHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new DeleteFileCommand { ObjectKey = "avatars/a.png" }, CancellationToken.None);
 
@@ -420,7 +428,7 @@ public class FileStorageCommandHandlerTests
             .ReturnsAsync("http://localhost:9000/solar-battery-files/docs/a.pdf");
         var (uow, _) = BuildFileStorageUnitOfWork([file]);
         var auth = BuildFileAuthorizationService();
-        var handler = new GetPresignedUrlQueryHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new GetPresignedUrlQueryHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new GetPresignedUrlQuery
         {
@@ -449,7 +457,7 @@ public class FileStorageCommandHandlerTests
         var storage = new Mock<IObjectStorageService>();
         var (uow, _) = BuildFileStorageUnitOfWork([file]);
         var auth = BuildFileAuthorizationService();
-        var handler = new GetPresignedUrlQueryHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new GetPresignedUrlQueryHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new GetPresignedUrlQuery
         {
@@ -476,7 +484,7 @@ public class FileStorageCommandHandlerTests
             .ReturnsAsync(new FileDownloadResponse());
         var (uow, _) = BuildFileStorageUnitOfWork();
         var auth = BuildFileAuthorizationService();
-        var handler = new DownloadFileQueryHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new DownloadFileQueryHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new DownloadFileQuery { ObjectKey = " " }, CancellationToken.None);
 
@@ -501,7 +509,7 @@ public class FileStorageCommandHandlerTests
         var storage = new Mock<IObjectStorageService>();
         var (uow, _) = BuildFileStorageUnitOfWork([file]);
         var auth = BuildFileAuthorizationService();
-        var handler = new DownloadFileQueryHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new DownloadFileQueryHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new DownloadFileQuery { ObjectKey = "reports/a.pdf" }, CancellationToken.None);
 
@@ -526,7 +534,7 @@ public class FileStorageCommandHandlerTests
         var storage = new Mock<IObjectStorageService>();
         var (uow, _) = BuildFileStorageUnitOfWork([file]);
         var auth = BuildFileAuthorizationService();
-        var handler = new DownloadFileQueryHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new DownloadFileQueryHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new DownloadFileQuery { ObjectKey = "reports/a.pdf" }, CancellationToken.None);
 
@@ -541,7 +549,7 @@ public class FileStorageCommandHandlerTests
         var storage = new Mock<IObjectStorageService>();
         var (uow, _) = BuildFileStorageUnitOfWork();
         var auth = BuildFileAuthorizationService();
-        var handler = new GetPresignedUrlQueryHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new GetPresignedUrlQueryHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new GetPresignedUrlQuery
         {
@@ -575,7 +583,7 @@ public class FileStorageCommandHandlerTests
         var storage = new Mock<IObjectStorageService>();
         var (uow, _) = BuildFileStorageUnitOfWork([file]);
         var auth = BuildFileAuthorizationService();
-        var handler = new DownloadFileByIdQueryHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new DownloadFileByIdQueryHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new DownloadFileByIdQuery { Id = file.Id }, CancellationToken.None);
 
@@ -600,7 +608,7 @@ public class FileStorageCommandHandlerTests
         var storage = new Mock<IObjectStorageService>();
         var (uow, _) = BuildFileStorageUnitOfWork([file]);
         var auth = BuildFileAuthorizationService(canRead: false);
-        var handler = new DownloadFileByIdQueryHandler(storage.Object, uow.Object, auth.Object);
+        var handler = new DownloadFileByIdQueryHandler(storage.Object, uow.Object, auth.Object, Mock.Of<IPublisher>());
 
         var result = await handler.Handle(new DownloadFileByIdQuery { Id = file.Id }, CancellationToken.None);
 

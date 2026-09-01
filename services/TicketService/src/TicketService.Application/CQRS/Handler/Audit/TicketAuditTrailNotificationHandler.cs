@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using SharedContracts.Audit;
 using SharedContracts.Events.Audit;
 using SharedInfrastructure.Middleware;
+using SharedInfrastructure.RateLimiting;
 using SharedInfrastructure.Services;
 using TicketService.Application.CQRS.Notification.Audit;
 using TicketService.Application.Interfaces.Repositories;
@@ -41,7 +42,12 @@ public class TicketAuditTrailNotificationHandler : INotificationHandler<TicketAu
         try
         {
             var http = _httpContextAccessor?.HttpContext;
-            var ip = http?.Connection?.RemoteIpAddress?.ToString();
+            // #27 QA solars.io.vn 2026-08-29: RemoteIpAddress sau ApiGateway luôn là IP pod của
+            // gateway (vd "10.42.0.8"), không phải IP trình duyệt thật. Ưu tiên header X-Client-Ip
+            // mà gateway ghi đè (anti-spoof, xem RateLimitPartitionResolver) — cùng cơ chế IP dùng
+            // cho rate limiting.
+            var gatewayIp = http?.Request.Headers[RateLimitPartitionResolver.ClientIpHeader].FirstOrDefault();
+            var ip = !string.IsNullOrWhiteSpace(gatewayIp) ? gatewayIp.Trim() : http?.Connection?.RemoteIpAddress?.ToString();
             var userAgent = http?.Request?.Headers.UserAgent.ToString();
             Guid.TryParse(http?.GetCorrelationId(), out var correlationGuid);
 

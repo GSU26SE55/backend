@@ -1,5 +1,4 @@
 using FileStorageService.Application.Authorization;
-using FileStorageService.Application.CQRS.Command;
 using FileStorageService.Application.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,7 +8,9 @@ public static class ManageDependencyInjection
 {
     public static IServiceCollection AddFileStorageApplication(this IServiceCollection services)
     {
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UploadFileCommand).Assembly));
+        // MediatR đã được đăng ký bởi AddSharedInfrastructure (Infrastructure DI) cho cùng assembly
+        // "FileStorageService.Application" — gọi AddMediatR ở đây nữa làm mọi INotificationHandler
+        // chạy 2 lần (audit log ghi đôi).
         services.AddScoped<IFileAuthorizationService, FileAuthorizationService>();
         return services;
     }

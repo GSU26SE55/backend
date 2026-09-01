@@ -165,7 +165,7 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task VerifyOtp_WrongOtp_Returns401_IncrementsCounter()
+    public async Task VerifyOtp_WrongOtp_Returns400_IncrementsCounter()
     {
         await _client.PostAsJsonAsync("/api/auth/register", new
         {
@@ -180,7 +180,9 @@ public class AuthFlowIntegrationTests : IAsyncLifetime
             Otp = "999999"
         });
 
-        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng chưa đăng nhập không được
+        // dùng 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         using var db = _factory.CreateDbContext();
         var acc = await db.Users.IgnoreQueryFilters().FirstAsync(a => a.Email == "wrong@example.com");

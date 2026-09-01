@@ -90,6 +90,19 @@ public class ChangeAccountRoleCommandHandler : IRequestHandler<ChangeAccountRole
             };
         }
 
+        // #50 QA solars.io.vn 2026-08-29 — "Change role" là menu con bấm phát ăn ngay, không hộp
+        // thoại, không lý do, và KHÔNG có chốt chặn "Admin cuối cùng". Đổi role account Admin duy
+        // nhất còn lại sang role khác là khoá cửa vĩnh viễn (không ai còn quyền quản trị để tự cứu).
+        if (await LastAdminGuard.WouldRemoveLastAdminAsync(_unitOfWork, account.Id, previousRoleId, cancellationToken))
+        {
+            return new AccountActionResponse
+            {
+                IsSuccess = false,
+                StatusCode = 409,
+                Message = "Cannot change the role of the last remaining Admin account. Assign another account as Admin first."
+            };
+        }
+
         var actorId = ResolveActorId();
         var newRoleId = request.RoleId;
 

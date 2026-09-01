@@ -62,7 +62,9 @@ public class ChangeEmailCommandHandlerTests
         var handler = new ChangeEmailCommandHandler(uow.Object, _hasher.Object, _producer.Object, StubRedis.Build().Object, NullLogger<ChangeEmailCommandHandler>.Instance, Moq.Mock.Of<MediatR.IPublisher>());
         var resp = await handler.Handle(new ChangeEmailCommand { AccountId = account.Id, NewEmail = "new@example.com", CurrentPassword = "wrong" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng đã đăng nhập không được dùng
+        // 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        resp.StatusCode.Should().Be(400);
         account.PendingEmail.Should().BeNull();
     }
 
@@ -203,11 +205,13 @@ public class ConfirmEmailChangeCommandHandlerTests
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "123456" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng đã đăng nhập không được dùng
+        // 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        resp.StatusCode.Should().Be(400);
     }
 
     [Fact]
-    public async Task Confirm_WrongOtp_IncrementsCounter_Returns401()
+    public async Task Confirm_WrongOtp_IncrementsCounter_Returns400()
     {
         var account = WithPending(otp: "999999");
         var (uow, accounts, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
@@ -216,7 +220,7 @@ public class ConfirmEmailChangeCommandHandlerTests
 
         var resp = await handler.Handle(new ConfirmEmailChangeCommand { AccountId = account.Id, Otp = "111111" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        resp.StatusCode.Should().Be(400);
         account.FailedLoginAttempts.Should().Be(1);
     }
 

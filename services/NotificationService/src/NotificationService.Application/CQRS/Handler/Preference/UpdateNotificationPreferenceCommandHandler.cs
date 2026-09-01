@@ -39,6 +39,7 @@ public class UpdateNotificationPreferenceCommandHandler
         {
             existing = new NotificationPreference
             {
+                Id = Guid.NewGuid(),
                 UserId = request.UserId,
                 PushEnabled = request.PushEnabled,
                 EmailEnabled = request.EmailEnabled,

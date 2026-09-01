@@ -1,6 +1,7 @@
 using AuthService.Application.CQRS.Command.Auth;
 using AuthService.Application.CQRS.Handler.Auth;
 using AuthService.Application.CQRS.Notification.Audit;
+using AuthService.Application.CQRS.Notification.Login;
 using AuthService.Application.DTOs.Response.Auth;
 using AuthService.Application.Interfaces.Services;
 using AuthService.Domain.Entities;
@@ -108,6 +109,11 @@ public class Verify2FALoginCommandHandlerTests
 
         resp.StatusCode.Should().Be(422);
         _store.Verify(s => s.InvalidateAsync("t", It.IsAny<CancellationToken>()), Times.Never);
+        // #39 QA solars.io.vn 2026-08-29: trước đây chỉ publish LoginAttemptNotification khi Success
+        // ⇒ login history của chính chủ không hiện lần sai 2FA.
+        _publisher.Verify(p => p.Publish(
+            It.Is<LoginAttemptNotification>(n => n.AccountId == acc.Id && n.Result == LoginAttemptResult.WrongTwoFactorCode),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using FileStorageService.Application.CQRS.Command;
+using FileStorageService.Application.CQRS.Notification.Audit;
 using FileStorageService.Application.Interfaces;
 using FileStorageService.Domain.Enums;
 using MediatR;
@@ -12,15 +13,18 @@ public class DeleteFileByIdCommandHandler : IRequestHandler<DeleteFileByIdComman
     private readonly IObjectStorageService _objectStorageService;
     private readonly IFileStorageUnitOfWork _unitOfWork;
     private readonly IFileAuthorizationService _fileAuthorizationService;
+    private readonly IPublisher _publisher;
 
     public DeleteFileByIdCommandHandler(
         IObjectStorageService objectStorageService,
         IFileStorageUnitOfWork unitOfWork,
-        IFileAuthorizationService fileAuthorizationService)
+        IFileAuthorizationService fileAuthorizationService,
+        IPublisher publisher)
     {
         _objectStorageService = objectStorageService;
         _unitOfWork = unitOfWork;
         _fileAuthorizationService = fileAuthorizationService;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<string>> Handle(DeleteFileByIdCommand request, CancellationToken cancellationToken)
@@ -37,12 +41,22 @@ public class DeleteFileByIdCommandHandler : IRequestHandler<DeleteFileByIdComman
             return NotFound();
 
         if (!_fileAuthorizationService.CanDelete(file))
+        {
+            // #46 QA solars.io.vn 2026-08-29 — hạ tầng FileAuditLog có đủ nhưng chưa handler nào
+            // từng ghi vào đó.
+            await _publisher.Publish(FileAuditTrailNotification.For(
+                FileAuditActionEnum.AccessDenied, file.Id, file.OriginalFileName, isSuccess: false,
+                reason: "Not authorized to delete this file"), cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Forbidden();
+        }
 
         await _objectStorageService.DeleteAsync(file.ObjectKey, cancellationToken);
 
         file.Status = FileStatusEnum.Deleted;
         _unitOfWork.UploadedFiles.DeleteAsync(file);
+        await _publisher.Publish(FileAuditTrailNotification.For(
+            FileAuditActionEnum.FileDeleted, file.Id, file.OriginalFileName), cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CommonResponse<string>

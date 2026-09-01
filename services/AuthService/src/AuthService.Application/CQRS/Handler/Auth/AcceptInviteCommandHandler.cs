@@ -52,13 +52,16 @@ public class AcceptInviteCommandHandler : IRequestHandler<AcceptInviteCommand, L
             .Include(a => a.Role)
             .FirstOrDefaultAsync(a => a.InvitationToken == request.InvitationToken, cancellationToken);
 
+        // #38 QA solars.io.vn 2026-08-29: 401 ở 2 nhánh này từng bị axios.ts coi là hết phiên
+        // (mọi 401 != TOKEN_EXPIRED ⇒ auto-logout) ⇒ nhận lời mời với token sai/hết hạn là bị
+        // văng thẳng về /login mất cả luồng, không hiện thông báo gì.
         if (account == null)
-            return Fail(401, "Invalid or already used invitation token.");
+            return Fail(400, "Invalid or already used invitation token.");
 
         // #AUTH-26: reject nếu InvitationExpiredAt null (invite không bao giờ hết hạn) hoặc đã quá hạn.
         // Dùng <= cho on-exact-expiry edge case, đồng bộ với #AUTH-27.
         if (!account.InvitationExpiredAt.HasValue || account.InvitationExpiredAt.Value <= DateTime.UtcNow)
-            return Fail(401, "Invitation token has expired. Please ask an admin to resend the invite.");
+            return Fail(400, "Invitation token has expired. Please ask an admin to resend the invite.");
 
         if (account.Status != AccountStatusEnum.PendingVerification)
             return Fail(409, "Account has already been activated.");
