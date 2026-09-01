@@ -102,7 +102,7 @@ public class PasswordResetIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task VerifyResetOtp_WrongOtp_Returns401()
+    public async Task VerifyResetOtp_WrongOtp_Returns400()
     {
         using (var db = _factory.CreateDbContext())
             await TestDataSeeder.SeedActiveAccountAsync(db, "wrongotp@example.com", "MyPass123",
@@ -111,6 +111,8 @@ public class PasswordResetIntegrationTests : IAsyncLifetime
 
         var resp = await _client.PostAsJsonAsync("/api/auth/verify-reset-otp",
             new { Email = "wrongotp@example.com", Otp = "999999" });
-        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng chưa đăng nhập không được
+        // dùng 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }

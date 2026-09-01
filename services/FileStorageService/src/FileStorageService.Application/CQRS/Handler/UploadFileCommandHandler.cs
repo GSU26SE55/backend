@@ -1,4 +1,5 @@
 using FileStorageService.Application.CQRS.Command;
+using FileStorageService.Application.CQRS.Notification.Audit;
 using FileStorageService.Application.DTOs;
 using FileStorageService.Application.Interfaces;
 using FileStorageService.Application.Validation;
@@ -14,15 +15,18 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
     private readonly IObjectStorageService _objectStorageService;
     private readonly IFileStorageUnitOfWork _unitOfWork;
     private readonly IFileAuthorizationService _fileAuthorizationService;
+    private readonly IPublisher _publisher;
 
     public UploadFileCommandHandler(
         IObjectStorageService objectStorageService,
         IFileStorageUnitOfWork unitOfWork,
-        IFileAuthorizationService fileAuthorizationService)
+        IFileAuthorizationService fileAuthorizationService,
+        IPublisher publisher)
     {
         _objectStorageService = objectStorageService;
         _unitOfWork = unitOfWork;
         _fileAuthorizationService = fileAuthorizationService;
+        _publisher = publisher;
     }
 
     public async Task<CommonResponse<FileUploadResponse>> Handle(UploadFileCommand request, CancellationToken cancellationToken)
@@ -33,6 +37,12 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
 
         if (!_fileAuthorizationService.CanUpload(request.Purpose))
         {
+            // #46 QA solars.io.vn 2026-08-29 — hạ tầng FileAuditLog có đủ nhưng chưa handler nào
+            // từng ghi vào đó.
+            await _publisher.Publish(FileAuditTrailNotification.For(
+                FileAuditActionEnum.AccessDenied, null, request.FolderName, isSuccess: false,
+                reason: $"Not authorized to upload purpose={request.Purpose}"), cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return new CommonResponse<FileUploadResponse>
             {
                 IsSuccess = false,
@@ -75,6 +85,8 @@ public class UploadFileCommandHandler : IRequestHandler<UploadFileCommand, Commo
         try
         {
             await _unitOfWork.UploadedFiles.AddAsync(uploadedFile);
+            await _publisher.Publish(FileAuditTrailNotification.For(
+                FileAuditActionEnum.FileUploaded, uploadedFile.Id, uploadedFile.OriginalFileName), cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch

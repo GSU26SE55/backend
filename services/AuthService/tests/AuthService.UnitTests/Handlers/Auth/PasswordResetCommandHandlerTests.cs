@@ -109,7 +109,7 @@ public class VerifyResetOtpCommandHandlerTests
     }
 
     [Fact]
-    public async Task VerifyReset_WrongOtp_IncrementsCounter_Returns401()
+    public async Task VerifyReset_WrongOtp_IncrementsCounter_Returns400()
     {
         var account = WithResetOtp(otp: "999999");
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
@@ -117,7 +117,9 @@ public class VerifyResetOtpCommandHandlerTests
 
         var resp = await handler.Handle(new VerifyResetOtpCommand { Email = "u@example.com", Otp = "111111" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng chưa đăng nhập không được
+        // dùng 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        resp.StatusCode.Should().Be(400);
         account.FailedLoginAttempts.Should().Be(1);
     }
 
@@ -131,7 +133,7 @@ public class VerifyResetOtpCommandHandlerTests
 
         var resp = await handler.Handle(new VerifyResetOtpCommand { Email = "u@example.com", Otp = "123456" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        resp.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -195,7 +197,7 @@ public class ResetPasswordCommandHandlerTests
     }
 
     [Fact]
-    public async Task Reset_InvalidToken_Returns401()
+    public async Task Reset_InvalidToken_Returns400()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
         _jwt.Setup(j => j.ValidateResetTokenDetailed(It.IsAny<string>())).Returns(((Guid?)null, (string?)null, (DateTime?)null, "invalid"));
@@ -203,7 +205,9 @@ public class ResetPasswordCommandHandlerTests
         var handler = new ResetPasswordCommandHandler(uow.Object, _hasher.Object, _jwt.Object, MockPublisher.NoOp().Object, StubRedis.Build().Object, new Mock<AuthService.Application.Interfaces.Services.ITokenRevocationStore>().Object);
         var resp = await handler.Handle(new ResetPasswordCommand { ResetToken = "bad", NewPassword = "Strong1Pass!" }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng chưa đăng nhập không được
+        // dùng 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        resp.StatusCode.Should().Be(400);
     }
 
     [Fact]

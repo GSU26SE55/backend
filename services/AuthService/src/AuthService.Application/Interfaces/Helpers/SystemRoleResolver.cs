@@ -15,6 +15,7 @@ namespace AuthService.Application.Interfaces.Helpers;
 public static class SystemRoleResolver
 {
     public const string CustomerNormalizedName = "CUSTOMER";
+    public const string AdminNormalizedName = "ADMIN";
 
     /// <summary>
     /// Trả về Id của system role theo <paramref name="normalizedName"/>, hoặc <c>null</c> nếu role

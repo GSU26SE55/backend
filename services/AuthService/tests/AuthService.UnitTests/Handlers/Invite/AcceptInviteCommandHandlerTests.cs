@@ -71,7 +71,7 @@ public class AcceptInviteCommandHandlerTests
     }
 
     [Fact]
-    public async Task Accept_InvalidToken_Returns401()
+    public async Task Accept_InvalidToken_Returns400()
     {
         var (uow, _, _, _) = MockUnitOfWork.Build();
         var handler = new AcceptInviteCommandHandler(uow.Object, _hasher.Object, _jwt.Object, _producer.Object, _publisher.Object, Microsoft.Extensions.Options.Options.Create(new AuthService.Application.Configuration.JwtSettingsOptions()));
@@ -83,11 +83,13 @@ public class AcceptInviteCommandHandlerTests
             ConfirmPassword = "Strong1Pass!"
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        // #38 QA solars.io.vn 2026-08-29: business error trên luồng chưa đăng nhập không được
+        // dùng 401 — axios.ts coi mọi 401 != TOKEN_EXPIRED là hết phiên và tự logout.
+        resp.StatusCode.Should().Be(400);
     }
 
     [Fact]
-    public async Task Accept_ExpiredToken_Returns401_DoesNotActivate()
+    public async Task Accept_ExpiredToken_Returns400_DoesNotActivate()
     {
         var account = InvitedAccount(expiresAt: DateTime.UtcNow.AddHours(-1));
         var (uow, _, _, _) = MockUnitOfWork.Build(accountSeed: new[] { account });
@@ -100,7 +102,7 @@ public class AcceptInviteCommandHandlerTests
             ConfirmPassword = "Strong1Pass!"
         }, CancellationToken.None);
 
-        resp.StatusCode.Should().Be(401);
+        resp.StatusCode.Should().Be(400);
         account.Status.Should().Be(AccountStatusEnum.PendingVerification);
     }
 

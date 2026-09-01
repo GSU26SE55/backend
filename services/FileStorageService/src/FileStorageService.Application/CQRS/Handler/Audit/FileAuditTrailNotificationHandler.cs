@@ -1,8 +1,9 @@
+using System.Security.Claims;
 using System.Text.Json;
-using BatteryService.Application.CQRS.Notification.Audit;
-using BatteryService.Application.Interfaces;
-using BatteryService.Domain.Entities;
-using BatteryService.Domain.Enums;
+using FileStorageService.Application.CQRS.Notification.Audit;
+using FileStorageService.Application.Interfaces;
+using FileStorageService.Domain.Entities;
+using FileStorageService.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -10,68 +11,64 @@ using SharedContracts.Audit;
 using SharedContracts.Events.Audit;
 using SharedInfrastructure.Middleware;
 using SharedInfrastructure.RateLimiting;
-using SharedInfrastructure.Services;
 
-namespace BatteryService.Application.CQRS.Handler.Audit;
+namespace FileStorageService.Application.CQRS.Handler.Audit;
 
 /// <summary>
-/// Ghi BatteryAuditLog + BatteryAuditOutbox (Sprint audit #AUDIT-21). KHÔNG SaveChanges — command handler save atomic.
-/// Audit fail KHÔNG throw (không phá business flow).
+/// Ghi FileAuditLog + FileAuditOutbox (Sprint audit #AUDIT-29). KHÔNG SaveChanges — caller save atomic.
+/// Audit fail KHÔNG throw (không phá luồng upload/download/delete file).
 /// </summary>
-public class BatteryAuditTrailNotificationHandler : INotificationHandler<BatteryAuditTrailNotification>
+public class FileAuditTrailNotificationHandler : INotificationHandler<FileAuditTrailNotification>
 {
-    private readonly IBatteryUnitOfWork _unitOfWork;
-    private readonly ICurrentUserService _currentUserService;
+    private readonly IFileStorageUnitOfWork _unitOfWork;
     private readonly IHttpContextAccessor? _httpContextAccessor;
-    private readonly ILogger<BatteryAuditTrailNotificationHandler> _logger;
+    private readonly ILogger<FileAuditTrailNotificationHandler> _logger;
 
-    public BatteryAuditTrailNotificationHandler(
-        IBatteryUnitOfWork unitOfWork,
-        ICurrentUserService currentUserService,
-        ILogger<BatteryAuditTrailNotificationHandler> logger,
+    public FileAuditTrailNotificationHandler(
+        IFileStorageUnitOfWork unitOfWork,
+        ILogger<FileAuditTrailNotificationHandler> logger,
         IHttpContextAccessor? httpContextAccessor = null)
     {
         _unitOfWork = unitOfWork;
-        _currentUserService = currentUserService;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public async Task Handle(BatteryAuditTrailNotification n, CancellationToken cancellationToken)
+    public async Task Handle(FileAuditTrailNotification n, CancellationToken cancellationToken)
     {
         try
         {
             var http = _httpContextAccessor?.HttpContext;
             // #27 QA solars.io.vn 2026-08-29: RemoteIpAddress sau ApiGateway luôn là IP pod của
-            // gateway (vd "10.42.0.8"), không phải IP trình duyệt thật. Ưu tiên header X-Client-Ip
-            // mà gateway ghi đè (anti-spoof, xem RateLimitPartitionResolver) — cùng cơ chế IP dùng
-            // cho rate limiting.
+            // gateway, không phải IP trình duyệt thật. Ưu tiên header X-Client-Ip mà gateway ghi đè
+            // (anti-spoof, xem RateLimitPartitionResolver).
             var gatewayIp = http?.Request.Headers[RateLimitPartitionResolver.ClientIpHeader].FirstOrDefault();
             var ip = !string.IsNullOrWhiteSpace(gatewayIp) ? gatewayIp.Trim() : http?.Connection?.RemoteIpAddress?.ToString();
             var userAgent = http?.Request?.Headers.UserAgent.ToString();
-            var correlationStr = http?.GetCorrelationId();
-            Guid.TryParse(correlationStr, out var correlationGuid);
+            Guid.TryParse(http?.GetCorrelationId(), out var correlationGuid);
 
-            Guid? actor = null;
-            if (Guid.TryParse(_currentUserService.UserId, out var resolvedActor))
-                actor = resolvedActor;
+            var user = http?.User;
+            var rawUserId = user?.FindFirstValue(ClaimTypes.NameIdentifier) ?? user?.FindFirstValue("AccountId");
+            Guid? actor = Guid.TryParse(rawUserId, out var resolvedActor) ? resolvedActor : null;
+            var actorRole = user?.FindFirstValue(ClaimTypes.Role) ?? user?.FindFirstValue("role");
 
             string? metadataJson = n.Metadata is { Count: > 0 } ? JsonSerializer.Serialize(n.Metadata) : null;
             var eventId = AuditEventId.New();    // #AUDIT-04 — helper tập trung event_id.
             var now = DateTime.UtcNow;
 
-            await _unitOfWork.BatteryAuditLogs.AddAsync(new BatteryAuditLog
+            await _unitOfWork.FileAuditLogs.AddAsync(new FileAuditLog
             {
                 Id = Guid.NewGuid(),
                 EventId = eventId,
-                ServiceName = "BatteryService",
+                ServiceName = "FileStorageService",
                 ActionCode = n.ActionCode,
                 ActionCategory = n.ActionCategory,
                 Severity = n.Severity,
-                TargetType = TargetTypes.Battery,
+                TargetType = TargetTypes.File,
                 TargetId = n.TargetId,
                 TargetDisplay = Truncate(n.TargetDisplay, 255),
                 ActorAccountId = actor,
+                ActorRole = actorRole,
                 ActorIp = ip,
                 ActorUserAgent = Truncate(userAgent, 512),
                 IsSuccess = n.IsSuccess,
@@ -79,18 +76,17 @@ public class BatteryAuditTrailNotificationHandler : INotificationHandler<Battery
                 Reason = Truncate(n.Reason, 1024),
                 MetadataJson = metadataJson,
                 CorrelationId = correlationGuid == Guid.Empty ? null : correlationGuid,
-                CausationId = n.CausationId,
                 OccurredAt = now,
                 RecordedAt = now,
             });
 
-            var evt = new AuditCreatedEventV1(eventId, "BatteryService", n.ActionCode, n.ActionCategory, n.Severity,
-                TargetTypes.Battery, n.TargetId, Truncate(n.TargetDisplay, 255),
-                actor, null, null, ip, Truncate(userAgent, 512),
+            var evt = new AuditCreatedEventV1(eventId, "FileStorageService", n.ActionCode, n.ActionCategory, n.Severity,
+                TargetTypes.File, n.TargetId, Truncate(n.TargetDisplay, 255),
+                actor, actorRole, null, ip, Truncate(userAgent, 512),
                 n.IsSuccess, n.IsSuccess ? null : n.ActionCode, Truncate(n.Reason, 1024), metadataJson,
-                correlationGuid == Guid.Empty ? null : correlationGuid, n.CausationId, now, now);
+                correlationGuid == Guid.Empty ? null : correlationGuid, null, now, now);
 
-            await _unitOfWork.BatteryAuditOutboxes.AddAsync(new BatteryAuditOutbox
+            await _unitOfWork.FileAuditOutboxes.AddAsync(new FileAuditOutbox
             {
                 Id = Guid.NewGuid(),
                 EventId = eventId,
@@ -101,7 +97,7 @@ public class BatteryAuditTrailNotificationHandler : INotificationHandler<Battery
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to write battery audit. Action={Action}", n.ActionCode);
+            _logger.LogError(ex, "Failed to write file audit. Action={Action}", n.ActionCode);
         }
     }
 

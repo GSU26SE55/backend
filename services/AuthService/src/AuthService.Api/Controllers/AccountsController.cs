@@ -145,8 +145,8 @@ public class AccountsController : ControllerBase
     /// <param name="cancellationToken">Token hủy request khi client ngắt kết nối hoặc server dừng xử lý.</param>
     /// <returns>Thông báo kết quả xác minh số điện thoại.</returns>
     /// <response code="200">Xác minh số điện thoại thành công. <c>PhoneConfirmed</c> được set <c>true</c>.</response>
-    /// <response code="400">OTP sai định dạng (validation: phải đủ 6 chữ số).</response>
-    /// <response code="401">Chưa đăng nhập HOẶC OTP không chính xác (sai giá trị OTP user nhập).</response>
+    /// <response code="400">OTP sai định dạng (validation: phải đủ 6 chữ số) HOẶC OTP không chính xác (sai giá trị OTP user nhập — #38 QA 2026-08-29: đổi từ 401 để không trùng mã "hết phiên" của axios interceptor).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     /// <response code="409">Số điện thoại đã được xác thực trước đó (state conflict).</response>
     /// <response code="422">OTP hết hạn, OTP không phải dành cho mục đích xác minh phone, hoặc account chưa có OTP nào được gửi (business rule violation).</response>
@@ -187,8 +187,8 @@ public class AccountsController : ControllerBase
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <returns>Thông báo kết quả gửi OTP đổi email.</returns>
     /// <response code="200">Đã gửi OTP tới email mới.</response>
-    /// <response code="400">Validation lỗi (email sai định dạng, password rỗng).</response>
-    /// <response code="401">Chưa đăng nhập HOẶC mật khẩu hiện tại không chính xác.</response>
+    /// <response code="400">Validation lỗi (email sai định dạng, password rỗng) HOẶC mật khẩu hiện tại không chính xác (#38 QA 2026-08-29: đổi từ 401 để không trùng mã "hết phiên" của axios interceptor).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     /// <response code="409">Email mới đã được tài khoản khác sử dụng.</response>
     /// <response code="422">Email mới trùng email hiện tại.</response>
@@ -228,8 +228,8 @@ public class AccountsController : ControllerBase
     /// <param name="cancellationToken">Token hủy request.</param>
     /// <returns>Thông báo kết quả đổi email.</returns>
     /// <response code="200">Đổi email thành công. Client cần đăng nhập lại bằng email mới.</response>
-    /// <response code="400">OTP sai định dạng (phải đủ 6 chữ số).</response>
-    /// <response code="401">Chưa đăng nhập HOẶC OTP sai/hết hạn.</response>
+    /// <response code="400">OTP sai định dạng (phải đủ 6 chữ số), OTP đã hết hạn, HOẶC OTP không đúng giá trị (#38 QA 2026-08-29: đổi từ 401 để không trùng mã "hết phiên" của axios interceptor).</response>
+    /// <response code="401">Chưa đăng nhập.</response>
     /// <response code="404">Không tìm thấy tài khoản.</response>
     /// <response code="409">Không có yêu cầu đổi email đang chờ verify, hoặc email mới đã bị tài khoản khác chiếm trong lúc chờ.</response>
     /// <response code="423">Tài khoản bị khóa tạm thời do sai OTP nhiều lần.</response>

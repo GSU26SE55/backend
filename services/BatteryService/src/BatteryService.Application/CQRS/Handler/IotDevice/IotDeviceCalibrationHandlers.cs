@@ -55,8 +55,10 @@ public class CreateIotDeviceCalibrationCommandHandler : IRequestHandler<CreateIo
             Scale = request.Scale,
             Offset = request.Offset,
             Unit = request.Unit.Trim(),
-            CalibratedAt = request.CalibratedAt,
-            ExpiresAt = request.ExpiresAt,
+            // #30 QA solars.io.vn 2026-08-29: FE gửi datetime không có hậu tố "Z" → System.Text.Json
+            // deserialize Kind=Unspecified → Npgsql ném lỗi (500) khi insert vào cột timestamptz.
+            CalibratedAt = ToUtc(request.CalibratedAt),
+            ExpiresAt = request.ExpiresAt.HasValue ? ToUtc(request.ExpiresAt.Value) : null,
             Notes = request.Notes?.Trim()
         };
         await _unitOfWork.IotDeviceCalibrations.AddAsync(entity);
@@ -72,6 +74,13 @@ public class CreateIotDeviceCalibrationCommandHandler : IRequestHandler<CreateIo
             Message = "Calibration created successfully.",
             Data = IotDeviceCalibrationMapper.ToDto(entity)
         };
+    }
+
+    private static DateTime ToUtc(DateTime value)
+    {
+        return value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            : value.ToUniversalTime();
     }
 }
 
