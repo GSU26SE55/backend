@@ -8,17 +8,20 @@ using SharedContracts.Events;
 namespace BatteryService.Infrastructure.Consumers;
 
 /// <summary>
-/// Đối xứng với <see cref="TicketClosedConsumer"/>: Customer reopen Ticket trong cửa sổ 7 ngày
-/// nghĩa là sự cố CHƯA thực sự xong dù ticket đã từng Closed. Alert liên kết bị resolve bởi lần
-/// Close trước đó cần quay lại Open để phản ánh đúng — nếu không, Alert list sẽ "sạch" trong khi
-/// ticket đang được xử lý lại.
+/// Đối xứng với <see cref="AlertResolveOnTicketClosedConsumer"/>: Customer reopen Ticket trong
+/// cửa sổ 7 ngày nghĩa là sự cố CHƯA thực sự xong dù ticket đã từng Closed. Alert liên kết bị
+/// resolve bởi lần Close trước đó cần quay lại Open để phản ánh đúng — nếu không, Alert list
+/// sẽ "sạch" trong khi ticket đang được xử lý lại.
+///
+/// Tên class KHÔNG được trùng <c>NotificationService.Application.Consumers.TicketReopenedConsumer</c>
+/// — cùng lý do đặt tên như <see cref="AlertResolveOnTicketClosedConsumer"/>.
 /// </summary>
-public class TicketReopenedConsumer : IConsumer<TicketReopenedEvent>
+public class AlertReopenOnTicketReopenedConsumer : IConsumer<TicketReopenedEvent>
 {
     private readonly IBatteryUnitOfWork _uow;
-    private readonly ILogger<TicketReopenedConsumer> _logger;
+    private readonly ILogger<AlertReopenOnTicketReopenedConsumer> _logger;
 
-    public TicketReopenedConsumer(IBatteryUnitOfWork uow, ILogger<TicketReopenedConsumer> logger)
+    public AlertReopenOnTicketReopenedConsumer(IBatteryUnitOfWork uow, ILogger<AlertReopenOnTicketReopenedConsumer> logger)
     {
         _uow = uow;
         _logger = logger;

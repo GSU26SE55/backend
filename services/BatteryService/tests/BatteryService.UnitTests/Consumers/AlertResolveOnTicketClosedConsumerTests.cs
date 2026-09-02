@@ -18,11 +18,11 @@ namespace BatteryService.UnitTests.Consumers;
 /// MassTransit harnesses start background bus workers — chạy tuần tự để tránh flaky do
 /// tranh worker, giống <c>LinkAlertToTicketConsumerTests</c>.
 /// </summary>
-[CollectionDefinition("TicketClosedConsumerHarness", DisableParallelization = true)]
-public sealed class TicketClosedConsumerTestCollection;
+[CollectionDefinition("AlertResolveOnTicketClosedConsumerHarness", DisableParallelization = true)]
+public sealed class AlertResolveOnTicketClosedConsumerTestCollection;
 
-[Collection("TicketClosedConsumerHarness")]
-public class TicketClosedConsumerTests
+[Collection("AlertResolveOnTicketClosedConsumerHarness")]
+public class AlertResolveOnTicketClosedConsumerTests
 {
     private sealed class HarnessScope : IAsyncDisposable
     {
@@ -75,11 +75,11 @@ public class TicketClosedConsumerTests
         var provider = new ServiceCollection()
             .AddMassTransitTestHarness(x =>
             {
-                x.AddConsumer<TicketClosedConsumer>();
+                x.AddConsumer<AlertResolveOnTicketClosedConsumer>();
                 x.SetTestTimeouts(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(15));
             })
             .AddSingleton(uow)
-            .AddSingleton(NullLogger<TicketClosedConsumer>.Instance)
+            .AddSingleton(NullLogger<AlertResolveOnTicketClosedConsumer>.Instance)
             .BuildServiceProvider(true);
 
         var harness = provider.GetRequiredService<ITestHarness>();
@@ -96,7 +96,7 @@ public class TicketClosedConsumerTests
         var uow = BuildUow(new List<Alert> { openAlert, mergedAlert });
         await using var scope = await StartHarness(uow.Object);
         var harness = scope.Harness;
-        var consumerHarness = harness.GetConsumerHarness<TicketClosedConsumer>();
+        var consumerHarness = harness.GetConsumerHarness<AlertResolveOnTicketClosedConsumer>();
 
         await harness.Bus.Publish(new TicketClosedEvent(
             ticketId, "T1", Guid.NewGuid(), DateTime.UtcNow, IsAutoClosed: false, Rating: null));
@@ -112,8 +112,8 @@ public class TicketClosedConsumerTests
     /// <summary>
     /// AlertAutoResolveService (sensor-based) CỐ Ý loại trừ SohDegradation, SensorMismatch,
     /// DeviceOffline — không có tín hiệu sensor đáng tin để tự resolve (GH-783 với SOH cụ thể).
-    /// TicketClosedConsumer KHÔNG suy luận từ sensor, chỉ tin quyết định nghiệp vụ của Manager,
-    /// nên PHẢI resolve được cả 3 loại này khi ticket đóng — khác AlertAutoResolveService.
+    /// AlertResolveOnTicketClosedConsumer KHÔNG suy luận từ sensor, chỉ tin quyết định nghiệp vụ
+    /// của Manager, nên PHẢI resolve được cả 3 loại này khi ticket đóng — khác AlertAutoResolveService.
     /// </summary>
     [Theory]
     [InlineData(AnomalyTypeEnum.SohDegradation)]
@@ -126,7 +126,7 @@ public class TicketClosedConsumerTests
         var uow = BuildUow(new List<Alert> { alert });
         await using var scope = await StartHarness(uow.Object);
         var harness = scope.Harness;
-        var consumerHarness = harness.GetConsumerHarness<TicketClosedConsumer>();
+        var consumerHarness = harness.GetConsumerHarness<AlertResolveOnTicketClosedConsumer>();
 
         await harness.Bus.Publish(new TicketClosedEvent(
             ticketId, "T1", Guid.NewGuid(), DateTime.UtcNow, IsAutoClosed: false, Rating: null));
@@ -143,7 +143,7 @@ public class TicketClosedConsumerTests
         var uow = BuildUow(new List<Alert>());
         await using var scope = await StartHarness(uow.Object);
         var harness = scope.Harness;
-        var consumerHarness = harness.GetConsumerHarness<TicketClosedConsumer>();
+        var consumerHarness = harness.GetConsumerHarness<AlertResolveOnTicketClosedConsumer>();
 
         await harness.Bus.Publish(new TicketClosedEvent(
             Guid.NewGuid(), "T1", Guid.NewGuid(), DateTime.UtcNow, IsAutoClosed: false, Rating: null));
@@ -160,7 +160,7 @@ public class TicketClosedConsumerTests
         var uow = BuildUow(new List<Alert> { resolvedAlert });
         await using var scope = await StartHarness(uow.Object);
         var harness = scope.Harness;
-        var consumerHarness = harness.GetConsumerHarness<TicketClosedConsumer>();
+        var consumerHarness = harness.GetConsumerHarness<AlertResolveOnTicketClosedConsumer>();
 
         await harness.Bus.Publish(new TicketClosedEvent(
             ticketId, "T1", Guid.NewGuid(), DateTime.UtcNow, IsAutoClosed: false, Rating: null));
@@ -179,7 +179,7 @@ public class TicketClosedConsumerTests
         var uow = BuildUow(new List<Alert> { deletedAlert });
         await using var scope = await StartHarness(uow.Object);
         var harness = scope.Harness;
-        var consumerHarness = harness.GetConsumerHarness<TicketClosedConsumer>();
+        var consumerHarness = harness.GetConsumerHarness<AlertResolveOnTicketClosedConsumer>();
 
         await harness.Bus.Publish(new TicketClosedEvent(
             ticketId, "T1", Guid.NewGuid(), DateTime.UtcNow, IsAutoClosed: false, Rating: null));

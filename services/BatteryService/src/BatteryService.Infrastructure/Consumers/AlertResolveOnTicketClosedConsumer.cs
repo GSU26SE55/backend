@@ -13,13 +13,18 @@ namespace BatteryService.Infrastructure.Consumers;
 /// SohDegradation, SensorMismatch — vì không có tín hiệu sensor đáng tin để suy luận lại
 /// anomaly đã hết. Ticket Closed là xác nhận nghiệp vụ cuối cùng của con người nên không
 /// cần kiểm tra lại anomaly, khác với AlertAutoResolveService.
+///
+/// Tên class KHÔNG được trùng <c>NotificationService.Application.Consumers.TicketClosedConsumer</c>
+/// — MassTransit đặt tên receive-endpoint theo tên consumer type (không theo namespace/service),
+/// nên 2 consumer trùng tên ở 2 service khác nhau sẽ vô tình bind chung 1 queue và cạnh tranh
+/// message thay vì mỗi service nhận đủ bản riêng.
 /// </summary>
-public class TicketClosedConsumer : IConsumer<TicketClosedEvent>
+public class AlertResolveOnTicketClosedConsumer : IConsumer<TicketClosedEvent>
 {
     private readonly IBatteryUnitOfWork _uow;
-    private readonly ILogger<TicketClosedConsumer> _logger;
+    private readonly ILogger<AlertResolveOnTicketClosedConsumer> _logger;
 
-    public TicketClosedConsumer(IBatteryUnitOfWork uow, ILogger<TicketClosedConsumer> logger)
+    public AlertResolveOnTicketClosedConsumer(IBatteryUnitOfWork uow, ILogger<AlertResolveOnTicketClosedConsumer> logger)
     {
         _uow = uow;
         _logger = logger;
