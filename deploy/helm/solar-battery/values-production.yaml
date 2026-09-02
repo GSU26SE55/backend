@@ -378,6 +378,6 @@ resourceQuota:
   enabled: true
   requestsCpu: "4"
   requestsMemory: 7Gi
-  limitsCpu: "12"
+  limitsCpu: "14"
   limitsMemory: 16Gi
   pvcs: "20"
