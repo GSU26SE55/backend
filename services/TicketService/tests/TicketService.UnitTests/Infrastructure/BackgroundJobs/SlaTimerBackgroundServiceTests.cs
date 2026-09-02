@@ -63,6 +63,13 @@ public class SlaTimerBackgroundServiceTests
 
         updatedTimer!.Status.Should().Be(SlaTimerStatusEnum.Breached);
         updatedTimer.BreachAt.Should().Be(FixedNow, "Thời điểm vi phạm phải khớp chính xác với đồng hồ hệ thống giả lập");
+
+        var activity = await dbContext.TicketActivities.FirstOrDefaultAsync(a => a.TicketId == ticketId);
+        activity.Should().NotBeNull();
+        activity!.Action.Should().Be(ActivityActionEnum.SlaBreached);
+        activity.ActorRole.Should().Be(ActorRoleEnum.System);
+        activity.ActorDisplayName.Should().Be("System");
+        activity.NewValue.Should().Be(SlaTimerStatusEnum.Breached.ToString());
     }
 
     [Fact]
@@ -346,6 +353,14 @@ public class SlaTimerBackgroundServiceTests
                 It.Is<SlaBreachedEvent>(e => e.TicketId == ticketId && e.Code == "T-OPEN-BREACH"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+
+        var activity = await verificationDb.TicketActivities.FirstOrDefaultAsync(a => a.TicketId == ticketId);
+        activity.Should().NotBeNull();
+        activity!.Action.Should().Be(ActivityActionEnum.SlaBreached);
+        activity.ActorRole.Should().Be(ActorRoleEnum.System);
+        activity.ActorDisplayName.Should().Be("System");
+        activity.NewValue.Should().Be(SlaTimerStatusEnum.Breached.ToString());
+        activity.Reason.Should().Be("Response SLA breached (initial response deadline exceeded).");
     }
 
     // ── QA Bug #20 — rescue window monitoring ────────────────────────────────────

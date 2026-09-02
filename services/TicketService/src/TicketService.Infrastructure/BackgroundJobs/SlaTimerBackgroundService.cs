@@ -6,6 +6,7 @@ using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.Common.Utils;
 using TicketService.Application.Interfaces.Utils;
+using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
 
@@ -155,6 +156,22 @@ public class SlaTimerBackgroundService : BackgroundService
             {
                 timer.Status = SlaTimerStatusEnum.Breached;
                 timer.BreachAt = nowUtc;
+                db.TicketActivities.Add(new TicketActivity
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = timer.TicketId,
+                    ActorUserId = Guid.Empty,
+                    ActorRole = ActorRoleEnum.System,
+                    ActorDisplayName = "System",
+                    Action = ActivityActionEnum.SlaBreached,
+                    OldValue = timer.Priority.ToString(),
+                    NewValue = SlaTimerStatusEnum.Breached.ToString(),
+                    Reason = timer.Type == SlaTimerTypeEnum.Response
+                        ? "Response SLA breached (initial response deadline exceeded)."
+                        : "Resolution SLA breached (resolution deadline exceeded).",
+                    Ticket = null!
+                });
+
                 await outbox.WriteAsync(new SlaBreachedEvent
                 {
                     TicketId = timer.TicketId,
