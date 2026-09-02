@@ -73,7 +73,10 @@ public record TicketReopenedEvent(
     Guid? StaffId,
     string ReopenReason,
     int ReopenCount,
-    DateTime ReopenedAt
+    DateTime ReopenedAt,
+    // Mốc Closed ngay trước lần reopen này. Consumer dùng nó để chỉ mở lại những alert đã
+    // được resolve bởi đúng lần đóng ticket đó, không hồi sinh alert đã resolve từ chu kỳ cũ.
+    DateTime? PreviousClosedAt = null
 ) : IntegrationEvent;
 
 /// <summary>Reminds the Customer to rate an eligible Closed ticket during its grace period.</summary>

@@ -150,21 +150,50 @@ public class TicketActivationService : ITicketActivationService
             return;
         }
 
-        // Nhánh 2 — Post-breach reassignment (ReAssign or already InProgress via correction):
-        // preserve the ENTIRE contractual clock — the escalation adds staff/tier, it does not
-        // re-scope the SLA. Priority is deliberately NOT synced onto the timer either: the
-        // deadline stays on the budget it was created with (SPE O&M v4.0 § Record Control), so
-        // syncing Priority would leave GetRemainingPercent dividing the old DueAt by the new,
-        // larger budget — the % collapses even though nothing about the clock changed. The
-        // ticket's own Priority is the source of truth for "current priority" in the UI.
+        // Nhánh 2 — Reassignment / Correction (ReAssign or already InProgress via correction):
         if (fromStatus is TicketStatusEnum.ReAssign or TicketStatusEnum.InProgress)
         {
             if (resolutionTimer is null)
                 return;  // no existing Resolution timer — nothing to preserve, skip
+
+            // Priority escalation (P3 -> P2, P2 -> P1): re-scope to the new tier's independent working window
+            if (priority < resolutionTimer.Priority)
+            {
+                var effectiveStart = _slaCalculator.NormalizeToNextWorkingInstant(nowUtc);
+                var extendedDueAt = _slaCalculator.CalculateDueDate(effectiveStart, priority);
+
+                resolutionTimer.Priority = priority;
+                resolutionTimer.StartedAt = effectiveStart;
+                resolutionTimer.OriginalDueAt = extendedDueAt;
+                resolutionTimer.DueAt = extendedDueAt;
+                resolutionTimer.Status = SlaTimerStatusEnum.Running;
+                resolutionTimer.BreachAt = null;
+                resolutionTimer.WarningSentAt = null;
+                resolutionTimer.TotalPausedMinutes = 0;
+                resolutionTimer.PauseEpisodesCount = 0;
+                resolutionTimer.CurrentPauseStartedAt = null;
+
+                // Close any open pause event (e.g. from manual escalation request paused with WorkBlocked)
+                var openPause = await _uow.SlaPauseEvents.GetAllAsync()
+                    .Where(x => x.SlaTimerId == resolutionTimer.Id && x.ResumedAt == null && !x.IsDeleted)
+                    .OrderByDescending(x => x.PausedAt)
+                    .FirstOrDefaultAsync(ct);
+                if (openPause is not null)
+                {
+                    openPause.ResumedAt = nowUtc;
+                    openPause.DurationMinutes = 0;
+                    _uow.SlaPauseEvents.UpdateAsync(openPause);
+                }
+
+                _uow.SlaTimers.UpdateAsync(resolutionTimer);
+                return;
+            }
+
+            // Same-priority (lateral reassignment / correction without escalation):
+            // Preserve the contractual clock. If already breached, status stays Breached for rescue window.
             if (resolutionTimer.Status != SlaTimerStatusEnum.Breached)
                 resolutionTimer.Status = SlaTimerStatusEnum.Running;
-            // Priority, DueAt, OriginalDueAt, BreachAt, TotalPausedMinutes, PauseEpisodesCount,
-            // WarningSentAt are all intentionally left unchanged.
+
             _uow.SlaTimers.UpdateAsync(resolutionTimer);
             return;
         }

@@ -113,6 +113,7 @@ public class TicketGetByIdQueryHandler : IRequestHandler<TicketGetByIdQuery, Com
             PendingReason = ticket.PendingReason,
             ReopenCount = ticket.ReopenCount,
             IsIncident = ticket.IsIncident,
+            ActiveIncidentEpisodeId = ticket.ActiveIncidentEpisodeId?.ToString(),
             EnvironmentalIncidentId = ticket.EnvironmentalIncidentId?.ToString(),
             PeriodicMaintenanceDueAtUtc = ticket.PeriodicMaintenanceDueAtUtc,
             PeriodicMaintenanceScheduleDeadlineAtUtc = ticket.PeriodicMaintenanceScheduleDeadlineAtUtc,

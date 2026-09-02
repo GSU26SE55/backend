@@ -31,13 +31,16 @@ public sealed class SlaDeadlineReconciler : ISlaDeadlineReconciler
             .ToListAsync(cancellationToken);
 
         var timerIds = timers.Select(x => x.Id).ToList();
+        var timerStartedAtLookup = timers.ToDictionary(x => x.Id, x => x.StartedAt);
         var completedPauseEvents = timerIds.Count == 0
             ? []
-            : await _unitOfWork.SlaPauseEvents.GetAllAsync()
+            : (await _unitOfWork.SlaPauseEvents.GetAllAsync()
                 .Where(x => !x.IsDeleted
                             && timerIds.Contains(x.SlaTimerId)
                             && x.ResumedAt.HasValue)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken))
+              .Where(x => x.PausedAt >= timerStartedAtLookup[x.SlaTimerId])
+              .ToList();
 
         var ticketIds = timers.Select(x => x.TicketId).Distinct().ToList();
         var tickets = ticketIds.Count == 0

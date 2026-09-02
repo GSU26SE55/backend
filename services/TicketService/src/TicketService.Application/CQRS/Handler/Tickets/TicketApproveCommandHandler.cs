@@ -71,6 +71,14 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
             ticket.Id, ticket.Code, ticket.CustomerId, request.ManagerId, request.ManagerComment,
             ticket.ApprovedAt ?? DateTime.UtcNow), ct);
 
+        // Manager approval là quyết định nghiệp vụ cuối cùng đóng ticket — BatteryService cần biết
+        // để resolve các Alert (Env/Device/SOH/SensorMismatch) mà AlertAutoResolveService không tự
+        // resolve được (không có tín hiệu sensor đáng tin để suy luận lại).
+        await _outboxWriter.WriteAsync(new TicketClosedEvent(
+            ticket.Id, ticket.Code, ticket.CustomerId,
+            ticket.ClosedAt ?? ticket.ApprovedAt ?? DateTime.UtcNow,
+            IsAutoClosed: false, Rating: ticket.Rating), ct);
+
         await _uow.SaveChangesAsync(ct);
 
         return new TicketActionResponse
