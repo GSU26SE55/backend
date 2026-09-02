@@ -118,7 +118,11 @@ public class TicketAssignCommandHandler : IRequestHandler<TicketAssignCommand, T
 
         await _uow.ExecuteInTransactionAsync(async transactionCt =>
         {
-            if (ticket.ReopenCount > 0 && ticket.IsIncident && request.Priority != TicketPriorityEnum.Urgent)
+            // ActiveIncidentEpisodeId, không phải IsIncident: một ticket AutoFromEnvironment
+            // cũng có IsIncident=true nhưng chưa từng qua Declare Incident (không có episode,
+            // priority vẫn theo severity) — declassify chỉ có ý nghĩa khi thật sự có episode
+            // đang mở để đóng lại.
+            if (ticket.ReopenCount > 0 && ticket.ActiveIncidentEpisodeId.HasValue && request.Priority != TicketPriorityEnum.Urgent)
             {
                 await _activityLogger.LogAsync(
                     ticket.Id,

@@ -37,7 +37,7 @@ public class StaffAccountConfiguration : IEntityTypeConfiguration<StaffAccount>
 
         builder.Property(e => e.Status)
             .HasColumnName("status")
-            .HasConversion<int>();
+            .HasConversion(new AccountStatusStorageConverter());
 
         builder.Property(e => e.IsAvailable)
             .HasColumnName("is_available");
