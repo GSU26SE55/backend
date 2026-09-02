@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TicketService.Domain.Entities;
+using TicketService.Infrastructure.Persistence.Converters;
 
 namespace TicketService.Infrastructure.Persistence.Configurations;
 
@@ -35,7 +36,7 @@ public class CustomerAccountConfiguration : IEntityTypeConfiguration<CustomerAcc
 
         builder.Property(e => e.Status)
             .HasColumnName("status")
-            .HasConversion<int>();
+            .HasConversion(new AccountStatusStorageConverter());
 
         builder.Property(e => e.LastSyncedAt)
             .HasColumnName("last_synced_at");

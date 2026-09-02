@@ -12,6 +12,11 @@ namespace TicketService.Domain.Enums;
 /// - <see cref="Suspended"/>: vi phạm policy. Set + clear bởi admin only.
 /// - <see cref="Banned"/>: kết quả của hard policy violation. Không reactivate được, phải tạo account mới.
 /// </summary>
+/// <remarks>
+/// Các giá trị 0..5 phải giữ đồng bộ với <c>AuthService.Domain.Enums.AccountStatusEnum</c> vì chúng
+/// đi qua integration events. TicketService vẫn đọc/ghi dữ liệu production cũ 1..6 qua
+/// <c>AccountStatusStorageConverter</c> để deployment có thể rollback an toàn.
+/// </remarks>
 public enum AccountStatusEnum
 {
     /// <summary>Tài khoản vừa đăng ký, chưa xác thực email/OTP.</summary>
