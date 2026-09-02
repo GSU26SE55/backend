@@ -110,10 +110,13 @@ redis:
 
 rabbitmq:
   storage: 2Gi
-  returnPerObjectMetrics: true
+  # Per-object metrics add a high-cardinality collection pass across every
+  # queue/channel. On R4 this amplified Prometheus and Erlang CPU during Helm
+  # rollouts. Aggregated broker metrics still satisfy the production dashboard.
+  returnPerObjectMetrics: false
   resources:
-    requests: { cpu: 150m, memory: 384Mi }
-    limits:   { cpu: 700m, memory: 768Mi }
+    requests: { cpu: 250m, memory: 384Mi }
+    limits:   { cpu: "1", memory: 768Mi }
 
 minio:
   storage: 12Gi
@@ -168,6 +171,9 @@ resourceQuota:
   # Prometheus plus the complete backend/observability stack needs more than
   # 4 GiB of requested memory. Keep this aligned with the recovered R4 quota.
   requestsMemory: "7Gi"
-  limitsCpu: "12"
-  limitsMemory: "14Gi"
+  # Limit totals are an admission ceiling rather than physical reservation.
+  # Leave room for old/new pods and Helm hook Jobs to overlap during an atomic
+  # rollout or rollback; the previous 12 CPU / 14 GiB ceiling was exhausted.
+  limitsCpu: "14"
+  limitsMemory: "16Gi"
   pvcs: "15"

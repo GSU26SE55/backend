@@ -41,22 +41,31 @@ spec:
         - |
           rabbitmq-plugins enable --offline rabbitmq_prometheus rabbitmq_management
           rabbitmq-server
+        # Keep kubelet health checks independent from the Erlang scheduler.
+        # `rabbitmq-diagnostics ping` briefly consumed most of the broker CPU on
+        # R4, timed out under rollout load and caused kubelet to restart a
+        # healthy broker. The AMQP listener is a cheap, direct availability
+        # signal; deeper broker health remains covered by Prometheus and the
+        # post-deploy smoke tests.
         startupProbe:
-          exec: { command: [rabbitmq-diagnostics, -q, ping] }
-          periodSeconds: 10
-          timeoutSeconds: 10
-          failureThreshold: 30
+          tcpSocket:
+            port: amqp
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 60
         readinessProbe:
-          exec: { command: [rabbitmq-diagnostics, -q, ping] }
-          initialDelaySeconds: 10
+          tcpSocket:
+            port: amqp
+          initialDelaySeconds: 5
           periodSeconds: 10
-          timeoutSeconds: 10
-          failureThreshold: 12
+          timeoutSeconds: 2
+          failureThreshold: 3
         livenessProbe:
-          exec: { command: [rabbitmq-diagnostics, -q, ping] }
+          tcpSocket:
+            port: amqp
           initialDelaySeconds: 30
           periodSeconds: 30
-          timeoutSeconds: 10
+          timeoutSeconds: 2
           failureThreshold: 6
         resources:
           {{- toYaml .Values.rabbitmq.resources | nindent 10 }}

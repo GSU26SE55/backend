@@ -128,7 +128,13 @@ extract_container_block() {
         next
       }
 
-      if (in_section && stripped != "" && current_indent <= section_indent) {
+      # YAML sequence items commonly use the same indentation as their parent
+      # key (`containers:` followed by `- name:`). Only a non-sequence sibling
+      # closes the section; otherwise later containers could never be found.
+      if (in_section &&
+          stripped != "" &&
+          current_indent <= section_indent &&
+          stripped !~ /^-/) {
         in_section = 0
       }
 
@@ -369,6 +375,8 @@ solar_smoke_test="${temporary_directory}/solar-smoke-test.yaml"
 admission_create_job="${temporary_directory}/admission-create-job.yaml"
 admission_patch_job="${temporary_directory}/admission-patch-job.yaml"
 resource_quota="${temporary_directory}/resource-quota.yaml"
+rabbitmq_statefulset="${temporary_directory}/rabbitmq-statefulset.yaml"
+rabbitmq_container="${temporary_directory}/rabbitmq-container.yaml"
 
 extract_source \
   'kube-prometheus-stack/charts/grafana/templates/deployment.yaml' \
@@ -381,6 +389,15 @@ extract_named_resource \
   'ResourceQuota' \
   'solar-quota' \
   "${resource_quota}"
+extract_named_resource \
+  'StatefulSet' \
+  'rabbitmq' \
+  "${rabbitmq_statefulset}"
+extract_container_block \
+  "${rabbitmq_statefulset}" \
+  'containers' \
+  'rabbitmq' \
+  "${rabbitmq_container}"
 extract_source \
   'kube-prometheus-stack/templates/prometheus-operator/deployment.yaml' \
   "${prometheus_operator}"
@@ -517,11 +534,70 @@ grep -Fq 'progressDeadlineSeconds: 1200' "${authservice_deployment}" || {
   exit 1
 }
 
+verify_rabbitmq_tcp_probe() {
+  local probe_name="$1"
+  local expected_period="$2"
+  local expected_timeout="$3"
+  local expected_failure_threshold="$4"
+
+  awk \
+    -v expected_probe="${probe_name}:" \
+    -v expected_period="${expected_period}" \
+    -v expected_timeout="${expected_timeout}" \
+    -v expected_failure_threshold="${expected_failure_threshold}" '
+      /^[[:space:]]+[[:alnum:]]+Probe:[[:space:]]*$/ {
+        if (in_expected_probe) {
+          exit
+        }
+        in_expected_probe = ($1 == expected_probe)
+        next
+      }
+
+      in_expected_probe && $1 == "tcpSocket:" { has_tcp_socket = 1 }
+      in_expected_probe && $1 == "exec:" { has_exec = 1 }
+      in_expected_probe && $1 == "port:" && $2 == "amqp" { has_amqp_port = 1 }
+      in_expected_probe && $1 == "periodSeconds:" && $2 == expected_period {
+        has_period = 1
+      }
+      in_expected_probe && $1 == "timeoutSeconds:" && $2 == expected_timeout {
+        has_timeout = 1
+      }
+      in_expected_probe && $1 == "failureThreshold:" && $2 == expected_failure_threshold {
+        has_failure_threshold = 1
+      }
+
+      END {
+        exit(has_tcp_socket && !has_exec && has_amqp_port && has_period &&
+          has_timeout && has_failure_threshold ? 0 : 1)
+      }
+    ' "${rabbitmq_container}" || {
+    printf '%s TCP probe contract is invalid: %s\n' \
+      'RabbitMQ' "${probe_name}" >&2
+    exit 1
+  }
+}
+
+verify_complete_resources "${rabbitmq_container}" 'rabbitmq'
+verify_resource_value "${rabbitmq_container}" 'requests' 'cpu' '250m' 'rabbitmq'
+verify_resource_value "${rabbitmq_container}" 'requests' 'memory' '384Mi' 'rabbitmq'
+verify_resource_value "${rabbitmq_container}" 'limits' 'cpu' '1' 'rabbitmq'
+verify_resource_value "${rabbitmq_container}" 'limits' 'memory' '768Mi' 'rabbitmq'
+
+grep -Fq 'return_per_object_metrics false' "${rabbitmq_container}" || {
+  printf '%s\n' \
+    'RabbitMQ per-object Prometheus metrics must be disabled on R4' >&2
+  exit 1
+}
+
+verify_rabbitmq_tcp_probe 'startupProbe' '5' '2' '60'
+verify_rabbitmq_tcp_probe 'readinessProbe' '10' '2' '3'
+verify_rabbitmq_tcp_probe 'livenessProbe' '30' '2' '6'
+
 for quota_contract in \
   'requests.cpu: "3"' \
   'requests.memory: "7Gi"' \
-  'limits.cpu: "12"' \
-  'limits.memory: "14Gi"'
+  'limits.cpu: "14"' \
+  'limits.memory: "16Gi"'
 do
   grep -Fq "${quota_contract}" "${resource_quota}" || {
     printf 'R4 ResourceQuota is missing rollout headroom: %s\n' \
