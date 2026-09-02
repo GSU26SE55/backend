@@ -6,13 +6,22 @@ namespace TicketService.UnitTests.Consumers;
 /// <summary>
 /// Khoá lại phép dịch trạng thái tài khoản từ AuthService sang enum của TicketService.
 ///
-/// <para>Hai enum lệch nhau một bậc (Auth bắt đầu từ 0, Ticket từ 1) nên ép kiểu thô dịch sai toàn
-/// bộ. Nguy hiểm nhất là <c>Locked</c> của Auth (2) rơi trúng <c>Active</c> của Ticket (2): khoá
-/// tài khoản xong bên này vẫn coi là hợp lệ để giao ticket, không log không exception. Đã đo được
-/// trên môi trường chạy thật trước khi sửa.</para>
+/// <para>Hai enum phải giữ cùng wire contract 0..5. Mapper vẫn bảo vệ boundary trước giá trị lạ
+/// từ publisher mới hơn.</para>
 /// </summary>
 public class AuthAccountStatusMapperTests
 {
+    [Fact]
+    public void TicketStatusValues_MatchAuthServiceWireContract()
+    {
+        ((int)AccountStatusEnum.PendingVerification).Should().Be(0);
+        ((int)AccountStatusEnum.Active).Should().Be(1);
+        ((int)AccountStatusEnum.Locked).Should().Be(2);
+        ((int)AccountStatusEnum.Inactive).Should().Be(3);
+        ((int)AccountStatusEnum.Suspended).Should().Be(4);
+        ((int)AccountStatusEnum.Banned).Should().Be(5);
+    }
+
     [Theory]
     [InlineData(0, AccountStatusEnum.PendingVerification)]
     [InlineData(1, AccountStatusEnum.Active)]
@@ -28,8 +37,7 @@ public class AuthAccountStatusMapperTests
     [Fact]
     public void FromAuthStatus_LockedNeverBecomesActive()
     {
-        // Case này là lý do file mapper tồn tại — giữ riêng để khi ai đó "đơn giản hoá" mapper
-        // thành phép cộng hay ép kiểu thì test đỏ ngay ở đúng chỗ đau.
+        // Khoá lại semantic quan trọng nhất của eligibility giao ticket.
         AuthAccountStatusMapper.FromAuthStatus(2).Should().NotBe(AccountStatusEnum.Active);
     }
 

@@ -44,6 +44,10 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
         if (!ticket.ClosedAt.HasValue || DateTime.UtcNow - ticket.ClosedAt.Value > TimeSpan.FromDays(7))
             return Fail(409, "The seven-day reopen window has expired.");
 
+        // Giữ lại mốc đóng trước khi state machine chuyển Closed -> Open. BatteryService dùng
+        // mốc này làm provenance để không mở lại một alert đã resolve ở chu kỳ ticket cũ.
+        var previousClosedAt = ticket.ClosedAt.Value;
+
         var transition = _stateMachine.CanTransition(ticket, TicketStatusEnum.Open, ActorRoleEnum.Customer, request.CustomerId);
         if (!transition.IsAllowed)
             return Fail(403, transition.Reason ?? "The ticket cannot be reopened.");
@@ -73,7 +77,8 @@ public class TicketReopenCommandHandler : IRequestHandler<TicketReopenCommand, T
                 ticket.Id, ticket.Code, request.CustomerId, request.ReopenReason.Trim()), transactionCt);
             await _outboxWriter.WriteAsync(new TicketReopenedEvent(
                 ticket.Id, ticket.Code, ticket.CustomerId, null,
-                request.ReopenReason.Trim(), ticket.ReopenCount, DateTime.UtcNow), transactionCt);
+                request.ReopenReason.Trim(), ticket.ReopenCount, DateTime.UtcNow,
+                previousClosedAt), transactionCt);
             await _uow.SaveChangesAsync(transactionCt);
         }, ct);
 

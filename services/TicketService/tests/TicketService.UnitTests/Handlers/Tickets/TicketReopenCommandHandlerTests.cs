@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Moq;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
@@ -57,6 +58,9 @@ public class TicketReopenCommandHandlerTests
 
         _stateMachine.Verify(x => x.ExecuteAsync(ticket, TicketStatusEnum.Open, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()), Times.Once);
         _outboxWriter.Verify(x => x.WriteAsync(It.IsAny<TicketReopenedIntegrationEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxWriter.Verify(x => x.WriteAsync(
+            It.Is<TicketReopenedEvent>(e => e.PreviousClosedAt == ticket.ClosedAt),
+            It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -6,15 +6,9 @@ namespace TicketService.Infrastructure.Consumers;
 /// Đổi giá trị trạng thái tài khoản từ <c>AccountStatusChangedEvent</c> (mang số của
 /// <c>AuthService.Domain.Enums.AccountStatusEnum</c>) sang enum của TicketService.
 ///
-/// <para><b>Vì sao phải có:</b> hai enum ĐÁNH SỐ LỆCH NHAU MỘT BẬC — AuthService bắt đầu từ
-/// <c>PendingVerification = 0</c>, TicketService bắt đầu từ <c>PendingVerification = 1</c>. Ép kiểu
-/// thô <c>(AccountStatusEnum)evt.NewStatus</c> nên dịch sai TOÀN BỘ trạng thái, và sai theo hướng
-/// nguy hiểm nhất: <c>Locked</c> của Auth (2) rơi đúng vào <c>Active</c> của Ticket (2), tức là
-/// khoá tài khoản bên Auth lại làm nó trở nên hợp lệ để giao ticket bên này.</para>
-///
-/// <para>Đã đo trên môi trường chạy thật: khoá tài khoản xong <c>last_synced_at</c> có cập nhật
-/// (consumer chạy đúng) nhưng <c>status</c> đọc ra vẫn là Active — lỗi im lặng, không log, không
-/// exception.</para>
+/// <para>Hai enum hiện dùng cùng wire contract 0..5. Mapper vẫn được giữ ở boundary để liệt kê
+/// tường minh các giá trị được hỗ trợ, tránh ép kiểu một số lạ thành enum không hợp lệ khi AuthService
+/// bổ sung trạng thái mới mà TicketService chưa được cập nhật.</para>
 ///
 /// <para>Giá trị lạ (enum Auth thêm thành viên mới mà bên này chưa biết) map về
 /// <see cref="AccountStatusEnum.Inactive"/>: không hiểu thì coi là không dùng được, chứ không đoán

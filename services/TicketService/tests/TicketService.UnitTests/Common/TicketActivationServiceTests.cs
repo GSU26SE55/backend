@@ -227,6 +227,114 @@ public class TicketActivationServiceTests
         fixture.Timer.WarningSentAt.Should().Be(warningSentAt, "warning timestamp is part of the audit trail");
     }
 
+    // ── SLA Deadline Extension on Escalation ────────────────────────────────────
+
+    [Fact]
+    public async Task Activate_EscalationP3ToP2_ExtendsResolutionSlaBy3WorkingDays()
+    {
+        var slaCalculator = new SlaCalculator();
+        var fixture = CreateEscalationFixture(
+            oldPriority: TicketPriorityEnum.P3Normal,
+            newPriority: TicketPriorityEnum.P2High,
+            staffTier: StaffSkillTierEnum.ModuleSpecialist,
+            timerStatus: SlaTimerStatusEnum.Running);
+
+        var result = await fixture.Service.ActivateAsync(
+            fixture.Request(ActivationReason.Immediate, actorRole: ActorRoleEnum.Manager), CancellationToken.None);
+
+        result.Activated.Should().BeTrue();
+        var expectedStart = slaCalculator.NormalizeToNextWorkingInstant(NowUtc);
+        var expectedDue = slaCalculator.CalculateDueDate(expectedStart, TicketPriorityEnum.P2High);
+
+        fixture.Timer.Priority.Should().Be(TicketPriorityEnum.P2High);
+        fixture.Timer.StartedAt.Should().Be(expectedStart);
+        fixture.Timer.OriginalDueAt.Should().Be(expectedDue);
+        fixture.Timer.DueAt.Should().Be(expectedDue);
+        fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running);
+        fixture.Timer.BreachAt.Should().BeNull();
+        fixture.Timer.WarningSentAt.Should().BeNull();
+        fixture.Timer.TotalPausedMinutes.Should().Be(0);
+        fixture.Timer.PauseEpisodesCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Activate_EscalationP2ToP1_ExtendsResolutionSlaBy14WorkingDays()
+    {
+        var slaCalculator = new SlaCalculator();
+        var fixture = CreateEscalationFixture(
+            oldPriority: TicketPriorityEnum.P2High,
+            newPriority: TicketPriorityEnum.P1Critical,
+            staffTier: StaffSkillTierEnum.SeniorSpecialist,
+            timerStatus: SlaTimerStatusEnum.Running);
+
+        var result = await fixture.Service.ActivateAsync(
+            fixture.Request(ActivationReason.Immediate, actorRole: ActorRoleEnum.Manager), CancellationToken.None);
+
+        result.Activated.Should().BeTrue();
+        var expectedStart = slaCalculator.NormalizeToNextWorkingInstant(NowUtc);
+        var expectedDue = slaCalculator.CalculateDueDate(expectedStart, TicketPriorityEnum.P1Critical);
+
+        fixture.Timer.Priority.Should().Be(TicketPriorityEnum.P1Critical);
+        fixture.Timer.StartedAt.Should().Be(expectedStart);
+        fixture.Timer.OriginalDueAt.Should().Be(expectedDue);
+        fixture.Timer.DueAt.Should().Be(expectedDue);
+        fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running);
+        fixture.Timer.BreachAt.Should().BeNull();
+        fixture.Timer.WarningSentAt.Should().BeNull();
+        fixture.Timer.TotalPausedMinutes.Should().Be(0);
+        fixture.Timer.PauseEpisodesCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Activate_PostBreachEscalation_StartsIndependentRunningWindowForNewHandler()
+    {
+        var slaCalculator = new SlaCalculator();
+        var fixture = CreateEscalationFixture(
+            oldPriority: TicketPriorityEnum.P3Normal,
+            newPriority: TicketPriorityEnum.P2High,
+            staffTier: StaffSkillTierEnum.ModuleSpecialist,
+            timerStatus: SlaTimerStatusEnum.Breached,
+            breachAt: NowUtc.AddHours(-2));
+
+        var result = await fixture.Service.ActivateAsync(
+            fixture.Request(ActivationReason.Immediate, actorRole: ActorRoleEnum.System), CancellationToken.None);
+
+        result.Activated.Should().BeTrue();
+        var expectedStart = slaCalculator.NormalizeToNextWorkingInstant(NowUtc);
+        var expectedDue = slaCalculator.CalculateDueDate(expectedStart, TicketPriorityEnum.P2High);
+
+        fixture.Timer.Priority.Should().Be(TicketPriorityEnum.P2High);
+        fixture.Timer.StartedAt.Should().Be(expectedStart);
+        fixture.Timer.OriginalDueAt.Should().Be(expectedDue);
+        fixture.Timer.DueAt.Should().Be(expectedDue);
+        fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running, "timer resets to Running for the new tier window");
+        fixture.Timer.BreachAt.Should().BeNull("breach flag is cleared on the active timer for the new window");
+        fixture.Timer.WarningSentAt.Should().BeNull();
+        fixture.Timer.TotalPausedMinutes.Should().Be(0);
+        fixture.Timer.PauseEpisodesCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Activate_EscalationFromPausedTimer_ClosesOpenPause()
+    {
+        var fixture = CreateEscalationFixture(
+            oldPriority: TicketPriorityEnum.P2High,
+            newPriority: TicketPriorityEnum.P1Critical,
+            staffTier: StaffSkillTierEnum.SeniorSpecialist,
+            timerStatus: SlaTimerStatusEnum.Paused,
+            openPause: true);
+
+        var result = await fixture.Service.ActivateAsync(
+            fixture.Request(ActivationReason.Immediate, actorRole: ActorRoleEnum.Manager), CancellationToken.None);
+
+        result.Activated.Should().BeTrue();
+        fixture.Timer.Status.Should().Be(SlaTimerStatusEnum.Running);
+        fixture.Timer.CurrentPauseStartedAt.Should().BeNull();
+        fixture.Timer.TotalPausedMinutes.Should().Be(0);
+        fixture.Pause.ResumedAt.Should().Be(NowUtc);
+        fixture.Pause.DurationMinutes.Should().Be(0);
+    }
+
     private static ActivationFixture CreateBreachReassignFixture()
     {
         var staffId = Guid.NewGuid();
@@ -278,6 +386,84 @@ public class TicketActivationServiceTests
             Status = AccountStatusEnum.Active,
             IsAvailable = true,
             SkillTier = StaffSkillTierEnum.ModuleSpecialist  // P2High requires >= ModuleSpecialist
+        };
+        var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(
+            ticketSeed: new[] { ticket },
+            staffSeed: new[] { staff },
+            slaTimerSeed: new[] { timer },
+            slaPauseEventSeed: new[] { pause });
+        var activity = new Mock<IActivityLogger>();
+        activity.Setup(x => x.LogAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ActorRoleEnum>(), It.IsAny<string?>(),
+                It.IsAny<ActivityActionEnum>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns(Task.CompletedTask);
+        var outbox = new Mock<IIntegrationEventOutboxWriter>();
+        outbox.Setup(x => x.WriteAsync(It.IsAny<TicketWorkStartedEvent>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var service = new TicketActivationService(
+            uow.Object,
+            new TicketStateMachine(new TransitionRuleProvider()),
+            new SlaCalculator(),
+            activity.Object,
+            outbox.Object);
+
+        return new ActivationFixture(service, ticket, timer, pause, staffId, activity, slaTimers);
+    }
+
+    private static ActivationFixture CreateEscalationFixture(
+        TicketPriorityEnum oldPriority,
+        TicketPriorityEnum newPriority,
+        StaffSkillTierEnum staffTier,
+        SlaTimerStatusEnum timerStatus,
+        DateTime? breachAt = null,
+        bool openPause = false)
+    {
+        var staffId = Guid.NewGuid();
+        var ticket = new Ticket
+        {
+            Id = Guid.NewGuid(),
+            Code = "TKT-ESC-01",
+            Title = "Escalated ticket",
+            Description = "Priority escalated ticket reassignment",
+            CustomerId = Guid.NewGuid(),
+            Status = TicketStatusEnum.ReAssign,
+            Priority = newPriority,
+            PendingContext = PendingContextEnum.Scheduled,
+            ScheduledStartAtUtc = null,
+            ScheduleVersion = 1,
+            PrimaryHandlerStaffId = staffId
+        };
+        var timer = new SlaTimer
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            Type = SlaTimerTypeEnum.Resolution,
+            Priority = oldPriority,
+            StartedAt = NowUtc.AddHours(-20),
+            DueAt = NowUtc.AddHours(-2),
+            OriginalDueAt = NowUtc.AddHours(-2),
+            BreachAt = breachAt,
+            TotalPausedMinutes = 45,
+            PauseEpisodesCount = 1,
+            WarningSentAt = NowUtc.AddHours(-5),
+            CurrentPauseStartedAt = openPause ? NowUtc.AddHours(-1) : null,
+            Status = timerStatus
+        };
+        var pause = new SlaPauseEvent
+        {
+            Id = Guid.NewGuid(),
+            SlaTimerId = timer.Id,
+            Reason = PauseReasonEnum.WorkBlocked,
+            PausedAt = NowUtc.AddHours(-1),
+            ResumedAt = openPause ? null : NowUtc.AddMinutes(-30),
+            PausedByUserId = staffId
+        };
+        var staff = new StaffAccount
+        {
+            AccountId = staffId,
+            Status = AccountStatusEnum.Active,
+            IsAvailable = true,
+            SkillTier = staffTier
         };
         var (uow, _, _, _, _, slaTimers, _) = MockTicketUnitOfWork.Build(
             ticketSeed: new[] { ticket },

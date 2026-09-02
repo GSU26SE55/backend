@@ -196,9 +196,7 @@ public class AccountSyncConsumerTests
         _customerRepoMock.Setup(r => r.GetAllAsync()).Returns(new List<CustomerAccount> { customer }.AsQueryable().BuildMock());
 
         var consumer = new TicketAccountStatusChangedConsumer(_uowMock.Object, _inboxMock.Object);
-        // Số trong event là của enum AuthService: Active=1 → Suspended=4. KHÔNG phải số của enum
-        // TicketService (bên này Suspended=5) — hai enum lệch nhau một bậc, đọc nhầm nguồn chính là
-        // nguyên nhân của lỗi mà AuthAccountStatusMapper sinh ra để chặn.
+        // AuthService và TicketService cùng wire contract: Active=1 → Suspended=4.
         var message = new AccountStatusChangedEvent(accountId, "staff@test.com", 1, 4, "Reason");
         var context = MockConsumeContext(message);
 

@@ -158,9 +158,8 @@ public class TicketAccountStatusChangedConsumer : IConsumer<AccountStatusChanged
         // biến thành mất message vĩnh viễn (gửi lại thấy dấu → bỏ qua → ACK).
         await context.ProcessOnceAsync(_inbox, nameof(TicketAccountStatusChangedConsumer), async () =>
         {
-            // Event mang số của enum bên AuthService, KHÔNG phải của enum bên này — hai enum lệch
-            // nhau một bậc. Ép kiểu thẳng thì Locked(2) của Auth rơi trúng Active(2) của Ticket,
-            // tức là khoá tài khoản lại làm nó hợp lệ để giao ticket. Xem AuthAccountStatusMapper.
+            // Event mang số của enum bên AuthService. Hai service hiện dùng cùng contract 0..5,
+            // nhưng vẫn đi qua mapper để từ chối an toàn giá trị mới/chưa biết thay vì ép kiểu thô.
             var status = AuthAccountStatusMapper.FromAuthStatus(@event.NewStatus);
             var isStaffRole = @event.Role.Equals("Staff", StringComparison.OrdinalIgnoreCase)
                               || @event.Role.Equals("Manager", StringComparison.OrdinalIgnoreCase)

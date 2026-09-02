@@ -28,11 +28,11 @@ public class SlaTimerDTO
     /// </summary>
     public double RemainingPercent { get; set; }
 
-    /// <summary>Budget SLA theo số ngày làm việc của priority (P1=1 · P2=3 · P3=7).</summary>
+    /// <summary>Budget SLA theo số ngày làm việc của priority (P1=14 · P2=3 · P3=2).</summary>
     public int SlaWorkingDays { get; set; }
 
     /// <summary>
-    /// Budget SLA quy ra giờ làm việc (P1=10h · P2=30h · P3=70h) — để FE không phải tự nhân
+    /// Budget SLA quy ra giờ làm việc (P1=140h · P2=30h · P3=20h) — để FE không phải tự nhân
     /// số ngày với độ dài cửa sổ làm việc.
     /// </summary>
     public int SlaWorkingHours { get; set; }
