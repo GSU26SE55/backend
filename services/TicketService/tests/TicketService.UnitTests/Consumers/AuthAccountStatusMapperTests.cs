@@ -13,6 +13,20 @@ namespace TicketService.UnitTests.Consumers;
 /// </summary>
 public class AuthAccountStatusMapperTests
 {
+    [Fact]
+    public void TicketStatusValues_RemainCompatibleWithPersistedAccountProjections()
+    {
+        // customer_accounts.status và staff_accounts.status đã được ghi bằng contract 1..6
+        // từ khi TicketService được tạo. Đổi trực tiếp các số này mà không backfill dữ liệu sẽ
+        // khiến bản ghi Active=2 hiện hữu bị EF đọc thành một trạng thái khác sau deployment.
+        ((int)AccountStatusEnum.PendingVerification).Should().Be(1);
+        ((int)AccountStatusEnum.Active).Should().Be(2);
+        ((int)AccountStatusEnum.Locked).Should().Be(3);
+        ((int)AccountStatusEnum.Inactive).Should().Be(4);
+        ((int)AccountStatusEnum.Suspended).Should().Be(5);
+        ((int)AccountStatusEnum.Banned).Should().Be(6);
+    }
+
     [Theory]
     [InlineData(0, AccountStatusEnum.PendingVerification)]
     [InlineData(1, AccountStatusEnum.Active)]

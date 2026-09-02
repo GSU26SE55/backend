@@ -93,13 +93,16 @@ public class AlertReopenOnTicketReopenedConsumerTests
     {
         var ticketId = Guid.NewGuid();
         var resolvedAlert = MakeAlert(ticketId, AlertStatusEnum.Resolved);
+        var previousClosedAt = DateTime.UtcNow.AddMinutes(-5);
+        resolvedAlert.ResolvedAt = previousClosedAt;
         var uow = BuildUow(new List<Alert> { resolvedAlert });
         await using var scope = await StartHarness(uow.Object);
         var harness = scope.Harness;
         var consumerHarness = harness.GetConsumerHarness<AlertReopenOnTicketReopenedConsumer>();
 
         await harness.Bus.Publish(new TicketReopenedEvent(
-            ticketId, "T1", Guid.NewGuid(), null, "Still broken", 1, DateTime.UtcNow));
+            ticketId, "T1", Guid.NewGuid(), null, "Still broken", 1, DateTime.UtcNow,
+            previousClosedAt));
         (await consumerHarness.Consumed.Any<TicketReopenedEvent>()).Should().BeTrue();
 
         resolvedAlert.Status.Should().Be(AlertStatusEnum.Open);
@@ -126,34 +129,27 @@ public class AlertReopenOnTicketReopenedConsumerTests
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    /// <summary>
-    /// Known gap (2026-09-02) — accepted, không fix. Consumer chỉ lọc theo (TicketId, Status),
-    /// không phân biệt "alert này Resolved bởi chính lần Close vừa rồi" hay "Resolved từ rất lâu
-    /// bởi lý do hoàn toàn khác" (vd tự resolve qua sensor trước khi ticket từng đóng lần đầu).
-    /// Reopen sẽ mở lại NHẦM alert đó dù nó không liên quan gì tới lý do reopen lần này.
-    /// Rủi ro thấp trong thực tế (ticket phải re-close rồi mới reopen lần nữa mới lặp lại tình
-    /// huống) nên chấp nhận giữ nguyên — test này ghi lại hành vi hiện tại làm bằng chứng, không
-    /// phải assertion "đúng" cần bảo toàn khi refactor.
-    /// </summary>
     [Fact]
-    public async Task TicketReopened_AlertResolvedLongBeforeThisCloseCycle_IsStillRevertedToOpen()
+    public async Task TicketReopened_AlertResolvedBeforePreviousCloseCycle_IsNotReopened()
     {
         var ticketId = Guid.NewGuid();
         var unrelatedResolvedAlert = MakeAlert(ticketId, AlertStatusEnum.Resolved);
-        // Resolved 30 ngày trước — chắc chắn không phải do lần Close dẫn tới Reopen này.
         unrelatedResolvedAlert.ResolvedAt = DateTime.UtcNow.AddDays(-30);
+        var previousClosedAt = DateTime.UtcNow.AddMinutes(-5);
         var uow = BuildUow(new List<Alert> { unrelatedResolvedAlert });
         await using var scope = await StartHarness(uow.Object);
         var harness = scope.Harness;
         var consumerHarness = harness.GetConsumerHarness<AlertReopenOnTicketReopenedConsumer>();
 
         await harness.Bus.Publish(new TicketReopenedEvent(
-            ticketId, "T1", Guid.NewGuid(), null, "Still broken", 1, DateTime.UtcNow));
+            ticketId, "T1", Guid.NewGuid(), null, "Still broken", 1, DateTime.UtcNow,
+            previousClosedAt));
         (await consumerHarness.Consumed.Any<TicketReopenedEvent>()).Should().BeTrue();
 
-        // Hành vi hiện tại: vẫn mở lại, dù ResolvedAt cách đây 30 ngày — đây CHÍNH LÀ gap đã biết.
-        unrelatedResolvedAlert.Status.Should().Be(AlertStatusEnum.Open);
-        unrelatedResolvedAlert.ResolvedAt.Should().BeNull();
+        unrelatedResolvedAlert.Status.Should().Be(AlertStatusEnum.Resolved);
+        unrelatedResolvedAlert.ResolvedAt.Should().NotBeNull();
+        uow.Verify(u => u.Alerts.UpdateAsync(It.IsAny<Alert>()), Times.Never);
+        uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

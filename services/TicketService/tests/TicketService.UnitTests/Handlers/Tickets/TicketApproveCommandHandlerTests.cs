@@ -1,4 +1,5 @@
 using FluentAssertions;
+using SharedContracts.Events;
 using SharedContracts.Interfaces;
 using TicketService.Application.CQRS.Command.Tickets;
 using TicketService.Application.CQRS.Handler.Tickets;
@@ -16,6 +17,7 @@ public class TicketApproveCommandHandlerTests
     public async Task Handle_IncidentTicket_SnapshotsEpisodeIdInApprovalActivity()
     {
         var episodeId = Guid.NewGuid();
+        var closedAt = DateTime.UtcNow;
         var ticket = new Ticket
         {
             Id = Guid.NewGuid(),
@@ -33,14 +35,20 @@ public class TicketApproveCommandHandlerTests
             .Returns(new TransitionResult { IsAllowed = true });
         stateMachine.Setup(x => x.ExecuteAsync(
                 ticket, TicketStatusEnum.Closed, It.IsAny<TransitionContext>(), It.IsAny<CancellationToken>()))
-            .Callback(() => ticket.Status = TicketStatusEnum.Closed)
+            .Callback(() =>
+            {
+                ticket.Status = TicketStatusEnum.Closed;
+                ticket.ApprovedAt = closedAt.AddMilliseconds(-1);
+                ticket.ClosedAt = closedAt;
+            })
             .ReturnsAsync(new TransitionResult { IsAllowed = true });
         var logger = new Mock<IActivityLogger>();
+        var outboxWriter = new Mock<IIntegrationEventOutboxWriter>();
         var handler = new TicketApproveCommandHandler(
             uow.Object,
             stateMachine.Object,
             logger.Object,
-            Mock.Of<IIntegrationEventOutboxWriter>());
+            outboxWriter.Object);
 
         var result = await handler.Handle(new TicketApproveCommand
         {
@@ -60,6 +68,9 @@ public class TicketApproveCommandHandlerTests
             episodeId.ToString(),
             null,
             "Approved after incident resolution."), Times.Once);
+        outboxWriter.Verify(x => x.WriteAsync(
+            It.Is<TicketClosedEvent>(e => e.ClosedAt == closedAt),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

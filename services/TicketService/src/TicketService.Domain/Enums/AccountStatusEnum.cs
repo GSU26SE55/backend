@@ -15,25 +15,25 @@ namespace TicketService.Domain.Enums;
 public enum AccountStatusEnum
 {
     /// <summary>Tài khoản vừa đăng ký, chưa xác thực email/OTP.</summary>
-    PendingVerification = 0,
+    PendingVerification = 1,
 
     /// <summary>Tài khoản đã xác thực và đang hoạt động bình thường.</summary>
-    Active = 1,
+    Active = 2,
 
     /// <summary>
     /// Tài khoản bị KHÓA TẠM THỜI bởi system (5 lần fail password/OTP liên tiếp).
     /// Auto-unlock khi LockoutEndAt qua hoặc scheduled job dọn.
     /// </summary>
-    Locked = 2,
+    Locked = 3,
 
     /// <summary>
     /// Tài khoản bị VÔ HIỆU HÓA bởi Admin (deactivate). KHÔNG auto-unlock — user phải request admin.
     /// </summary>
-    Inactive = 3,
+    Inactive = 4,
 
     /// <summary>Tài khoản bị đình chỉ do vi phạm chính sách. Admin only set/clear.</summary>
-    Suspended = 4,
+    Suspended = 5,
 
     /// <summary>Tài khoản bị cấm vĩnh viễn do vi phạm nghiêm trọng.</summary>
-    Banned = 5
+    Banned = 6
 }

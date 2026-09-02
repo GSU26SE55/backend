@@ -53,6 +53,35 @@ public class TicketReprioritizeCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_EnvironmentalTicketWithoutActiveEpisode_CanBeReprioritized()
+    {
+        var ticket = Ticket(TicketStatusEnum.Open, TicketPriorityEnum.P3Normal);
+        ticket.IsIncident = true;
+        ticket.Origin = TicketOriginEnum.AutoFromEnvironment;
+        ticket.ActiveIncidentEpisodeId = null;
+        var (uow, _, _, _, _, _, _) = MockTicketUnitOfWork.Build(ticketSeed: [ticket]);
+        var handler = CreateHandler(
+            uow.Object,
+            new Mock<ISlaCalculator>().Object,
+            new Mock<IActivityLogger>().Object);
+
+        var result = await handler.Handle(new TicketReprioritizeCommand
+        {
+            TicketId = ticket.Id,
+            Impact = ImpactScopeEnum.Site,
+            Urgency = UrgencyLevelEnum.High,
+            Reason = "Environmental impact reassessed",
+            ManagerId = Guid.NewGuid(),
+            ManagerName = "Manager"
+        }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        ticket.Priority.Should().Be(TicketPriorityEnum.P1Critical);
+        ticket.IsIncident.Should().BeTrue();
+        ticket.ActiveIncidentEpisodeId.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Handle_OpenTicket_DerivesPriorityFromMatrixAndAudits()
     {
         var ticket = Ticket(TicketStatusEnum.Open, TicketPriorityEnum.P3Normal);

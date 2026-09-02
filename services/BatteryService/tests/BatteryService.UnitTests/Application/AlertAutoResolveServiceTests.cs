@@ -151,6 +151,37 @@ public class AlertAutoResolveServiceTests
         alert.Status.Should().Be(AlertStatusEnum.Open);
     }
 
+    [Fact]
+    public async Task AutoResolve_EnvironmentalIncident_IsNotResolvedByAmbientThresholdEngine()
+    {
+        var (uow, alert) = AmbientHarness(reading => reading.AmbientTemperature = 30m);
+        alert.AnomalyType = AnomalyTypeEnum.EnvironmentalIncident;
+        var sut = new AlertAutoResolveService(uow.Build());
+
+        var result = await sut.AutoResolveAsync(LookbackMinutes);
+
+        result.Resolved.Should().Be(0);
+        alert.Status.Should().Be(AlertStatusEnum.Open);
+        alert.ResolvedAt.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(AnomalyTypeEnum.Undervoltage)]
+    [InlineData(AnomalyTypeEnum.Undertemp)]
+    [InlineData(AnomalyTypeEnum.IotDataIntegrityViolation)]
+    public async Task AutoResolve_BatteryAlertUnsupportedByThresholdEngine_IsSkipped(
+        AnomalyTypeEnum anomalyType)
+    {
+        var (uow, alert) = Harness(anomalyType);
+        var sut = new AlertAutoResolveService(uow.Build());
+
+        var result = await sut.AutoResolveAsync(LookbackMinutes);
+
+        result.Resolved.Should().Be(0);
+        alert.Status.Should().Be(AlertStatusEnum.Open);
+        alert.ResolvedAt.Should().BeNull();
+    }
+
     /// <summary>
     /// 1 site + threshold Enabled + 1 AmbientReading gần nhất, với nhiệt độ tuỳ chỉnh qua
     /// <paramref name="configureReading"/>, kèm 1 alert HighAmbientTemp Open đủ cũ để lọt cutoff.

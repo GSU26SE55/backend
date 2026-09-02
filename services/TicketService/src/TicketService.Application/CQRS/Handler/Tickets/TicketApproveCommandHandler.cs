@@ -76,7 +76,8 @@ public class TicketApproveCommandHandler : IRequestHandler<TicketApproveCommand,
         // resolve được (không có tín hiệu sensor đáng tin để suy luận lại).
         await _outboxWriter.WriteAsync(new TicketClosedEvent(
             ticket.Id, ticket.Code, ticket.CustomerId,
-            ticket.ApprovedAt ?? DateTime.UtcNow, IsAutoClosed: false, Rating: ticket.Rating), ct);
+            ticket.ClosedAt ?? ticket.ApprovedAt ?? DateTime.UtcNow,
+            IsAutoClosed: false, Rating: ticket.Rating), ct);
 
         await _uow.SaveChangesAsync(ct);
 

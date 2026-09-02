@@ -97,14 +97,16 @@ public class AlertResolveOnTicketClosedConsumerTests
         await using var scope = await StartHarness(uow.Object);
         var harness = scope.Harness;
         var consumerHarness = harness.GetConsumerHarness<AlertResolveOnTicketClosedConsumer>();
+        var closedAt = DateTime.UtcNow;
 
         await harness.Bus.Publish(new TicketClosedEvent(
-            ticketId, "T1", Guid.NewGuid(), DateTime.UtcNow, IsAutoClosed: false, Rating: null));
+            ticketId, "T1", Guid.NewGuid(), closedAt, IsAutoClosed: false, Rating: null));
         (await consumerHarness.Consumed.Any<TicketClosedEvent>()).Should().BeTrue();
 
         openAlert.Status.Should().Be(AlertStatusEnum.Resolved);
         mergedAlert.Status.Should().Be(AlertStatusEnum.Resolved);
-        openAlert.ResolvedAt.Should().NotBeNull();
+        openAlert.ResolvedAt.Should().Be(closedAt);
+        mergedAlert.ResolvedAt.Should().Be(closedAt);
         uow.Verify(u => u.Alerts.UpdateAsync(It.IsAny<Alert>()), Times.Exactly(2));
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }

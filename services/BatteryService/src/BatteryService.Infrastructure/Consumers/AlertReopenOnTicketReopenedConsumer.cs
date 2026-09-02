@@ -34,7 +34,10 @@ public class AlertReopenOnTicketReopenedConsumer : IConsumer<TicketReopenedEvent
         var alerts = await _uow.Alerts.GetAllAsync()
             .Where(a => !a.IsDeleted
                         && a.TicketId == msg.TicketId
-                        && a.Status == AlertStatusEnum.Resolved)
+                        && a.Status == AlertStatusEnum.Resolved
+                        // Event cũ không có PreviousClosedAt vẫn giữ hành vi tương thích. Event
+                        // mới chỉ mở alert được resolve bởi đúng lần close ngay trước lần reopen.
+                        && (msg.PreviousClosedAt == null || a.ResolvedAt == msg.PreviousClosedAt))
             .ToListAsync(context.CancellationToken);
 
         if (alerts.Count == 0)

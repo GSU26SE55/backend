@@ -77,6 +77,19 @@ public class AlertAutoResolveService : IAlertAutoResolveService
     private async Task<bool> TryResolveBatteryAlertAsync(
         Domain.Entities.Alert alert, Guid assetId, DateTime cutoff, CancellationToken cancellationToken)
     {
+        // Chỉ những loại mà AnomalyRules.Detect thật sự có thể tái tạo mới được phép tự resolve.
+        // Các enum lịch sử/AI/security không xuất hiện trong kết quả Detect; nếu không guard,
+        // Any(...) luôn false và service sẽ resolve nhầm chúng như thể sensor đã an toàn.
+        if (alert.AnomalyType is not (
+            AnomalyTypeEnum.Overheat or
+            AnomalyTypeEnum.Overvoltage or
+            AnomalyTypeEnum.LowSoc or
+            AnomalyTypeEnum.RapidDischarge or
+            AnomalyTypeEnum.AbnormalCharging or
+            AnomalyTypeEnum.HighInternalResistance or
+            AnomalyTypeEnum.CellImbalance))
+            return false;
+
         var asset = await _unitOfWork.BatteryAssets
             .GetAllAsync()
             .Where(b => !b.IsDeleted && b.Id == assetId)
@@ -108,6 +121,16 @@ public class AlertAutoResolveService : IAlertAutoResolveService
     private async Task<bool> TryResolveAmbientAlertAsync(
         Domain.Entities.Alert alert, Guid siteId, DateTime cutoff, CancellationToken cancellationToken)
     {
+        // EnvironmentalIncident và các loại site-level khác có workflow resolve riêng. Chỉ
+        // allow những loại được AnomalyRules.DetectAmbient phát hiện từ một AmbientReading.
+        if (alert.AnomalyType is not (
+            AnomalyTypeEnum.HighAmbientTemp or
+            AnomalyTypeEnum.HighHumidity or
+            AnomalyTypeEnum.HighTempHumidityCombo or
+            AnomalyTypeEnum.HighGasConcentration or
+            AnomalyTypeEnum.WaterLeak))
+            return false;
+
         var latest = await _unitOfWork.AmbientReadings
             .GetAllAsync()
             .Where(r => r.SiteId == siteId && r.Time >= cutoff)

@@ -43,11 +43,12 @@ public class AlertResolveOnTicketClosedConsumer : IConsumer<TicketClosedEvent>
         if (alerts.Count == 0)
             return;
 
-        var now = DateTime.UtcNow;
         foreach (var alert in alerts)
         {
             alert.Status = AlertStatusEnum.Resolved;
-            alert.ResolvedAt = now;
+            // Dùng timestamp nghiệp vụ từ event thay vì thời điểm consumer xử lý. Mốc ổn định
+            // này cho phép lần TicketReopened kế tiếp chỉ mở lại đúng alert của close cycle đó.
+            alert.ResolvedAt = msg.ClosedAt;
             _uow.Alerts.UpdateAsync(alert);
         }
 
