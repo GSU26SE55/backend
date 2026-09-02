@@ -55,7 +55,13 @@ public class TicketReprioritizeCommandHandler : IRequestHandler<TicketReprioriti
             // và bắn BatteryIsolationRequestedEvent để BatteryService cô lập pin. Cho hạ cấp
             // về P1/P2/P3 ở đây sẽ hồi sinh SLA timer vừa bị dừng và để lại IsIncident /
             // ActiveIncidentEpisodeId treo, trong khi pin đã bị cô lập và không có đường thu hồi.
-            if (ticket.IsIncident || ticket.ActiveIncidentEpisodeId.HasValue)
+            //
+            // Chỉ check ActiveIncidentEpisodeId, KHÔNG check IsIncident: ticket AutoFromEnvironment
+            // cũng có IsIncident=true (đánh dấu "sinh từ 1 Environmental Incident") nhưng Priority
+            // của nó vẫn tính theo severity (P1/P2/P3), không phải Urgent, và không có episode nào
+            // đang mở — SLA vẫn chạy, pin chưa cô lập. Chặn reprioritize theo IsIncident ở đây từng
+            // khoá nhầm priority của loại ticket này dù chưa hề qua Declare Incident.
+            if (ticket.ActiveIncidentEpisodeId.HasValue)
             {
                 response = Fail(409, "An active incident is fixed at Urgent priority and cannot be re-prioritized.");
                 return;
