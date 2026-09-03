@@ -112,8 +112,74 @@ public class AuthDataSeederTests : IDisposable
         accounts.Where(account => account.Email != "admin@test.local")
             .Should().OnlyContain(account => account.PasswordHash == "hashed:Password123@");
 
-        (await _ctx.AccountProfiles.CountAsync()).Should().Be(6);
-        (await _ctx.StaffProfiles.CountAsync()).Should().Be(3);
+        var accountProfiles = await _ctx.AccountProfiles
+            .Include(profile => profile.Account)
+            .ToListAsync();
+        accountProfiles.Should().HaveCount(6);
+        accountProfiles.Should().OnlyContain(profile =>
+            profile.TimeZone == "Asia/Ho_Chi_Minh" &&
+            profile.AvatarSource == AvatarSourceEnum.None);
+        accountProfiles.Select(profile => profile.Account.Email).Should().BeEquivalentTo(new[]
+        {
+            "admin@test.local",
+            "manager@solars.io.vn",
+            "staff1@solars.io.vn",
+            "staff2@solars.io.vn",
+            "staff3@solars.io.vn",
+            "dienhoanguyen11@gmail.com"
+        });
+
+        var staffProfiles = await _ctx.StaffProfiles
+            .Include(profile => profile.Account)
+            .Include(profile => profile.Skills)
+            .ToListAsync();
+        staffProfiles.Select(profile => new
+        {
+            profile.Account.Email,
+            profile.EmployeeCode,
+            profile.Department,
+            profile.MaxConcurrentTickets,
+            profile.IsAvailable,
+            profile.SkillTier,
+            Skills = profile.Skills
+                    .Select(skill => $"{skill.SkillCode}:{skill.SkillLevel}")
+                    .OrderBy(skill => skill)
+                    .ToArray()
+        })
+            .Should().BeEquivalentTo(new[]
+            {
+                new
+                {
+                    Email = "staff1@solars.io.vn",
+                    EmployeeCode = "STF-001",
+                    Department = "Technical Operations",
+                    MaxConcurrentTickets = 10,
+                    IsAvailable = true,
+                    SkillTier = StaffSkillTierEnum.Generalist,
+                    Skills = new[] { "general:1" }
+                },
+                new
+                {
+                    Email = "staff2@solars.io.vn",
+                    EmployeeCode = "STF-002",
+                    Department = "Technical Operations",
+                    MaxConcurrentTickets = 8,
+                    IsAvailable = true,
+                    SkillTier = StaffSkillTierEnum.ModuleSpecialist,
+                    Skills = new[] { "battery:2", "charging:2" }
+                },
+                new
+                {
+                    Email = "staff3@solars.io.vn",
+                    EmployeeCode = "STF-003",
+                    Department = "Technical Operations",
+                    MaxConcurrentTickets = 5,
+                    IsAvailable = true,
+                    SkillTier = StaffSkillTierEnum.SeniorSpecialist,
+                    Skills = new[] { "battery:3", "firmware:3", "incident:3" }
+                }
+            });
+
         (await _ctx.StaffSkills.CountAsync()).Should().Be(6);
         (await _ctx.LoginAttempts.CountAsync()).Should().Be(0,
             "login history is runtime audit data and must never be seeded");
