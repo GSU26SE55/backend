@@ -66,7 +66,7 @@ public class AuthDataSeederTests : IDisposable
         roles.Select(r => r.NormalizedName).Should().BeEquivalentTo(new[] { "ADMIN", "MANAGER", "STAFF", "CUSTOMER" });
         roles.Should().OnlyContain(r => r.IsSystemRole && r.Status == RoleStatusEnum.Active);
 
-        var admin = await _ctx.Users.FirstAsync();
+        var admin = await _ctx.Users.SingleAsync(account => account.Email == "admin@test.local");
         admin.Email.Should().Be("admin@test.local");
         admin.PasswordHash.Should().Be("hashed:Test123!");
         admin.EmailConfirmed.Should().BeTrue();
@@ -85,20 +85,146 @@ public class AuthDataSeederTests : IDisposable
         await NewSeeder().SeedAsync();
 
         (await _ctx.Roles.CountAsync()).Should().Be(4);
-        // Seeder tạo 1 admin + 5 sample accounts (1 Manager + 3 Staff tier 1/2/3 + 1 Customer).
-        // Idempotent — lần 2 không tạo thêm.
-        (await _ctx.Users.CountAsync()).Should().Be(6);
+        var accounts = await _ctx.Users
+            .Include(account => account.Role)
+            .OrderBy(account => account.Email)
+            .ToListAsync();
+
+        accounts.Should().HaveCount(6);
+        accounts.Select(account => new
+        {
+            account.Email,
+            account.FullName,
+            Role = account.Role!.NormalizedName,
+            account.Status,
+            account.EmailConfirmed
+        })
+            .Should().BeEquivalentTo(new[]
+            {
+                new { Email = "admin@test.local", FullName = "Alex", Role = "ADMIN", Status = AccountStatusEnum.Active, EmailConfirmed = true },
+                new { Email = "manager@solars.io.vn", FullName = "Bùi Phước Thắng", Role = "MANAGER", Status = AccountStatusEnum.Active, EmailConfirmed = true },
+                new { Email = "staff1@solars.io.vn", FullName = "Trần Minh Trí", Role = "STAFF", Status = AccountStatusEnum.Active, EmailConfirmed = true },
+                new { Email = "staff2@solars.io.vn", FullName = "Nguyễn Phúc Duy", Role = "STAFF", Status = AccountStatusEnum.Active, EmailConfirmed = true },
+                new { Email = "staff3@solars.io.vn", FullName = "Mai Hồng Thái", Role = "STAFF", Status = AccountStatusEnum.Active, EmailConfirmed = true },
+                new { Email = "dienhoanguyen11@gmail.com", FullName = "Nguyễn Nhật Minh", Role = "CUSTOMER", Status = AccountStatusEnum.Active, EmailConfirmed = true }
+            });
+
+        accounts.Where(account => account.Email != "admin@test.local")
+            .Should().OnlyContain(account => account.PasswordHash == "hashed:Password123@");
+
+        var accountProfiles = await _ctx.AccountProfiles
+            .Include(profile => profile.Account)
+            .ToListAsync();
+        accountProfiles.Should().HaveCount(6);
+        accountProfiles.Should().OnlyContain(profile =>
+            profile.TimeZone == "Asia/Ho_Chi_Minh" &&
+            profile.AvatarSource == AvatarSourceEnum.None);
+        accountProfiles.Select(profile => profile.Account.Email).Should().BeEquivalentTo(new[]
+        {
+            "admin@test.local",
+            "manager@solars.io.vn",
+            "staff1@solars.io.vn",
+            "staff2@solars.io.vn",
+            "staff3@solars.io.vn",
+            "dienhoanguyen11@gmail.com"
+        });
+
+        var staffProfiles = await _ctx.StaffProfiles
+            .Include(profile => profile.Account)
+            .Include(profile => profile.Skills)
+            .ToListAsync();
+        staffProfiles.Select(profile => new
+        {
+            profile.Account.Email,
+            profile.EmployeeCode,
+            profile.Department,
+            profile.MaxConcurrentTickets,
+            profile.IsAvailable,
+            profile.SkillTier,
+            Skills = profile.Skills
+                    .Select(skill => $"{skill.SkillCode}:{skill.SkillLevel}")
+                    .OrderBy(skill => skill)
+                    .ToArray()
+        })
+            .Should().BeEquivalentTo(new[]
+            {
+                new
+                {
+                    Email = "staff1@solars.io.vn",
+                    EmployeeCode = "STF-001",
+                    Department = "Technical Operations",
+                    MaxConcurrentTickets = 10,
+                    IsAvailable = true,
+                    SkillTier = StaffSkillTierEnum.Generalist,
+                    Skills = new[] { "general:1" }
+                },
+                new
+                {
+                    Email = "staff2@solars.io.vn",
+                    EmployeeCode = "STF-002",
+                    Department = "Technical Operations",
+                    MaxConcurrentTickets = 8,
+                    IsAvailable = true,
+                    SkillTier = StaffSkillTierEnum.ModuleSpecialist,
+                    Skills = new[] { "battery:2", "charging:2" }
+                },
+                new
+                {
+                    Email = "staff3@solars.io.vn",
+                    EmployeeCode = "STF-003",
+                    Department = "Technical Operations",
+                    MaxConcurrentTickets = 5,
+                    IsAvailable = true,
+                    SkillTier = StaffSkillTierEnum.SeniorSpecialist,
+                    Skills = new[] { "battery:3", "firmware:3", "incident:3" }
+                }
+            });
+
+        (await _ctx.StaffSkills.CountAsync()).Should().Be(6);
+        (await _ctx.LoginAttempts.CountAsync()).Should().Be(0,
+            "login history is runtime audit data and must never be seeded");
     }
 
     [Fact]
-    public async Task SeedAsync_DemoEmployeeCodeOwnedByAnotherProfile_PreservesOwnerAndStarts()
+    public async Task SeedAsync_NoAdminOverride_UsesRequestedProductionBootstrapAccount()
+    {
+        var previousEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL");
+        var previousPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD");
+        Environment.SetEnvironmentVariable("ADMIN_EMAIL", null);
+        Environment.SetEnvironmentVariable("ADMIN_PASSWORD", null);
+
+        try
+        {
+            var config = new ConfigurationBuilder().Build();
+            var seeder = new AuthDataSeeder(
+                _ctx,
+                config,
+                _hasher.Object,
+                _producer.Object,
+                NullLogger<AuthDataSeeder>.Instance);
+
+            await seeder.SeedAsync();
+
+            var admin = await _ctx.Users.SingleAsync(account => account.Email == "admin@solars.io.vn");
+            admin.FullName.Should().Be("Alex");
+            admin.PasswordHash.Should().Be("hashed:Pasword123@");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ADMIN_EMAIL", previousEmail);
+            Environment.SetEnvironmentVariable("ADMIN_PASSWORD", previousPassword);
+        }
+    }
+
+    [Fact]
+    public async Task SeedAsync_BootstrapEmployeeCodeOwnedByAnotherProfile_PreservesOwnerAndStarts()
     {
         var existingOwnerAccountId = Guid.NewGuid();
         _ctx.StaffProfiles.Add(new StaffProfile
         {
             Id = Guid.NewGuid(),
             AccountId = existingOwnerAccountId,
-            EmployeeCode = "STF-T1-001",
+            EmployeeCode = "STF-001",
             Department = "Production",
             MaxConcurrentTickets = 4,
             IsAvailable = true,
@@ -112,19 +238,19 @@ public class AuthDataSeederTests : IDisposable
         await NewSeeder().SeedAsync();
 
         var tier1AccountId = await _ctx.Users
-            .Where(a => a.Email == "staff.tier1@solarbattery.local")
+            .Where(a => a.Email == "staff1@solars.io.vn")
             .Select(a => a.Id)
             .SingleAsync();
         var allProfiles = await _ctx.StaffProfiles
             .IgnoreQueryFilters()
             .ToListAsync();
 
-        allProfiles.Should().ContainSingle(p => p.EmployeeCode == "STF-T1-001");
-        allProfiles.Single(p => p.EmployeeCode == "STF-T1-001").AccountId
+        allProfiles.Should().ContainSingle(p => p.EmployeeCode == "STF-001");
+        allProfiles.Single(p => p.EmployeeCode == "STF-001").AccountId
             .Should().Be(existingOwnerAccountId);
         allProfiles.Should().NotContain(p => p.AccountId == tier1AccountId);
-        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-T2-001");
-        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-T3-001");
+        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-002");
+        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-003");
     }
 
     [Fact]

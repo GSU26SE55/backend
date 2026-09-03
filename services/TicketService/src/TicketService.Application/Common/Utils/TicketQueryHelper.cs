@@ -52,7 +52,13 @@ public static class TicketQueryHelper
             // Sprint Bonus NS-22 (#662) — ticket site-level (env incident, Origin=System) có
             // BatteryAssetId = Guid.Empty → trả chuỗi rỗng (contract DTO: "không liên quan pin cụ thể").
             BatteryAssetId = t.BatteryAssetId == Guid.Empty ? string.Empty : t.BatteryAssetId.ToString(),
-            BatteryAssetIds = t.BatteryAssets.Select(b => b.BatteryAssetId.ToString()).ToList(),
+            // Cùng lý do với BatteryAssetId ở trên: lọc Guid.Empty phòng data rác trong bảng
+            // liên kết (ticket site-level trót insert một row rỗng) không bị lọt ra FE và bị
+            // hiểu nhầm là "ticket có pin" — kéo theo gọi API battery-assets/000...0 → 404.
+            BatteryAssetIds = t.BatteryAssets
+                .Where(b => b.BatteryAssetId != Guid.Empty)
+                .Select(b => b.BatteryAssetId.ToString())
+                .ToList(),
             CustomerId = t.CustomerId.ToString(),
             Assignments = t.Assignments
             .Where(a => !a.IsDeleted)

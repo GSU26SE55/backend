@@ -46,6 +46,13 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
 
     public async Task<TicketActionResponse> Handle(TicketCreateCommand request, CancellationToken ct)
     {
+        // ValidationBehavior normally rejects this before the handler. Keep the boundary guard as
+        // well because handlers are also called directly by tests and internal code; continuing
+        // with Guid.Empty would otherwise attempt a battery lookup and later index the snapshot
+        // dictionary with an invalid primary key.
+        if (request.BatteryAssetIds.Count != 1 || request.BatteryAssetIds[0] == Guid.Empty)
+            return Fail(400, "Exactly one valid battery must be selected.");
+
         // Validate Customer
         var customer = await _uow.CustomerAccounts.GetAllAsync()
             .FirstOrDefaultAsync(c => c.AccountId == request.CustomerId, ct);

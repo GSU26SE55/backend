@@ -10,7 +10,6 @@ using TicketService.Application.DependencyInjection;
 using TicketService.Infrastructure.BackgroundJobs;
 using TicketService.Infrastructure.DependencyInjection;
 using TicketService.Infrastructure.Persistence;
-using TicketService.Infrastructure.Persistence.Seeders;
 using TicketService.Infrastructure.Realtime;
 
 EnvFileLoader.LoadIfExists();
@@ -116,18 +115,6 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("[TicketService] No pending migrations.");
     }
 
-    // Skip seeder khi SkipSeeder=true (integration test với SQLite — xmin column Postgres-only).
-    var skipSeeder = app.Configuration.GetValue("SkipSeeder", false);
-    if (!app.Environment.IsProduction() && !skipSeeder)
-    {
-        var seeder = scope.ServiceProvider.GetRequiredService<TicketDataSeeder>();
-        await seeder.SeedAsync();
-        Console.WriteLine("[TicketService] Seed data checked for non-production environment.");
-    }
-    else if (skipSeeder)
-    {
-        Console.WriteLine("[TicketService] Skipping seed (SkipSeeder=true).");
-    }
 }
 
 app.UseSharedInfrastructure();
