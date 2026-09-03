@@ -65,6 +65,11 @@ global:
     maxUnavailable: 0
     maxSurge: 1
 
+  # Kubernetes defaults Deployment progress to 10 minutes. Keep the baseline
+  # above the longest application startup budget; constrained production nodes
+  # can override this further while immutable images are downloaded/extracted.
+  rolloutProgressDeadlineSeconds: 1200
+
   # Sprint 7 #116 — OTLP endpoint cho OpenTelemetry tracing. Để trống = tracing tắt.
   # Tự override thành http://tempo:4317 khi tempo.enabled (xem shared/configmap.yaml).
   otlpEndpoint: ""

@@ -93,22 +93,28 @@ jq -e '.auths["ghcr.io"] | type == "object"' \
 }
 
 image_namespace="ghcr.io/gsu26se55"
-for specification in \
+application_image_specs=(
+  # Warm the largest application first so a registry/runtime problem is found
+  # before the release mutates any live Deployment.
+  "ticketservice|TICKETSERVICE_DIGEST" \
   "apigateway|APIGATEWAY_DIGEST" \
   "authservice|AUTHSERVICE_DIGEST" \
   "emailservice|EMAILSERVICE_DIGEST" \
   "smsservice|SMSSERVICE_DIGEST" \
   "filestorageservice|FILESTORAGESERVICE_DIGEST" \
   "batteryservice|BATTERYSERVICE_DIGEST" \
-  "ticketservice|TICKETSERVICE_DIGEST" \
   "notificationservice|NOTIFICATIONSERVICE_DIGEST" \
   "auditaggregatorservice|AUDITAGGREGATORSERVICE_DIGEST"
-do
+)
+declare -a application_images=()
+
+for specification in "${application_image_specs[@]}"; do
   service="${specification%%|*}"
   key="${specification#*|}"
   image_ref="${image_namespace}/${service}@$(read_env "${key}" "${image_lock}")"
   DOCKER_CONFIG="${registry_config}" \
     cosign verify --key "${root}/config/cosign.pub" "${image_ref}" >/dev/null
+  application_images+=("${service}|${image_ref}")
 done
 
 cleanup_registry_config
@@ -364,6 +370,7 @@ rendered_manifest="$(mktemp)"
 backup_cronjob_manifest="$(mktemp)"
 previous_helm_revision=""
 post_upgrade_rollback_pending=false
+warmup_pod=""
 
 cleanup_deploy() {
   local exit_status=$?
@@ -371,6 +378,11 @@ cleanup_deploy() {
   # Avoid recursively invoking this handler if Helm rollback itself fails.
   trap - EXIT
   rm -f "${rendered_manifest}" "${backup_cronjob_manifest}"
+
+  if [[ -n "${warmup_pod}" ]]; then
+    kubectl -n "${namespace}" delete pod "${warmup_pod}" \
+      --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  fi
 
   if (( exit_status != 0 )) \
     && [[ "${post_upgrade_rollback_pending}" == true ]] \
@@ -395,6 +407,121 @@ cleanup_deploy() {
   exit "${exit_status}"
 }
 trap cleanup_deploy EXIT
+
+render_application_image_warmup_pod() {
+  local image
+  local service
+  local specification
+  local completion_image="${application_images[0]#*|}"
+
+  cat <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${warmup_pod}
+  labels:
+    app.kubernetes.io/component: release-image-warmup
+spec:
+  activeDeadlineSeconds: 1800
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 1
+  imagePullSecrets:
+  - name: ghcr-pull
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  initContainers:
+EOF
+
+  for specification in "${application_images[@]}"; do
+    service="${specification%%|*}"
+    image="${specification#*|}"
+    cat <<EOF
+  - name: warm-${service}
+    image: "${image}"
+    imagePullPolicy: IfNotPresent
+    command: ["/bin/sh", "-c", "exit 0"]
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      readOnlyRootFilesystem: true
+    resources:
+      requests: { cpu: 10m, memory: 16Mi }
+      limits: { cpu: 50m, memory: 64Mi }
+EOF
+  done
+
+  cat <<EOF
+  containers:
+  - name: complete
+    image: "${completion_image}"
+    imagePullPolicy: IfNotPresent
+    command: ["/bin/sh", "-c", "exit 0"]
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      readOnlyRootFilesystem: true
+    resources:
+      requests: { cpu: 10m, memory: 16Mi }
+      limits: { cpu: 50m, memory: 64Mi }
+EOF
+}
+
+print_image_warmup_diagnostics() {
+  printf '=== APPLICATION IMAGE WARM-UP: %s ===\n' "${warmup_pod}" >&2
+  kubectl -n "${namespace}" get pod "${warmup_pod}" -o wide >&2 || true
+  kubectl -n "${namespace}" describe pod "${warmup_pod}" >&2 || true
+  kubectl -n "${namespace}" get event \
+    --field-selector "involvedObject.name=${warmup_pod}" \
+    --sort-by=.metadata.creationTimestamp >&2 || true
+}
+
+warm_application_images() {
+  local deadline
+  local phase
+
+  warmup_pod="solar-image-warmup-${release_sha:0:12}"
+  kubectl -n "${namespace}" delete pod "${warmup_pod}" \
+    --ignore-not-found --wait=true --timeout=2m >/dev/null
+  render_application_image_warmup_pod | kubectl -n "${namespace}" apply -f -
+
+  # Pull and extract each immutable image through the same K3s containerd store
+  # used by the Deployments. Init containers are deliberately sequential so a
+  # full release cannot saturate R4 with nine concurrent image extractions.
+  deadline="$((SECONDS + 1860))"
+  while (( SECONDS < deadline )); do
+    phase="$(
+      kubectl -n "${namespace}" get pod "${warmup_pod}" \
+        -o jsonpath='{.status.phase}' 2>/dev/null || true
+    )"
+
+    case "${phase}" in
+      Succeeded)
+        kubectl -n "${namespace}" delete pod "${warmup_pod}" \
+          --wait=true --timeout=2m >/dev/null
+        warmup_pod=""
+        printf '%s\n' \
+          'All immutable application images are cached in the K3s runtime.'
+        return 0
+        ;;
+      Failed)
+        print_image_warmup_diagnostics
+        printf '%s\n' 'application image warm-up Pod failed' >&2
+        return 1
+        ;;
+    esac
+
+    sleep 5
+  done
+
+  print_image_warmup_diagnostics
+  printf '%s\n' 'application image warm-up exceeded 31 minutes' >&2
+  return 1
+}
 
 helm template "${helm_release}" "${chart_dir}" \
   --namespace "${namespace}" \
@@ -444,6 +571,8 @@ if helm status "${helm_release}" --namespace "${namespace}" >/dev/null 2>&1; the
       jq -er 'map(select(.status == "deployed")) | last | .revision'
   )"
 fi
+
+warm_application_images
 
 helm_args=(
   upgrade --install "${helm_release}" "${chart_dir}"
@@ -524,7 +653,7 @@ print_workload_failure_diagnostics() {
 # become Ready (a completed Pod never has Ready=True).
 while IFS= read -r resource; do
   [[ -n "${resource}" ]] || continue
-  if ! kubectl -n "${namespace}" rollout status "${resource}" --timeout=15m; then
+  if ! kubectl -n "${namespace}" rollout status "${resource}" --timeout=35m; then
     print_workload_failure_diagnostics "${resource}"
     printf 'workload rollout failed after Helm upgrade: %s\n' "${resource}" >&2
     exit 1

@@ -300,6 +300,30 @@ verify_application_service_monitor_contract() {
   }
 }
 
+verify_application_rollout_deadline() {
+  local service_name="$1"
+  local expected_deadline="$2"
+  local deployment_manifest="${temporary_directory}/${service_name}-deployment.yaml"
+
+  extract_named_resource \
+    'Deployment' \
+    "${service_name}" \
+    "${deployment_manifest}"
+
+  awk \
+    -v expected_deadline="${expected_deadline}" '
+      $1 == "progressDeadlineSeconds:" && $2 == expected_deadline {
+        found = 1
+      }
+
+      END { exit(found ? 0 : 1) }
+    ' "${deployment_manifest}" || {
+    printf '%s rollout progress deadline must equal %s seconds\n' \
+      "${service_name}" "${expected_deadline}" >&2
+    exit 1
+  }
+}
+
 verify_network_policy_ingress_port() {
   local input_file="$1"
   local source_label="$2"
@@ -355,6 +379,7 @@ for application_service in \
   ticketservice
 do
   verify_application_service_monitor_contract "${application_service}"
+  verify_application_rollout_deadline "${application_service}" '1800'
 done
 
 grafana_deployment="${temporary_directory}/grafana-deployment.yaml"
@@ -527,12 +552,6 @@ verify_probe_value "${authservice_deployment}" 'startupProbe' 'timeoutSeconds' '
 verify_probe_value "${authservice_deployment}" 'startupProbe' 'failureThreshold' '120'
 verify_probe_value "${authservice_deployment}" 'readinessProbe' 'timeoutSeconds' '5'
 verify_probe_value "${authservice_deployment}" 'livenessProbe' 'timeoutSeconds' '5'
-
-grep -Fq 'progressDeadlineSeconds: 1200' "${authservice_deployment}" || {
-  printf '%s\n' \
-    'AuthService rollout progress deadline must exceed its startup probe budget' >&2
-  exit 1
-}
 
 verify_rabbitmq_tcp_probe() {
   local probe_name="$1"

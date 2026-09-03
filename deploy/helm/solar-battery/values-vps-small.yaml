@@ -11,6 +11,10 @@ global:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+  # A full release replaces nine immutable application images. Even with the
+  # sequential cache warm-up, leave enough time for a slow GHCR transfer and
+  # containerd extraction before Kubernetes declares ProgressDeadlineExceeded.
+  rolloutProgressDeadlineSeconds: 1800
 
 services:
   apigateway:
