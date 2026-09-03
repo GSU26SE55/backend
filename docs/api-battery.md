@@ -372,14 +372,18 @@ Open ──→ Acknowledged ──→ Resolved
 
 ### `ElectricalTopologyEnum` (Sprint 7 B4)
 
-Cách đấu nối điện của pin trong site — dùng để tính **cascade risk** (rủi ro 1 pin hỏng lan sang pin lân cận). Topology càng "dính" nhau thì hệ số rủi ro lan truyền càng cao.
+Cách đấu nối điện của pin trong site — dùng để tính **cascade risk** (rủi ro 1 pin hỏng lan sang pin lân cận). Hệ số rủi ro đo **lan truyền thermal runaway** (cháy lan), KHÔNG phải rủi ro mất chức năng vận hành — 2 khái niệm khác nhau, xem ghi chú bên dưới.
 
 | Giá trị | Int | Ý nghĩa | Hệ số rủi ro (Rule 1) |
 |---|---|---|---|
 | `Independent` | 1 | Pin đơn lẻ, không kết nối điện với pin khác — hỏng không lây | +0.0 |
-| `SeriesString` | 2 | Mắc nối tiếp (string voltage) — mất 1 pin có thể ngắt cả chuỗi | +0.6 |
-| `ParallelBank` | 3 | Mắc song song (bank capacity) — 1 pin hỏng làm tăng tải pin còn lại | +0.2 |
+| `SeriesString` | 2 | Mắc nối tiếp — lan truyền chậm nhất, chỉ qua dẫn nhiệt vật lý (không có current transfer giữa các pin) | +0.2 |
 | `SeriesParallel` | 4 | Hỗn hợp nối tiếp + song song | +0.4 |
+| `ParallelBank` | 3 | Mắc song song — **nguy hiểm nhất khi lan truyền**: pin lành trong cùng nhánh đổ dòng điện thẳng vào pin đang runaway qua đường điện trở thấp, cộng thêm nhiệt lên trên phản ứng toả nhiệt tự nhiên | +0.6 |
+
+> **Căn cứ khoa học:** nghiên cứu thực nghiệm đo đỉnh nhiệt độ khi lan truyền — Parallel 720°C > Series-Parallel 683°C > Series 669°C; có nghiên cứu ghi nhận thermal runaway **gần như không lan truyền** ở cấu hình series thuần trong khi lan "dữ dội" ở parallel. Nguồn: Sun et al., *"Experimental study on thermal runaway propagation of lithium-ion battery modules with different parallel-series hybrid connections"*, Journal of Cleaner Production (2020), [doi:10.1016/j.jclepro.2020.124188](https://doi.org/10.1016/j.jclepro.2020.124188); Feng et al., *"An experimental and analytical study of thermal runaway propagation... NCM pouch-cells in parallel"*, International Journal of Heat and Mass Transfer (2019), [doi:10.1016/j.ijheatmasstransfer.2018.11.077](https://doi.org/10.1016/j.ijheatmasstransfer.2018.11.077).
+>
+> **Phân biệt với reliability engineering cổ điển:** lý thuyết mạch điện nói series dễ "mất chức năng" hơn khi mất 1 phần tử (đứt cả chuỗi, không có đường thay thế), còn parallel vẫn còn nhánh khác hoạt động. Đây là câu hỏi **khác** với "cháy có lan sang pin khác không" — cascade risk ở đây trả lời câu hỏi thứ 2, nên dùng đúng nguồn về thermal runaway propagation, không dùng lý thuyết reliability cổ điển.
 
 ### `CascadeRiskLevel` (Sprint 7 B4)
 
@@ -2982,7 +2986,7 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 
 **Bối cảnh & tác dụng:** Đánh giá rủi ro **1 pin hỏng lây lan sang pin lân cận cùng site** (cascade/propagation). `cascadeRiskScore` (0.0–1.0) được `CascadeRiskBackgroundService` tính lại **mỗi 5 phút** theo 3 rule cộng dồn rồi clamp ≤ 1.0:
 
-1. **Topology factor** — theo `ElectricalTopology` (xem enum): Independent +0.0 · ParallelBank +0.2 · SeriesParallel +0.4 · SeriesString +0.6.
+1. **Topology factor** — theo `ElectricalTopology` (xem enum §`ElectricalTopologyEnum` bên trên cho căn cứ khoa học): Independent +0.0 · SeriesString +0.2 · SeriesParallel +0.4 · ParallelBank +0.6 (ParallelBank cao nhất — current transfer giữa nhánh song song làm thermal runaway lan nhanh hơn).
 2. **Proximity** — số asset **cùng Site** có Open alert trong 1h gần đây: ≥1 → +0.2 · ≥3 → +0.2 (cộng dồn).
 3. **Thermal runaway** — asset có alert `Overheat` + `Critical` + `Open` → +0.3.
 
@@ -3015,8 +3019,12 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
     "siteId": "3a2b...",
     "cascadeRiskScore": 0.800,
     "level": "High",
-    "electricalTopology": "SeriesString",
-    "cascadeRiskUpdatedAt": "2026-06-24T03:15:00Z"
+    "electricalTopology": "ParallelBank",
+    "cascadeRiskUpdatedAt": "2026-06-24T03:15:00Z",
+    "riskFactors": [
+      "ParallelBank wiring adds +0.60",
+      "1 neighbouring battery(ies) in the same site have an open alert adds +0.20"
+    ]
   },
   "listErrors": null
 }
@@ -3033,6 +3041,7 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | `level` | `CascadeRiskLevel` | Không | Mức derive từ score: `Low`/`Medium`/`High` (xem enum) |
 | `electricalTopology` | `ElectricalTopologyEnum` | Không | Cách đấu nối điện (xem enum) |
 | `cascadeRiskUpdatedAt` | `DateTime?` | **Null nếu chưa từng tính** | Thời điểm recompute gần nhất (UTC) |
+| `riskFactors` | `string[]` | Không (mảng có thể rỗng) | Lý do đóng góp điểm theo rule — **tính LIVE mỗi request, không lưu DB** — chỉ để hiển thị (tooltip), không dùng để quyết định threshold-crossing |
 
 **Lỗi thường gặp:** `404` — không tìm thấy asset (hoặc đã soft-delete) · `401`/`403`.
 
@@ -3059,6 +3068,13 @@ Base route: `/api/admin/iot-firmware-releases` — toàn bộ yêu cầu role `A
 | `lowRiskCount` | `int` | Không | Số asset mức `Low` (score < 0.5) |
 | `maxScore` | `decimal` | Không | Score lớn nhất trong site (0 nếu site rỗng) |
 | `highRiskAssets` | `CascadeRiskDto[]` | Không (mảng có thể rỗng) | Danh sách asset `High`, sort theo score giảm dần |
+| `independentCount` | `int` | Không | Số asset topology `Independent` — đếm trên **toàn bộ** asset của site (không phân trang) |
+| `seriesStringCount` | `int` | Không | Số asset topology `SeriesString` — cùng quy ước đếm như trên |
+| `parallelBankCount` | `int` | Không | Số asset topology `ParallelBank` — cùng quy ước đếm như trên |
+| `seriesParallelCount` | `int` | Không | Số asset topology `SeriesParallel` — cùng quy ước đếm như trên |
+
+> 4 field đếm topology dùng để vẽ breakdown trên UI site — **không** dùng bảng battery list (phân
+> trang) để tự cộng dồn ở FE, vì trang hiện tại có thể chỉ là 10/100 asset của site.
 
 **Lỗi thường gặp:** `404` — không tìm thấy site · `401`/`403`.
 

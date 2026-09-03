@@ -1,6 +1,7 @@
 using BatteryService.Application.CQRS.Query.CascadeRisk;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
+using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedContracts.Common.Responses;
@@ -64,7 +65,11 @@ public class GetSiteCascadeRiskSummaryQueryHandler
             HighRiskAssets = assets
                 .Where(a => a.Level == CascadeRiskLevel.High)
                 .OrderByDescending(a => a.CascadeRiskScore)
-                .ToList()
+                .ToList(),
+            IndependentCount = assets.Count(a => a.ElectricalTopology == ElectricalTopologyEnum.Independent),
+            SeriesStringCount = assets.Count(a => a.ElectricalTopology == ElectricalTopologyEnum.SeriesString),
+            ParallelBankCount = assets.Count(a => a.ElectricalTopology == ElectricalTopologyEnum.ParallelBank),
+            SeriesParallelCount = assets.Count(a => a.ElectricalTopology == ElectricalTopologyEnum.SeriesParallel)
         };
 
         return new CommonResponse<SiteCascadeRiskSummaryDto>

@@ -276,27 +276,20 @@ public static class TicketQueryHelper
     /// Lọc theo nguồn tạo. Thứ tự điều kiện phải KHỚP với thứ tự ưu tiên FE dùng để gắn nhãn,
     /// nếu không một ticket sẽ hiện nhãn này mà lại lọt vào bộ lọc kia.
     ///
-    /// Origin = System bị hai luồng dùng chung (sự cố môi trường, bảo trì định kỳ) cộng thêm
-    /// cascade risk, nên AiPredicted phải loại trừ tường minh hai nhóm kia — không có cột nào
-    /// đánh dấu riêng cascade risk.
+    /// Origin = System bị BA luồng dùng chung (sự cố môi trường, bảo trì định kỳ, cascade
+    /// risk) — không có cột nào đánh dấu riêng cascade risk, phải loại trừ tường minh hai
+    /// nhóm kia thì phần còn lại mới chắc chắn là cascade risk.
     /// </summary>
     public static IQueryable<Ticket> FilterBySource(IQueryable<Ticket> query, TicketSourceFilterEnum? source) => source switch
     {
         TicketSourceFilterEnum.Customer => query.Where(t =>
             t.Origin == TicketOriginEnum.ManualByCustomer),
 
-        // AI dự đoán: alert bất thường của MỘT viên pin do AI module chấm, hoặc điểm cascade
-        // risk cao (System nhưng không phải bảo trì định kỳ).
-        //
-        // Không còn phải loại trừ `ImpactScope == Site` ở đây: sự cố môi trường nay mang
-        // `AutoFromEnvironment` chứ không dùng ké `AutoFromAlert` nữa.
+        // AI dự đoán: alert bất thường của MỘT viên pin do AI module chấm. KHÔNG còn gộp
+        // cascade risk ở đây — đó là công thức rule-based cộng điểm cứng, không có ML tham
+        // gia, tách riêng thành TicketSourceFilterEnum.CascadeRisk (bên dưới).
         TicketSourceFilterEnum.AiPredicted => query.Where(t =>
-            t.Origin == TicketOriginEnum.AutoFromAlert
-            || (t.Origin == TicketOriginEnum.System
-                // Dòng CŨ chưa qua backfill vẫn là `System` + có IncidentId — vẫn phải loại,
-                // cùng lưới an toàn với nhánh Environmental ngay dưới.
-                && t.EnvironmentalIncidentId == null
-                && t.PeriodicMaintenanceDueAtUtc == null)),
+            t.Origin == TicketOriginEnum.AutoFromAlert),
 
         // Sự cố môi trường — đọc thẳng origin. Hai đường (thiết bị tự báo qua
         // EnvironmentalIncident, và backend chấm số đo ambient) nay cùng một origin.
@@ -310,6 +303,13 @@ public static class TicketQueryHelper
 
         TicketSourceFilterEnum.PeriodicMaintenance => query.Where(t =>
             t.PeriodicMaintenanceDueAtUtc != null),
+
+        // Cascade risk cao — TicketBatteryCascadeRiskHighConsumer tự tạo/nâng P1. Phần còn
+        // lại của Origin=System sau khi đã loại môi trường + bảo trì định kỳ ở trên.
+        TicketSourceFilterEnum.CascadeRisk => query.Where(t =>
+            t.Origin == TicketOriginEnum.System
+            && t.EnvironmentalIncidentId == null
+            && t.PeriodicMaintenanceDueAtUtc == null),
 
         _ => query
     };

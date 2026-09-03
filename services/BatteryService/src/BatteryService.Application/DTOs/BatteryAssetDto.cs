@@ -68,6 +68,9 @@ public class BatteryAssetDto
     /// <summary>Mức rủi ro suy ra từ CascadeRiskScore (CascadeRiskDto.ToLevel).</summary>
     public CascadeRiskLevel CascadeRiskLevel { get; set; }
 
+    /// <summary>Cách đấu nối điện — input của Rule 1 (Topology) trong CascadeRiskCalculator.</summary>
+    public ElectricalTopologyEnum ElectricalTopology { get; set; }
+
     /// <summary>Lần bảo trì định kỳ gần nhất đã hoàn tất. Null = chưa lần nào.</summary>
     public DateTime? LastMaintenanceAtUtc { get; set; }
 

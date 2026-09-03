@@ -112,6 +112,44 @@ public class CascadeRiskServiceTests
     }
 
     [Fact]
+    public async Task HealthyNeighbour_OfAlertingAsset_IsAlsoScanned()
+    {
+        // Set C fix — pin lành (score=0, không alert) ở cùng site với pin đang Open alert phải
+        // được đưa vào candidate set, nếu không Rule 2 (Proximity) không bao giờ có cơ hội chạy
+        // cho nó dù về vật lý nó đang chịu rủi ro lan truyền.
+        var siteId = Guid.NewGuid();
+        var alertingId = Guid.NewGuid();
+        var healthyNeighbourId = Guid.NewGuid();
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(
+                Asset(alertingId, score: 0m, siteId: siteId),
+                Asset(healthyNeighbourId, score: 0m, siteId: siteId))
+            .WithAlerts(OpenAlert(alertingId));
+        var (sut, calc, _) = Build(b);
+        calc.Setup(c => c.CalculateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(0.2m);
+
+        var result = await sut.RecomputeAsync(200, CancellationToken.None);
+
+        result.Scanned.Should().Be(2, "cả pin đang alert lẫn pin lành cùng site đều phải được recompute");
+        calc.Verify(c => c.CalculateAsync(healthyNeighbourId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HealthyAsset_AloneInSite_NotScanned()
+    {
+        // Không có hàng xóm nào đang alert → vẫn không được quét (giữ nguyên hành vi cũ, tránh
+        // quét toàn bộ hệ thống mỗi 5 phút).
+        var siteId = Guid.NewGuid();
+        var b = new MockUnitOfWorkBuilder()
+            .WithBatteryAssets(Asset(Guid.NewGuid(), score: 0m, siteId: siteId));
+        var (sut, _, _) = Build(b);
+
+        var result = await sut.RecomputeAsync(200, CancellationToken.None);
+
+        result.Scanned.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Ordering_ProcessesStalestFirst_WithinBatchSize()
     {
         // Sprint Bonus NS-16 (#660, R7) — batchSize=1 → chỉ asset stale nhất (updatedAt cũ/null) được tính.

@@ -8,7 +8,9 @@ using SharedContracts.Interfaces;
 namespace BatteryService.Application.Services;
 
 /// <summary>
-/// Sprint 7 B4 (§31.7) — recompute cascade risk cho asset có Open alert.
+/// Sprint 7 B4 (§31.7) — recompute cascade risk cho asset có Open alert, asset đang decay
+/// (Set B), và asset lành ở cùng site với 1 asset đang Open alert (Set C — proximity blind
+/// spot fix, xem comment trong <see cref="RecomputeAsync"/>).
 ///
 /// Ngưỡng:
 /// - cross từ &lt; 0.7 lên &gt;= 0.7 → publish <see cref="BatteryCascadeRiskHighEvent"/>
@@ -65,7 +67,27 @@ public class CascadeRiskService : ICascadeRiskService
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
-        var candidateIds = activeIds.Concat(decayIds).Distinct().ToList();
+        // Set C — pin KHÔNG có alert của chính nó, nhưng ở cùng site với 1 pin thuộc Set A.
+        // Thiếu bước này thì Rule 2 (Proximity) trong CascadeRiskCalculator không bao giờ có cơ hội
+        // chạy cho pin lành: nó chỉ được cộng điểm khi asset đã lọt vào candidateIds, mà trước đây
+        // candidateIds chỉ gồm asset TỰ có alert hoặc đang decay — nên pin khỏe mạnh đứng cạnh ổ dịch
+        // sẽ mãi mãi kẹt ở score cũ dù về vật lý nó đang chịu rủi ro lan truyền cao nhất.
+        var activeSiteIds = await _unitOfWork.BatteryAssets
+            .GetAllAsync()
+            .Where(a => !a.IsDeleted && activeIds.Contains(a.Id) && a.SiteId != null)
+            .Select(a => a.SiteId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var siblingOfActiveIds = activeSiteIds.Count == 0
+            ? new List<Guid>()
+            : await _unitOfWork.BatteryAssets
+                .GetAllAsync()
+                .Where(a => !a.IsDeleted && a.SiteId != null && activeSiteIds.Contains(a.SiteId!.Value))
+                .Select(a => a.Id)
+                .ToListAsync(cancellationToken);
+
+        var candidateIds = activeIds.Concat(decayIds).Concat(siblingOfActiveIds).Distinct().ToList();
         if (candidateIds.Count == 0)
             return result;
 

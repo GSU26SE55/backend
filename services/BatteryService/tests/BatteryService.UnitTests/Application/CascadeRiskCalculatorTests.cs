@@ -53,16 +53,32 @@ public class CascadeRiskCalculatorTests
     };
 
     [Fact]
-    public async Task Topology_SeriesString_NoSiblings_NoThermal_Returns_0_6()
+    public async Task Topology_ParallelBank_NoSiblings_NoThermal_Returns_0_6()
     {
+        // ParallelBank là kiểu nguy hiểm nhất khi lan truyền thermal runaway (current transfer
+        // giữa các nhánh song song) — xem citation trong CascadeRiskCalculator.ComputeAsync.
         var id = Guid.NewGuid();
-        var target = Asset(id, ElectricalTopologyEnum.SeriesString);   // SiteId null → skip proximity
+        var target = Asset(id, ElectricalTopologyEnum.ParallelBank);   // SiteId null → skip proximity
 
         var calc = Build(target, new() { target }, new());
 
         var score = await calc.CalculateAsync(id);
 
         score.Should().Be(0.6m);
+    }
+
+    [Fact]
+    public async Task Topology_SeriesString_NoSiblings_NoThermal_Returns_0_2()
+    {
+        // Series lan truyền chậm nhất (chỉ qua dẫn nhiệt, không có current transfer).
+        var id = Guid.NewGuid();
+        var target = Asset(id, ElectricalTopologyEnum.SeriesString);
+
+        var calc = Build(target, new() { target }, new());
+
+        var score = await calc.CalculateAsync(id);
+
+        score.Should().Be(0.2m);
     }
 
     [Fact]
@@ -120,7 +136,7 @@ public class CascadeRiskCalculatorTests
     {
         var siteId = Guid.NewGuid();
         var id = Guid.NewGuid();
-        var target = Asset(id, ElectricalTopologyEnum.SeriesString, siteId);   // 0.6
+        var target = Asset(id, ElectricalTopologyEnum.ParallelBank, siteId);   // 0.6
 
         var siblings = Enumerable.Range(0, 3).Select(_ => Asset(Guid.NewGuid(), ElectricalTopologyEnum.Independent, siteId)).ToList();
         var all = new List<BatteryAsset> { target };
@@ -144,5 +160,66 @@ public class CascadeRiskCalculatorTests
         var score = await calc.CalculateAsync(Guid.NewGuid());
 
         score.Should().Be(0m);
+    }
+
+    // --- ExplainAsync (breakdown cho tooltip UI) — cùng nguồn logic với CalculateAsync ---
+
+    [Fact]
+    public async Task ExplainAsync_Independent_NoAlerts_ReturnsEmpty()
+    {
+        var id = Guid.NewGuid();
+        var target = Asset(id, ElectricalTopologyEnum.Independent);
+
+        var calc = Build(target, new() { target }, new());
+
+        var reasons = await calc.ExplainAsync(id);
+
+        reasons.Should().BeEmpty("Low risk, không rule nào đóng góp điểm thì không cần giải thích");
+    }
+
+    [Fact]
+    public async Task ExplainAsync_ParallelBank_ReturnsTopologyReason()
+    {
+        var id = Guid.NewGuid();
+        var target = Asset(id, ElectricalTopologyEnum.ParallelBank);
+
+        var calc = Build(target, new() { target }, new());
+
+        var reasons = await calc.ExplainAsync(id);
+
+        reasons.Should().ContainSingle(r => r.Contains("ParallelBank") && r.Contains("0.60"));
+    }
+
+    [Fact]
+    public async Task ExplainAsync_Combined_ReturnsOneReasonPerContributingRule()
+    {
+        var siteId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var target = Asset(id, ElectricalTopologyEnum.SeriesString, siteId);
+        var sibling = Asset(Guid.NewGuid(), ElectricalTopologyEnum.Independent, siteId);
+
+        var calc = Build(target, new() { target, sibling }, new()
+        {
+            OpenAlert(sibling.Id, AnomalyTypeEnum.Overvoltage, AlertSeverityEnum.Warning),
+            OpenAlert(id, AnomalyTypeEnum.Overheat, AlertSeverityEnum.Critical)
+        });
+
+        var reasons = await calc.ExplainAsync(id);
+
+        // Topology (SeriesString) + Proximity (>=1 sibling) + Thermal — KHÔNG có ">=3 sibling".
+        reasons.Should().HaveCount(3);
+        reasons.Should().Contain(r => r.Contains("SeriesString"));
+        reasons.Should().Contain(r => r.Contains("neighbouring battery"));
+        reasons.Should().Contain(r => r.Contains("overheat"));
+    }
+
+    [Fact]
+    public async Task ExplainAsync_UnknownAsset_ReturnsEmpty()
+    {
+        var calc = Build(Asset(Guid.NewGuid(), ElectricalTopologyEnum.SeriesString), new(), new());
+
+        var reasons = await calc.ExplainAsync(Guid.NewGuid());
+
+        reasons.Should().BeEmpty();
     }
 }

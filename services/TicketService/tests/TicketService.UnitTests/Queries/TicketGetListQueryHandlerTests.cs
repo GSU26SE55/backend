@@ -227,9 +227,10 @@ public class TicketGetListQueryHandlerTests
 
     [Theory]
     [InlineData(TicketSourceFilterEnum.Customer, "CUSTOMER")]
-    [InlineData(TicketSourceFilterEnum.AiPredicted, "AI-ALERT,AI-CASCADE")]
+    [InlineData(TicketSourceFilterEnum.AiPredicted, "AI-ALERT")]
     [InlineData(TicketSourceFilterEnum.Environmental, "ENVIRONMENTAL")]
     [InlineData(TicketSourceFilterEnum.PeriodicMaintenance, "PERIODIC")]
+    [InlineData(TicketSourceFilterEnum.CascadeRisk, "AI-CASCADE")]
     public async Task Handle_FilterBySource_ReturnsOnlyMatchingTickets(
         TicketSourceFilterEnum source,
         string expectedCodes)

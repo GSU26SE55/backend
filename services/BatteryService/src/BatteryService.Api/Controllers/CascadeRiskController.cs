@@ -18,7 +18,10 @@ namespace BatteryService.Api.Controllers;
 /// Điểm rủi ro <c>CascadeRiskScore</c> (0.0–1.0) được tính lại định kỳ (mỗi 5 phút) bởi
 /// <c>CascadeRiskBackgroundService</c> cho mọi asset có Open alert, theo 3 rule cộng dồn:
 /// <list type="number">
-///   <item><description><b>Topology factor</b>: SeriesString +0.6 · SeriesParallel +0.4 · ParallelBank +0.2 · Independent +0.0</description></item>
+///   <item><description><b>Topology factor</b>: ParallelBank +0.6 · SeriesParallel +0.4 · SeriesString +0.2 · Independent +0.0 —
+///   ParallelBank cao nhất vì current transfer giữa các nhánh song song làm thermal runaway lan nhanh và dữ dội hơn
+///   (Sun et al. 2020, J. Cleaner Production; Feng et al. 2019, Int. J. Heat Mass Transfer) — xem citation đầy đủ trong
+///   <see cref="BatteryService.Application.Services.CascadeRiskCalculator"/>.</description></item>
 ///   <item><description><b>Proximity</b>: ≥1 asset cùng Site có Open alert trong 1h +0.2 · ≥3 +0.2 (cộng dồn)</description></item>
 ///   <item><description><b>Thermal runaway</b>: asset có Overheat + Critical + Open +0.3</description></item>
 /// </list>
@@ -41,9 +44,13 @@ public class CascadeRiskController : ControllerBase
     /// <summary>Cascade risk hiện tại của 1 asset (score 0.0–1.0 + level + electrical topology).</summary>
     /// <remarks>
     /// Trả <see cref="CascadeRiskDto"/>: <c>CascadeRiskScore</c>, <c>Level</c> (Low/Medium/High),
-    /// <c>ElectricalTopology</c>, <c>CascadeRiskUpdatedAt</c> (lần recompute cuối).
+    /// <c>ElectricalTopology</c>, <c>CascadeRiskUpdatedAt</c> (lần recompute cuối), <c>RiskFactors</c>
+    /// (mảng lý do đóng góp điểm — vd "SeriesString wiring adds +0.60" — chỉ để hiển thị tooltip).
     ///
-    /// Trả về score đã lưu (background service giữ tươi mỗi 5 phút) — không recompute on-demand.
+    /// <c>CascadeRiskScore</c> trả về score đã lưu (background service giữ tươi mỗi 5 phút) —
+    /// không recompute on-demand. Riêng <c>RiskFactors</c> được tính LIVE cho mỗi request (không
+    /// lưu DB) — cùng input nên khớp với score đã lưu ở trạng thái ổn định, nhưng có thể lệch
+    /// trong vài giây ngay sau khi 1 alert vừa mở/đóng và trước lượt quét 5 phút kế tiếp.
     /// Quyền: tất cả role đăng nhập (Customer dùng để xem rủi ro pin của mình).
     /// </remarks>
     /// <param name="id">Id của BatteryAsset.</param>
@@ -68,7 +75,10 @@ public class CascadeRiskController : ControllerBase
     /// <summary>Heat map cascade risk tổng hợp cho toàn bộ asset trong 1 site (Manager dashboard).</summary>
     /// <remarks>
     /// Trả <see cref="SiteCascadeRiskSummaryDto"/>: tổng asset, số High/Medium/Low, <c>MaxScore</c>,
-    /// và danh sách <c>HighRiskAssets</c> (score ≥ 0.7, sort giảm dần) để hiển thị heat map / cảnh báo.
+    /// danh sách <c>HighRiskAssets</c> (score ≥ 0.7, sort giảm dần), và 4 field đếm topology
+    /// (<c>IndependentCount</c>, <c>SeriesStringCount</c>, <c>ParallelBankCount</c>,
+    /// <c>SeriesParallelCount</c>) — đếm trên TOÀN BỘ asset của site (không phân trang), dùng để
+    /// vẽ breakdown topology trên UI mà không lệ thuộc trang hiện tại của bảng battery list.
     ///
     /// Quyền: Admin/Manager.
     /// </remarks>

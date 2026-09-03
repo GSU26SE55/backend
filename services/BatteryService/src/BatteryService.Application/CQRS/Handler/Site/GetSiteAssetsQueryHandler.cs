@@ -139,6 +139,7 @@ public class GetSiteAssetsQueryHandler : IRequestHandler<GetSiteAssetsQuery, Com
                 ActiveAlertCount = activeAlertAssetIdSet.Contains(x.asset.Id) ? 1 : 0,
                 CascadeRiskScore = x.asset.CascadeRiskScore,
                 CascadeRiskLevel = CascadeRiskDto.ToLevel(x.asset.CascadeRiskScore),
+                ElectricalTopology = x.asset.ElectricalTopology,
                 CreatedAt = x.asset.CreatedAt
             })
             .ToPagedEntityListAsync(request.PageNumber, request.PageSize, cancellationToken);
