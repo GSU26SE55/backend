@@ -1,3 +1,4 @@
+using BatteryService.Application.Common.Models;
 using BatteryService.Application.CQRS.Command.BatteryAsset;
 using BatteryService.Application.DTOs;
 using BatteryService.Application.Interfaces;
@@ -5,6 +6,7 @@ using BatteryService.Application.Mapping;
 using BatteryService.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedContracts.Common.Responses;
 using SharedContracts.Events;
 using SharedContracts.Interfaces;
@@ -18,12 +20,18 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
     private readonly IBatteryUnitOfWork _unitOfWork;
     private readonly IIntegrationEventOutboxWriter _outbox;
     private readonly MediatR.IPublisher _publisher;   // Sprint audit #AUDIT-22
+    private readonly IOptions<MaintenanceScheduleOptions> _maintenanceOptions;
 
-    public CreateBatteryAssetCommandHandler(IBatteryUnitOfWork unitOfWork, IIntegrationEventOutboxWriter outbox, MediatR.IPublisher publisher)
+    public CreateBatteryAssetCommandHandler(
+        IBatteryUnitOfWork unitOfWork,
+        IIntegrationEventOutboxWriter outbox,
+        MediatR.IPublisher publisher,
+        IOptions<MaintenanceScheduleOptions> maintenanceOptions)
     {
         _unitOfWork = unitOfWork;
         _outbox = outbox;
         _publisher = publisher;
+        _maintenanceOptions = maintenanceOptions;
     }
 
     public async Task<CommonResponse<BatteryAssetDto>> Handle(CreateBatteryAssetCommand request, CancellationToken cancellationToken)
@@ -112,7 +120,9 @@ public class CreateBatteryAssetCommandHandler : IRequestHandler<CreateBatteryAss
             Latitude = request.Latitude,
             Longitude = request.Longitude,
             Status = BatteryStatusEnum.Active,
-            Notes = request.Notes?.Trim()
+            Notes = request.Notes?.Trim(),
+            NextMaintenanceDueAtUtc = ToUtc(request.InstallDate)
+                .AddMonths(batteryType.MaintenanceIntervalMonths ?? _maintenanceOptions.Value.DefaultCycleMonths)
         };
 
         await _unitOfWork.BatteryAssets.AddAsync(entity);

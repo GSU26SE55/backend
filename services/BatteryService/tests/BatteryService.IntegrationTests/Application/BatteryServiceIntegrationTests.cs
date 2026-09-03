@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using BatteryService.Application.Common.Models;
 using BatteryService.Application.CQRS.Command.BatteryAsset;
 using BatteryService.Application.CQRS.Command.SensorReading;
 using BatteryService.Application.CQRS.Handler.BatteryAsset;
@@ -12,6 +13,7 @@ using MassTransit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Options;
 using SharedContracts.Events;
 using SharedInfrastructure.Idempotency;
 using SharedInfrastructure.Persistence.Interceptors;
@@ -21,6 +23,9 @@ namespace BatteryService.IntegrationTests.Application;
 
 public class BatteryServiceIntegrationTests
 {
+    private static readonly IOptions<MaintenanceScheduleOptions> MaintenanceOptions =
+        Options.Create(new MaintenanceScheduleOptions());
+
     [Fact]
     public async Task AccountActivatedConsumer_CustomerRole_UpsertsCustomerReadModelOnce()
     {
@@ -65,7 +70,7 @@ public class BatteryServiceIntegrationTests
         dbContext.BatteryTypes.Add(CreateBatteryType(batteryTypeId));
         await dbContext.SaveChangesAsync();
 
-        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance, Mock.Of<MediatR.IPublisher>());
+        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance, Mock.Of<MediatR.IPublisher>(), MaintenanceOptions);
 
         var result = await handler.Handle(new CreateBatteryAssetCommand
         {
@@ -94,7 +99,7 @@ public class BatteryServiceIntegrationTests
         dbContext.BatteryTypes.Add(CreateBatteryType(batteryTypeId));
         await dbContext.SaveChangesAsync();
 
-        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance, Mock.Of<MediatR.IPublisher>());
+        var handler = new CreateBatteryAssetCommandHandler(new UnitOfWork(dbContext), NoOpIntegrationOutbox.Instance, Mock.Of<MediatR.IPublisher>(), MaintenanceOptions);
 
         var result = await handler.Handle(new CreateBatteryAssetCommand
         {

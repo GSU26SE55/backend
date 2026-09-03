@@ -1,9 +1,11 @@
+using BatteryService.Application.Common.Models;
 using BatteryService.Application.CQRS.Command.BatteryAsset;
 using BatteryService.Application.CQRS.Handler.BatteryAsset;
 using BatteryService.Application.CQRS.Query.BatteryAsset;
 using BatteryService.Domain.Entities;
 using BatteryService.Domain.Enums;
 using BatteryService.UnitTests.Helpers;
+using Microsoft.Extensions.Options;
 using SharedInfrastructure.Services;
 
 namespace BatteryService.UnitTests.Application;
@@ -12,6 +14,8 @@ public class BatteryAssetFullHandlerTests
 {
     private static readonly Guid CustomerId = Guid.NewGuid();
     private static readonly Guid BatteryTypeId = Guid.NewGuid();
+    private static readonly IOptions<MaintenanceScheduleOptions> MaintenanceOptions =
+        Options.Create(new MaintenanceScheduleOptions());
 
     private static CustomerAccount Customer(Guid? id = null, bool active = true, bool deleted = false) => new()
     {
@@ -73,7 +77,7 @@ public class BatteryAssetFullHandlerTests
     public async Task Create_CustomerMissing_Returns404()
     {
         var b = new MockUnitOfWorkBuilder().WithBatteryTypes(MakeType());
-        var handler = new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>());
+        var handler = new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>(), MaintenanceOptions);
         var r = await handler.Handle(BuildCreateCmd(), CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
@@ -87,7 +91,7 @@ public class BatteryAssetFullHandlerTests
             .WithBatteryAssets(MakeAsset());
         var cmd = BuildCreateCmd();
         cmd.SerialNumber = "ABC-123";
-        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>()).Handle(cmd, CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>(), MaintenanceOptions).Handle(cmd, CancellationToken.None);
         r.StatusCode.Should().Be(409);
     }
 
@@ -95,7 +99,7 @@ public class BatteryAssetFullHandlerTests
     public async Task Create_BatteryTypeMissing_Returns404()
     {
         var b = new MockUnitOfWorkBuilder().WithCustomerAccounts(Customer());
-        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>()).Handle(BuildCreateCmd(), CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>(), MaintenanceOptions).Handle(BuildCreateCmd(), CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
 
@@ -107,7 +111,7 @@ public class BatteryAssetFullHandlerTests
         var b = new MockUnitOfWorkBuilder()
             .WithCustomerAccounts(Customer())
             .WithBatteryTypes(MakeType());
-        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>()).Handle(cmd, CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>(), MaintenanceOptions).Handle(cmd, CancellationToken.None);
         r.StatusCode.Should().Be(404);
     }
 
@@ -122,7 +126,7 @@ public class BatteryAssetFullHandlerTests
             .WithCustomerAccounts(Customer())
             .WithBatteryTypes(MakeType())
             .WithSites(site);
-        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>()).Handle(cmd, CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>(), MaintenanceOptions).Handle(cmd, CancellationToken.None);
         r.StatusCode.Should().Be(409);
     }
 
@@ -137,7 +141,7 @@ public class BatteryAssetFullHandlerTests
             .WithSites(site);
 
         var r = await new CreateBatteryAssetCommandHandler(
-            b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>())
+            b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>(), MaintenanceOptions)
             .Handle(cmd, CancellationToken.None);
 
         r.StatusCode.Should().Be(409);
@@ -155,7 +159,7 @@ public class BatteryAssetFullHandlerTests
             .WithCustomerAccounts(Customer())
             .WithBatteryTypes(MakeType())
             .WithSites(site);
-        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>()).Handle(cmd, CancellationToken.None);
+        var r = await new CreateBatteryAssetCommandHandler(b.Build(), NoOpOutbox.Instance, Moq.Mock.Of<MediatR.IPublisher>(), MaintenanceOptions).Handle(cmd, CancellationToken.None);
         r.IsSuccess.Should().BeTrue();
         r.StatusCode.Should().Be(201);
         b.BatteryAssets.Verify(x => x.AddAsync(It.IsAny<BatteryAsset>()), Times.Once);
