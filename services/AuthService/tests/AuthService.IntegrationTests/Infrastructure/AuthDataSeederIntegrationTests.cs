@@ -25,7 +25,7 @@ public class AuthDataSeederIntegrationTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
-    public async Task SeedAsync_SoftDeletedProfileOwnsDemoEmployeeCode_DoesNotViolateUniqueIndex()
+    public async Task SeedAsync_SoftDeletedProfileOwnsBootstrapEmployeeCode_DoesNotViolateUniqueIndex()
     {
         var existingOwner = new AccountEntity
         {
@@ -45,7 +45,7 @@ public class AuthDataSeederIntegrationTests : IAsyncLifetime
             {
                 Id = Guid.NewGuid(),
                 AccountId = existingOwner.Id,
-                EmployeeCode = "STF-T1-001",
+                EmployeeCode = "STF-001",
                 Department = "Production",
                 MaxConcurrentTickets = 4,
                 IsAvailable = false,
@@ -65,18 +65,18 @@ public class AuthDataSeederIntegrationTests : IAsyncLifetime
 
         await using var verifyDb = _factory.CreateDbContext();
         var tier1AccountId = await verifyDb.Users
-            .Where(a => a.Email == "staff.tier1@solarbattery.local")
+            .Where(a => a.Email == "staff1@solars.io.vn")
             .Select(a => a.Id)
             .SingleAsync();
         var allProfiles = await verifyDb.StaffProfiles
             .IgnoreQueryFilters()
             .ToListAsync();
 
-        allProfiles.Should().ContainSingle(p => p.EmployeeCode == "STF-T1-001");
-        allProfiles.Single(p => p.EmployeeCode == "STF-T1-001").AccountId
+        allProfiles.Should().ContainSingle(p => p.EmployeeCode == "STF-001");
+        allProfiles.Single(p => p.EmployeeCode == "STF-001").AccountId
             .Should().Be(existingOwner.Id);
         allProfiles.Should().NotContain(p => p.AccountId == tier1AccountId);
-        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-T2-001");
-        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-T3-001");
+        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-002");
+        allProfiles.Should().Contain(p => p.EmployeeCode == "STF-003");
     }
 }

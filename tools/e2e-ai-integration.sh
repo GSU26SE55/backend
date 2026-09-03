@@ -204,8 +204,9 @@ echo "$BATCH_JSON" | grep -q '"isComplete"' && pass "  có cờ isComplete (=$B_
 
 section "6d. BE → AI · VerifyTicket qua TicketService (cần role Manager)"
 # Endpoint re-verify là [Authorize(Roles="Manager")] — token Admin ở trên sẽ nhận 403.
-# Mật khẩu tài khoản demo nằm trong AuthDataSeeder (không phải dò), giữ ở biến để đổi được.
-MGR_EMAIL="${MGR_EMAIL:-manager.demo@solarbattery.local}"
+# Tài khoản bootstrap vận hành nằm trong AuthDataSeeder; giữ ở biến để có thể
+# override khi chạy trên môi trường khác.
+MGR_EMAIL="${MGR_EMAIL:-manager@solars.io.vn}"
 MGR_PASSWORD="${MGR_PASSWORD:-Password123@}"
 MGR_TOKEN="$(curl -fsS -X POST "$GATEWAY/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$MGR_EMAIL\",\"password\":\"$MGR_PASSWORD\"}" 2>/dev/null | jqp data.tokens.accessToken)"

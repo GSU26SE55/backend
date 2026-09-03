@@ -4267,44 +4267,46 @@ Nếu role-permission row bị soft-deleted → restore. Nếu chưa tồn tại
 
 | Field | Default | Override env / config |
 |---|---|---|
-| Email | `admin@gmail.com` | `ADMIN_EMAIL` env var HOẶC `AdminSeed:Email` config |
-| Password | `Admin123@` | `ADMIN_PASSWORD` env var HOẶC `AdminSeed:Password` config |
-| FullName | `"System Admin"` | (không override) |
+| Email | `admin@solars.io.vn` | `ADMIN_EMAIL` env var HOẶC `AdminSeed:Email` config |
+| Password | `Pasword123@` | `ADMIN_PASSWORD` env var HOẶC `AdminSeed:Password` config |
+| FullName | `"Alex"` | (không override) |
 | EmailConfirmed | `true` | — |
 | Status | `Active` | — |
 | RoleId | (Admin role ID) | — |
 
-> ⚠️ **SECURITY**: Default credentials phải được đổi ngay sau first deploy production. Trong staging/dev acceptable. Build script CI nên check + warn nếu default password còn ở production env.
+> ⚠️ **SECURITY**: Production có thể override password qua Kubernetes Secret
+> `ADMIN_PASSWORD`. Seeder chỉ đặt password khi tạo account lần đầu và không reset password
+> của account đã tồn tại.
 
 Nếu admin account đã tồn tại theo email:
 - Re-set `EmailConfirmed = true`, `Status = Active`, `IsDeleted = false`, `DeletedAt = null` (chống admin tự xóa nhầm).
 - Force `RoleId = Admin role ID` (chống admin tự đổi role thành Customer rồi locked-out).
 - **KHÔNG** reset password — đã set ban đầu là final.
 
-### 6. **5 Sample accounts** (`@solarbattery.local`, password `Password123@`)
+### 6. **5 operational accounts** (password khởi tạo `Password123@`)
 
 | Email | FullName | Role |
 |---|---|---|
-| `manager.demo@solarbattery.local` | "Demo Manager" | Manager |
-| `staff.tier1@solarbattery.local` | "Staff Tier1 Generalist" | Staff (Generalist tier) |
-| `staff.tier2@solarbattery.local` | "Staff Tier2 Specialist" | Staff (ModuleSpecialist tier) |
-| `staff.tier3@solarbattery.local` | "Staff Tier3 Senior" | Staff (SeniorSpecialist tier) |
-| `customer.demo@solarbattery.local` | "Demo Customer" | Customer |
+| `manager@solars.io.vn` | "Bùi Phước Thắng" | Manager |
+| `staff1@solars.io.vn` | "Trần Minh Trí" | Staff (Generalist tier) |
+| `staff2@solars.io.vn` | "Nguyễn Phúc Duy" | Staff (ModuleSpecialist tier) |
+| `staff3@solars.io.vn` | "Mai Hồng Thái" | Staff (SeniorSpecialist tier) |
+| `dienhoanguyen11@gmail.com` | "Nguyễn Nhật Minh" | Customer |
 
-> Sample accounts giúp FE/QA test các role flow mà không cần register thủ công. **KHÔNG** seed lên production — chỉ seed nếu config flag enable hoặc env `Development`.
+> Đây là danh sách account bootstrap được yêu cầu cho mọi môi trường. Các account
+> khác phải được tạo bằng luồng API; startup không tạo account demo/test.
 
-### 7. **Sample LoginAttempts** (dev fixture)
+### 7. **LoginAttempts là runtime-only**
 
-Seed 1 lần (nếu bảng rỗng): 3 attempts cho admin (2 success + 1 wrong password) + 3 attempts/sample account (Password success + Google success + wrong password) + 1 AccountNotFound cho email lạ.
+Seeder không ghi `login_attempts`. Bảng này chỉ chứa audit phát sinh từ các lần đăng nhập
+thực tế.
 
-Giúp FE test `/me/login-history` UI ngay sau deploy mà không cần thực sự login nhiều lần.
+### 8. **Operational staff profiles + account profiles**
 
-### 8. **Staff profiles + Account profiles**
-
-Auto-tạo profile rows cho admin + sample accounts. Staff sample được set:
-- `tier1` → `StaffSkillTierEnum.Generalist`
-- `tier2` → `ModuleSpecialist`
-- `tier3` → `SeniorSpecialist`
+Auto-tạo profile rows cần thiết cho sáu account bootstrap. Staff được set:
+- `staff1@solars.io.vn` / `STF-001` → `StaffSkillTierEnum.Generalist`
+- `staff2@solars.io.vn` / `STF-002` → `ModuleSpecialist`
+- `staff3@solars.io.vn` / `STF-003` → `SeniorSpecialist`
 
 ---
 
@@ -4907,7 +4909,8 @@ Items DevOps PHẢI verify ở mỗi production deploy (consolidate từ finding
 
 1. **`JwtSettings:SecretKey`** ≥ 32 chars (app startup fail nếu thiếu).
 2. **`JwtSettings:Issuer`** + **`Audience`** set.
-3. **`ADMIN_EMAIL`** + **`ADMIN_PASSWORD`** env vars set **khác default** (`admin@gmail.com`/`Admin123@`) cho production.
+3. **`ADMIN_EMAIL`** + **`ADMIN_PASSWORD`** phải khớp account bootstrap mong muốn trước
+   khi reset database; password chỉ được hash khi account được tạo lần đầu.
 4. **`GoogleOAuth:RedirectUri`** + (optional) **`AllowedRedirectUris`** array set + match Google Console config.
 5. **`GoogleOAuth:ClientId`** + **`ClientSecret`** set.
 6. **`Redis:ConnectionString`** reachable từ pod — verify qua `/ready` probe.
