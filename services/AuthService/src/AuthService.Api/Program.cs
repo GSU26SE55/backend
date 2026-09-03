@@ -113,7 +113,7 @@ using (var scope = app.Services.CreateScope())
 
     var seeder = scope.ServiceProvider.GetRequiredService<AuthDataSeeder>();
     await seeder.SeedAsync();
-    Console.WriteLine("? Auth seed data checked.");
+    Console.WriteLine("? Auth bootstrap data checked.");
 }
 
 app.UseSharedInfrastructure();

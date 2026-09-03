@@ -2,7 +2,6 @@ using BatteryService.Api.Authentication;
 using BatteryService.Application.DependencyInjection;
 using BatteryService.Infrastructure.DependencyInjection;
 using BatteryService.Infrastructure.Persistence;
-using BatteryService.Infrastructure.Persistence.Seeders;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
@@ -132,13 +131,6 @@ if (!EF.IsDesignTime)
             Console.WriteLine("? No pending migrations.");
         }
 
-        var seeder = scope.ServiceProvider.GetRequiredService<BatteryDataSeeder>();
-        await seeder.SeedAsync();
-        Console.WriteLine("? Battery seed data checked.");
-
-        var envSeeder = scope.ServiceProvider.GetRequiredService<EnvironmentDataSeeder>();
-        await envSeeder.SeedAsync();
-        Console.WriteLine("? Environment seed data checked.");
     }
 
     app.UseSharedInfrastructure();

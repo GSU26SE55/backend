@@ -396,7 +396,7 @@ docker compose up -d            # gồm gateway, batteryservice, postgres/timesc
 ```bash
 curl -s -X POST http://localhost:4001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@yourdomain.com","password":"Admin123@"}'
+  -d '{"email":"admin@solars.io.vn","password":"Pasword123@"}'
 # → token nằm ở data.tokens.accessToken
 ```
 
@@ -404,10 +404,10 @@ Tài khoản seed sẵn (dev):
 
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | `admin@yourdomain.com` | `Admin123@` |
-| Manager | `manager.demo@solarbattery.local` | `Password123@` |
-| Staff | `staff.tier1@solarbattery.local` | `Password123@` |
-| Customer | `customer.demo@solarbattery.local` | `Password123@` |
+| Admin | `admin@solars.io.vn` | `Pasword123@` |
+| Manager | `manager@solars.io.vn` | `Password123@` |
+| Staff | `staff1@solars.io.vn` | `Password123@` |
+| Customer | `dienhoanguyen11@gmail.com` | `Password123@` |
 
 ### 9.4. Sinh dữ liệu realtime (để thấy stream nhảy)
 Chạy IoT simulator để liên tục đẩy reading vào backend:
@@ -420,7 +420,7 @@ Simulator trỏ về gateway `http://localhost:4001`, đẩy nhiều pin theo `c
 ### 9.5. Thử nhanh stream bằng curl
 ```bash
 TOK=$(curl -s -X POST http://localhost:4001/api/auth/login -H "Content-Type: application/json" \
-  -d '{"email":"admin@yourdomain.com","password":"Admin123@"}' \
+  -d '{"email":"admin@solars.io.vn","password":"Pasword123@"}' \
   | python3 -c "import sys,json;print(json.load(sys.stdin)['data']['tokens']['accessToken'])")
 
 # 1 pin → event reading

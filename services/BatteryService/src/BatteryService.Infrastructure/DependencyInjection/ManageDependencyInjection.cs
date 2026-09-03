@@ -7,7 +7,6 @@ using BatteryService.Infrastructure.Consumers;
 using BatteryService.Infrastructure.Implements.Repositories;
 using BatteryService.Infrastructure.Implements.Services;
 using BatteryService.Infrastructure.Persistence;
-using BatteryService.Infrastructure.Persistence.Seeders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,8 +24,6 @@ public static class ManageDependencyInjection
     {
         services.AddDatabase(configuration);
         services.AddScoped<IBatteryUnitOfWork, UnitOfWork>();
-        services.AddScoped<BatteryDataSeeder>();
-        services.AddScoped<EnvironmentDataSeeder>();
         services.AddSharedInfrastructure(configuration, "BatteryService.Application", "Battery Service API");
         services.AddMessageBus(configuration, typeof(BatteryAccountActivatedConsumer).Assembly);
         services.AddInboxIdempotency(configuration);

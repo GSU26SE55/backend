@@ -13,8 +13,8 @@ namespace NotificationService.Infrastructure.Persistence.Seeders;
 /// **02/08/2026 — chỉ còn tiếng Việt.** Bản <c>en-US</c> và trường <c>Locale</c> đã bị gỡ: hệ thống
 /// phục vụ tiếng Việt only, giữ thêm một bộ dịch chỉ tạo thứ phải bảo trì mà không ai đọc.
 ///
-/// Tách khỏi <c>NotificationDataSeeder</c> để test bao (mọi ô của ma trận có template chưa) đọc được
-/// danh mục mà không phải dựng DbContext.
+/// Danh mục này được giữ làm nguồn tham chiếu và để kiểm tra mọi ô của ma trận; startup không tự
+/// ghi template vào DB. Người vận hành quản lý template qua API quản trị.
 /// </summary>
 public static class NotificationTemplateCatalog
 {

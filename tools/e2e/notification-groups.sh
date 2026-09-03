@@ -37,9 +37,9 @@
 set -uo pipefail
 
 BASE=${E2E_BASE:-http://localhost:4001}
-ADMIN_EMAIL=${E2E_ADMIN_EMAIL:-admin@yourdomain.com}
-ADMIN_PASSWORD=${E2E_ADMIN_PASSWORD:-Admin123@}
-MANAGER_EMAIL=${E2E_MANAGER_EMAIL:-manager.demo@solarbattery.local}
+ADMIN_EMAIL=${E2E_ADMIN_EMAIL:-admin@solars.io.vn}
+ADMIN_PASSWORD=${E2E_ADMIN_PASSWORD:-Pasword123@}
+MANAGER_EMAIL=${E2E_MANAGER_EMAIL:-manager@solars.io.vn}
 MANAGER_PASSWORD=${E2E_MANAGER_PASSWORD:-Password123@}
 PG=${E2E_PG_CONTAINER:-solar-postgres}
 DB=${E2E_DB:-notification_db}

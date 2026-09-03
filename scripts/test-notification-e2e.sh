@@ -65,10 +65,10 @@ print(tok.get('accessToken') or data.get('accessToken') or data.get('token') or 
 "
 }
 
-ADMIN_TOKEN=$(login "${ADMIN_EMAIL:-admin@yourdomain.com}" "${ADMIN_PASSWORD:-Admin123@}" admin)
+ADMIN_TOKEN=$(login "${ADMIN_EMAIL:-admin@solars.io.vn}" "${ADMIN_PASSWORD:-Pasword123@}" admin)
 [ -n "$ADMIN_TOKEN" ] && ok "Đăng nhập Admin" "có accessToken" || bad "Đăng nhập Admin" "không lấy được token"
 
-CUST_TOKEN=$(login "customer.demo@solarbattery.local" "Password123@" customer)
+CUST_TOKEN=$(login "${CUSTOMER_EMAIL:-dienhoanguyen11@gmail.com}" "${CUSTOMER_PASSWORD:-Password123@}" customer)
 [ -n "$CUST_TOKEN" ] && ok "Đăng nhập Customer" "có accessToken" || bad "Đăng nhập Customer" "không lấy được token"
 
 if [ -z "$ADMIN_TOKEN" ]; then

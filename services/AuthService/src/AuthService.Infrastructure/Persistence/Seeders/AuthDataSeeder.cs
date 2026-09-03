@@ -41,14 +41,15 @@ public class AuthDataSeeder
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
+        _createdAccounts.Clear();
+
         var roles = await SeedRolesAsync(cancellationToken);
         var permissionsByCode = await SeedPermissionsAsync(cancellationToken);
         await SeedRolePermissionsAsync(roles, permissionsByCode, cancellationToken);
         var adminAccount = await SeedAdminAccountAsync(roles["ADMIN"], cancellationToken);
-        var sampleAccounts = await SeedSampleAccountsAsync(roles, cancellationToken);
-        await SeedAccountProfilesAsync(adminAccount, sampleAccounts, cancellationToken);
-        await SeedStaffProfilesAsync(sampleAccounts, cancellationToken);
-        await SeedLoginAttemptsAsync(adminAccount, sampleAccounts, cancellationToken);
+        var operationalAccounts = await SeedOperationalAccountsAsync(roles, cancellationToken);
+        await SeedAccountProfilesAsync(adminAccount, operationalAccounts, cancellationToken);
+        await SeedStaffProfilesAsync(operationalAccounts, cancellationToken);
         await PublishSeededAccountSnapshotsAsync(cancellationToken);
     }
 
@@ -84,84 +85,15 @@ public class AuthDataSeeder
                 IsActive: account.Status.IsNotifiable(),
                 IsDeleted: false,
                 SnapshotAtUtc: snapshotAtUtc,
-                Reason: "Seed",
+                Reason: "Bootstrap",
                 AccountStatus: (int)account.Status), cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Seeded {Count} account snapshot(s) vào outbox để các service khác dựng read-model.",
+            "Queued {Count} bootstrap account snapshot(s) for downstream read models.",
             _createdAccounts.Count);
-    }
-
-    private async Task SeedLoginAttemptsAsync(
-        Account adminAccount,
-        List<Account> sampleAccounts,
-        CancellationToken cancellationToken)
-    {
-        var hasAny = await _dbContext.LoginAttempts.AnyAsync(cancellationToken);
-        if (hasAny)
-            return;
-
-        var now = DateTime.UtcNow;
-        var attempts = new List<LoginAttempt>();
-
-        // Admin: 3 success login từ 3 thiết bị / IP khác nhau
-        attempts.Add(NewAttempt(adminAccount.Id, adminAccount.Email, LoginAttemptResult.Success,
-            "Password", "203.0.113.10", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) Safari/605.1.15", "mac-pro-01", now.AddHours(-1)));
-        attempts.Add(NewAttempt(adminAccount.Id, adminAccount.Email, LoginAttemptResult.Success,
-            "Password", "203.0.113.11", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0", "win-desk-01", now.AddDays(-1)));
-        attempts.Add(NewAttempt(adminAccount.Id, adminAccount.Email, LoginAttemptResult.WrongPassword,
-            "Password", "203.0.113.99", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0", "unknown-01", now.AddHours(-3),
-            "Wrong password — 4 attempts remaining"));
-
-        // Sample accounts: 2 success + 1 fail mỗi account
-        foreach (var account in sampleAccounts)
-        {
-            attempts.Add(NewAttempt(account.Id, account.Email, LoginAttemptResult.Success,
-                "Password", "192.168.1.50", "ExpoMobile/1.0 (Android 14)", "expo-android-001", now.AddHours(-2)));
-            attempts.Add(NewAttempt(account.Id, account.Email, LoginAttemptResult.Success,
-                "Google", "192.168.1.51", "Mozilla/5.0 Chrome/124.0", "web-chrome-001", now.AddDays(-2)));
-            attempts.Add(NewAttempt(account.Id, account.Email, LoginAttemptResult.WrongPassword,
-                "Password", "10.0.0.5", "ExpoMobile/1.0 (iOS 17.4)", "expo-ios-001", now.AddHours(-12),
-                "Wrong password"));
-        }
-
-        // 1 attempt cho email không tồn tại (AccountNotFound)
-        attempts.Add(NewAttempt(null, "ghost@solarbattery.local", LoginAttemptResult.AccountNotFound,
-            "Password", "198.51.100.1", "curl/8.6.0", null, now.AddHours(-6),
-            "Email does not exist"));
-
-        _dbContext.LoginAttempts.AddRange(attempts);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Seeded {Count} login attempts.", attempts.Count);
-    }
-
-    private static LoginAttempt NewAttempt(
-        Guid? accountId,
-        string email,
-        LoginAttemptResult result,
-        string method,
-        string ip,
-        string userAgent,
-        string? deviceId,
-        DateTime at,
-        string? note = null)
-    {
-        return new LoginAttempt
-        {
-            Id = Guid.NewGuid(),
-            AccountId = accountId,
-            AttemptedEmail = email,
-            Result = result,
-            Method = method,
-            IpAddress = ip,
-            UserAgent = userAgent,
-            DeviceId = deviceId,
-            Note = note,
-            CreatedAt = at
-        };
     }
 
     private async Task<Dictionary<string, Permission>> SeedPermissionsAsync(CancellationToken cancellationToken)
@@ -306,8 +238,8 @@ public class AuthDataSeeder
 
     private async Task<Account> SeedAdminAccountAsync(Role adminRole, CancellationToken cancellationToken)
     {
-        var adminEmail = GetSeedValue("ADMIN_EMAIL", "AdminSeed:Email", "admin@gmail.com").Trim().ToLowerInvariant();
-        var adminPassword = GetSeedValue("ADMIN_PASSWORD", "AdminSeed:Password", "Admin123@");
+        var adminEmail = GetSeedValue("ADMIN_EMAIL", "AdminSeed:Email", "admin@solars.io.vn").Trim().ToLowerInvariant();
+        var adminPassword = GetSeedValue("ADMIN_PASSWORD", "AdminSeed:Password", "Pasword123@");
         var now = DateTime.UtcNow;
 
         var adminAccount = await _dbContext.Users
@@ -321,7 +253,7 @@ public class AuthDataSeeder
                 Id = Guid.NewGuid(),
                 Email = adminEmail,
                 PasswordHash = _passwordHasher.Hash(adminPassword),
-                FullName = "System Admin",
+                FullName = "Alex",
                 EmailConfirmed = true,
                 PhoneConfirmed = false,
                 Status = AccountStatusEnum.Active,
@@ -337,6 +269,7 @@ public class AuthDataSeeder
         }
         else
         {
+            adminAccount.FullName = "Alex";
             adminAccount.EmailConfirmed = true;
             adminAccount.Status = AccountStatusEnum.Active;
             adminAccount.IsDeleted = false;
@@ -354,44 +287,57 @@ public class AuthDataSeeder
         return adminAccount;
     }
 
-    private async Task<List<Account>> SeedSampleAccountsAsync(
+    private async Task<List<Account>> SeedOperationalAccountsAsync(
         IReadOnlyDictionary<string, Role> roles,
         CancellationToken cancellationToken)
     {
-        var defaultPasswordHash = _passwordHasher.Hash("Password123@");
         var now = DateTime.UtcNow;
 
-        var samples = new[]
+        var definitions = new[]
         {
-            ("manager.demo@solarbattery.local", "Demo Manager", "MANAGER"),
-            ("staff.tier1@solarbattery.local", "Staff Tier1 Generalist", "STAFF"),
-            ("staff.tier2@solarbattery.local", "Staff Tier2 Specialist", "STAFF"),
-            ("staff.tier3@solarbattery.local", "Staff Tier3 Senior", "STAFF"),
-            ("customer.demo@solarbattery.local", "Demo Customer", "CUSTOMER")
+            ("manager@solars.io.vn", "Bùi Phước Thắng", "MANAGER"),
+            ("staff1@solars.io.vn", "Trần Minh Trí", "STAFF"),
+            ("staff2@solars.io.vn", "Nguyễn Phúc Duy", "STAFF"),
+            ("staff3@solars.io.vn", "Mai Hồng Thái", "STAFF"),
+            ("dienhoanguyen11@gmail.com", "Nguyễn Nhật Minh", "CUSTOMER")
         };
 
-        var emails = samples.Select(s => s.Item1).ToList();
+        var emails = definitions.Select(s => s.Item1).ToList();
         var existing = await _dbContext.Users
             .IgnoreQueryFilters()
             .Where(u => emails.Contains(u.Email))
             .ToDictionaryAsync(u => u.Email, cancellationToken);
 
-        var added = new List<Account>();
-        foreach (var (email, fullName, roleKey) in samples)
+        var accounts = new List<Account>();
+        foreach (var (email, fullName, roleKey) in definitions)
         {
-            if (existing.TryGetValue(email, out var current))
-            {
-                added.Add(current);
-                continue;
-            }
             if (!roles.TryGetValue(roleKey, out var role))
                 continue;
+
+            if (existing.TryGetValue(email, out var current))
+            {
+                current.FullName = fullName;
+                current.EmailConfirmed = true;
+                current.Status = AccountStatusEnum.Active;
+                current.IsDeleted = false;
+                current.DeletedAt = null;
+                if (current.RoleId != role.Id)
+                {
+                    current.RoleId = role.Id;
+                    current.RoleAssignedAt = now;
+                }
+
+                accounts.Add(current);
+                continue;
+            }
 
             var account = new Account
             {
                 Id = Guid.NewGuid(),
                 Email = email,
-                PasswordHash = defaultPasswordHash,
+                // Hash separately so every account receives an independent salt even though the
+                // requested initial password is shared.
+                PasswordHash = _passwordHasher.Hash("Password123@"),
                 FullName = fullName,
                 EmailConfirmed = true,
                 PhoneConfirmed = false,
@@ -403,22 +349,21 @@ public class AuthDataSeeder
             };
             _dbContext.Users.Add(account);
             _createdAccounts.Add((account, role.Name));
-            added.Add(account);
+            accounts.Add(account);
         }
 
-        if (added.Any(a => _dbContext.Entry(a).State == EntityState.Added))
-            await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return added;
+        return accounts;
     }
 
     private async Task SeedAccountProfilesAsync(
         Account adminAccount,
-        List<Account> sampleAccounts,
+        List<Account> operationalAccounts,
         CancellationToken cancellationToken)
     {
         var accountIds = new List<Guid> { adminAccount.Id };
-        accountIds.AddRange(sampleAccounts.Select(a => a.Id));
+        accountIds.AddRange(operationalAccounts.Select(a => a.Id));
 
         var existing = await _dbContext.AccountProfiles
             .IgnoreQueryFilters()
@@ -450,16 +395,16 @@ public class AuthDataSeeder
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task SeedStaffProfilesAsync(List<Account> sampleAccounts, CancellationToken cancellationToken)
+    private async Task SeedStaffProfilesAsync(List<Account> operationalAccounts, CancellationToken cancellationToken)
     {
         var staffMap = new (string Email, string EmployeeCode, StaffSkillTierEnum Tier, int MaxTickets, string[] Skills)[]
         {
-            ("staff.tier1@solarbattery.local", "STF-T1-001", StaffSkillTierEnum.Generalist, 10, new[] { "general" }),
-            ("staff.tier2@solarbattery.local", "STF-T2-001", StaffSkillTierEnum.ModuleSpecialist, 8, new[] { "battery", "charging" }),
-            ("staff.tier3@solarbattery.local", "STF-T3-001", StaffSkillTierEnum.SeniorSpecialist, 5, new[] { "battery", "firmware", "incident" })
+            ("staff1@solars.io.vn", "STF-001", StaffSkillTierEnum.Generalist, 10, new[] { "general" }),
+            ("staff2@solars.io.vn", "STF-002", StaffSkillTierEnum.ModuleSpecialist, 8, new[] { "battery", "charging" }),
+            ("staff3@solars.io.vn", "STF-003", StaffSkillTierEnum.SeniorSpecialist, 5, new[] { "battery", "firmware", "incident" })
         };
 
-        var emailToAccount = sampleAccounts.ToDictionary(a => a.Email, a => a);
+        var emailToAccount = operationalAccounts.ToDictionary(a => a.Email, a => a);
         var staffAccountIds = staffMap
             .Where(m => emailToAccount.ContainsKey(m.Email))
             .Select(m => emailToAccount[m.Email].Id)
@@ -469,11 +414,11 @@ public class AuthDataSeeder
             .ToList();
 
         // EmployeeCode is unique across every row, including soft-deleted profiles. Production
-        // data may legitimately retain one of the historical demo codes on another account (for
+        // data may legitimately retain one of these employee codes on another account (for
         // example after an account was recreated or data was repaired manually). Looking up only
         // by the current seed AccountIds would then attempt a duplicate insert and prevent the
         // entire AuthService from starting. Preserve the existing owner and skip only the
-        // conflicting demo profile instead of mutating production data during startup.
+        // conflicting bootstrap profile instead of mutating production data during startup.
         var existingProfiles = await _dbContext.StaffProfiles
             .IgnoreQueryFilters()
             .Where(p => staffAccountIds.Contains(p.AccountId) ||
@@ -501,7 +446,7 @@ public class AuthDataSeeder
             if (!occupiedEmployeeCodes.Add(entry.EmployeeCode))
             {
                 _logger.LogWarning(
-                    "Skipping demo StaffProfile for AccountId {AccountId}: EmployeeCode {EmployeeCode} is already assigned to another profile.",
+                    "Skipping bootstrap StaffProfile for AccountId {AccountId}: EmployeeCode {EmployeeCode} is already assigned to another profile.",
                     account.Id,
                     entry.EmployeeCode);
                 continue;
@@ -512,7 +457,7 @@ public class AuthDataSeeder
                 Id = Guid.NewGuid(),
                 AccountId = account.Id,
                 EmployeeCode = entry.EmployeeCode,
-                Department = "Operations",
+                Department = "Technical Operations",
                 MaxConcurrentTickets = entry.MaxTickets,
                 IsAvailable = true,
                 SkillTier = entry.Tier,
