@@ -102,6 +102,9 @@ public class TicketCreateCommandHandler : IRequestHandler<TicketCreateCommand, T
 
         foreach (var batteryId in request.BatteryAssetIds)
         {
+            if (batteryId == Guid.Empty)
+                continue;
+
             await _uow.TicketBatteryAssets.AddAsync(new TicketBatteryAsset
             {
                 Id = Guid.NewGuid(),
