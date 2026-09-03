@@ -654,4 +654,38 @@ else
   FAILED=1
 fi
 
+# ---------------------------------------------------------------------------
+# Rule 16: the single-node R4 must not pull/extract all application images at
+# once. Warm the exact signed digests sequentially in K3s before Helm mutates
+# Deployments, and allow the explicit rollout observer to outlive Kubernetes'
+# production progress deadline.
+# ---------------------------------------------------------------------------
+IMAGE_WARMUP_FAILED=0
+
+for required_contract in \
+  'application_image_specs=(' \
+  'initContainers:' \
+  'activeDeadlineSeconds: 1800' \
+  'imagePullPolicy: IfNotPresent' \
+  'warm_application_images' \
+  '--timeout=35m'
+do
+  if ! grep -Fq -- "${required_contract}" "${PRODUCTION_DEPLOY}"; then
+    echo "FAIL: ${PRODUCTION_DEPLOY} is missing image warm-up contract: ${required_contract}"
+    IMAGE_WARMUP_FAILED=1
+  fi
+done
+
+if ! grep -Fq 'rolloutProgressDeadlineSeconds: 1800' \
+  deploy/helm/solar-battery/values-vps-small.yaml; then
+  echo 'FAIL: the R4 overlay must allow 30 minutes of Deployment progress'
+  IMAGE_WARMUP_FAILED=1
+fi
+
+if [ "${IMAGE_WARMUP_FAILED}" -eq 0 ]; then
+  echo 'PASS: immutable application images warm sequentially before the bounded R4 rollout'
+else
+  FAILED=1
+fi
+
 exit "$FAILED"

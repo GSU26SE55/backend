@@ -9,9 +9,9 @@ metadata:
     {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "authservice") | nindent 4 }}
 spec:
   replicas: {{ $svc.replicas }}
-  # Keep Kubernetes from declaring the rollout failed at its ten-minute
-  # default while Auth is still applying bounded startup migrations on R4.
-  progressDeadlineSeconds: 1200
+  # Keep Kubernetes from declaring the rollout failed while Auth applies
+  # bounded startup migrations or the node extracts an immutable image.
+  progressDeadlineSeconds: {{ .Values.global.rolloutProgressDeadlineSeconds }}
   strategy:
     type: RollingUpdate
     rollingUpdate:

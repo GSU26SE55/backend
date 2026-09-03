@@ -9,6 +9,7 @@ metadata:
     {{- include "solar.serviceLabels" (dict "Release" .Release "Chart" .Chart "Values" .Values "component" "ticketservice") | nindent 4 }}
 spec:
   replicas: {{ $svc.replicas }}
+  progressDeadlineSeconds: {{ .Values.global.rolloutProgressDeadlineSeconds }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
