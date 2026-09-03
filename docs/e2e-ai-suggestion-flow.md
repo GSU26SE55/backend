@@ -118,7 +118,7 @@ docker exec solar-postgres psql -U postgres -d ticket_db -c \
 > ghi đè ở lần đồng bộ tài khoản kế tiếp. Nếu thấy Manager mang `role='Staff'`, sửa tay để
 > họ không lọt vào danh sách gợi ý:
 > ```sql
-> UPDATE staff_accounts SET role='Manager' WHERE email='manager.demo@solarbattery.local';
+> UPDATE staff_accounts SET role='Manager' WHERE email='manager@solars.io.vn';
 > ```
 
 ---
@@ -255,7 +255,7 @@ docker exec solar-postgres psql -U postgres -d ticket_db -c \
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:4001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"manager.demo@solarbattery.local","password":"<mật khẩu>"}' \
+  -d '{"email":"manager@solars.io.vn","password":"<mật khẩu>"}' \
   | python3 -c "import sys,json;print(json.load(sys.stdin)['data']['accessToken'])")
 ```
 
@@ -327,7 +327,7 @@ Sau khi ticket đã được phân công ở §5.4:
 ```bash
 STAFF_TOKEN=$(curl -s -X POST http://localhost:4001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"staff.tier2@solarbattery.local","password":"<mật khẩu>"}' \
+  -d '{"email":"staff2@solars.io.vn","password":"<mật khẩu>"}' \
   | python3 -c "import sys,json;print(json.load(sys.stdin)['data']['accessToken'])")
 
 curl -s "http://localhost:4001/api/tickets/$TICKET_ID/kb-suggestions?topN=5" \

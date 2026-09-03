@@ -77,4 +77,39 @@ public class TicketCreateCommandHandlerTests
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
         _logger.Verify(x => x.LogAsync(It.IsAny<Guid>(), customerId, ActorRoleEnum.Customer, "Customer", ActivityActionEnum.Created, null, null, null), Times.Once);
     }
+
+    [Fact]
+    public async Task Handle_EmptyBatteryId_ReturnsBadRequestWithoutPersisting()
+    {
+        var command = new TicketCreateCommand
+        {
+            Title = "Battery Overheat",
+            Description = "Battery is too hot",
+            Category = TicketCategoryEnum.Repair,
+            CustomerId = Guid.NewGuid(),
+            BatteryAssetIds = [Guid.Empty],
+            IncidentDetectedAt = DateTime.UtcNow.AddMinutes(-1)
+        };
+        var (uow, tickets, _, _, _, _, _, _, _, _, _, _, _, _) = MockTicketUnitOfWork.BuildExtended();
+        var batteryLookup = new Mock<IBatteryLookupClient>();
+        var handler = new TicketCreateCommandHandler(
+            uow.Object,
+            _codeGen.Object,
+            _logger.Object,
+            _outboxWriter.Object,
+            Mock.Of<MediatR.IPublisher>(),
+            batteryLookup.Object,
+            new TicketService.Infrastructure.Implements.Utils.SlaCalculator());
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(400);
+        result.Message.Should().Be("Exactly one valid battery must be selected.");
+        batteryLookup.Verify(
+            lookup => lookup.GetSnapshotAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        tickets.Verify(repository => repository.AddAsync(It.IsAny<TicketService.Domain.Entities.Ticket>()), Times.Never);
+        uow.Verify(unit => unit.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

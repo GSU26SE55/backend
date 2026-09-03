@@ -19,7 +19,6 @@ using TicketService.Infrastructure.Implements.Repositories;
 using TicketService.Infrastructure.Implements.Services;
 using TicketService.Infrastructure.Implements.Utils;
 using TicketService.Infrastructure.Persistence;
-using TicketService.Infrastructure.Persistence.Seeders;
 using TicketService.Infrastructure.Realtime;
 using TicketService.Infrastructure.Sagas;
 
@@ -347,7 +346,6 @@ public static class ManageDependencyInjection
     private static void AddRepositories(this IServiceCollection services)
     {
         services.AddScoped<ITicketUnitOfWork, UnitOfWork>();
-        services.AddScoped<TicketDataSeeder>();
         services.AddHttpContextAccessor();
     }
 }

@@ -44,7 +44,7 @@ call() {
 }
 
 ADMIN=$(curl -s -X POST "$GW/api/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"${ADMIN_EMAIL:-admin@yourdomain.com}\",\"password\":\"${ADMIN_PASSWORD:-Admin123@}\"}" \
+  -d "{\"email\":\"${ADMIN_EMAIL:-admin@solars.io.vn}\",\"password\":\"${ADMIN_PASSWORD:-Pasword123@}\"}" \
   | python3 -c "import json,sys;print((json.load(sys.stdin).get('data') or {}).get('tokens',{}).get('accessToken',''))")
 [ -n "$ADMIN" ] || { echo "‼️ không đăng nhập được"; exit 1; }
 
@@ -193,7 +193,7 @@ code=$(call POST /api/notifications "$ADMIN" \
 
 # quyền: Customer không được tạo
 CUST=$(curl -s -X POST "$GW/api/auth/login" -H 'Content-Type: application/json' \
-  -d '{"email":"customer.demo@solarbattery.local","password":"Password123@"}' \
+  -d "{\"email\":\"${CUSTOMER_EMAIL:-dienhoanguyen11@gmail.com}\",\"password\":\"${CUSTOMER_PASSWORD:-Password123@}\"}" \
   | python3 -c "import json,sys;print((json.load(sys.stdin).get('data') or {}).get('tokens',{}).get('accessToken',''))")
 if [ -n "$CUST" ]; then
   code=$(call POST /api/notifications "$CUST" \

@@ -33,7 +33,6 @@ public static class ManageDependencyInjection
             typeof(NotificationService.Application.Consumers.IotDeviceWentOfflineConsumer).Assembly,
             typeof(ManageDependencyInjection).Assembly);
 
-        services.AddScoped<NotificationDataSeeder>();
         services.AddScoped<NotificationGroupSeeder>();   // Sprint 6.4 NOTI4-04
 
         // ADR-0019 — mặc định cho lần chạy đầu khi bảng notification_settings còn trống.
